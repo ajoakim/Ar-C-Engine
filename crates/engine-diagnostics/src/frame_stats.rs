@@ -61,7 +61,11 @@ impl FrameClock {
             .started
             .take()
             .ok_or(DiagnosticsError::FrameNotStarted)?;
-        let spans = self.timing.as_ref().map(FrameTimingHandle::take).unwrap_or_default();
+        let spans = self
+            .timing
+            .as_ref()
+            .map(FrameTimingHandle::take)
+            .unwrap_or_default();
         let stats = FrameStats {
             frame_index: self.next_index,
             frame_time: started.elapsed(),

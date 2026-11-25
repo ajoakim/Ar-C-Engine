@@ -1,6 +1,6 @@
 //! Global subscriber install; single test so the global default is set once.
 
-use engine_diagnostics::{init, DiagnosticsConfig, DiagnosticsError};
+use engine_diagnostics::{DiagnosticsConfig, DiagnosticsError, init};
 
 #[test]
 fn global_init_once() {

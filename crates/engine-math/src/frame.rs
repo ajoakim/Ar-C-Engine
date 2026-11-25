@@ -175,7 +175,9 @@ impl FrameRegistry {
         let lca = self.lowest_common_ancestor(pos.frame(), to)?;
         let up = self.up_to(pos.frame(), lca)?;
         let down = self.up_to(to, lca)?;
-        let local = down.inverse().transform_point3(up.transform_point3(pos.local()));
+        let local = down
+            .inverse()
+            .transform_point3(up.transform_point3(pos.local()));
         WorldPos::new(to, local)
     }
 
@@ -203,7 +205,11 @@ mod tests {
     fn setup() -> (FrameRegistry, FrameId, FrameId) {
         let mut r = FrameRegistry::new();
         let a = r
-            .add_frame("A", r.root(), DAffine3::from_translation(DVec3::new(6.4e6, 0.0, 0.0)))
+            .add_frame(
+                "A",
+                r.root(),
+                DAffine3::from_translation(DVec3::new(6.4e6, 0.0, 0.0)),
+            )
             .unwrap();
         let t = DAffine3::from_rotation_translation(
             DQuat::from_rotation_y(std::f64::consts::FRAC_PI_2),
@@ -242,7 +248,11 @@ mod tests {
         let mut r = FrameRegistry::new();
         let root = r.root();
         assert_eq!(
-            r.add_frame("n", root, DAffine3::from_translation(DVec3::new(f64::NAN, 0.0, 0.0))),
+            r.add_frame(
+                "n",
+                root,
+                DAffine3::from_translation(DVec3::new(f64::NAN, 0.0, 0.0))
+            ),
             Err(MathError::NonFinite)
         );
         assert!(matches!(
@@ -265,13 +275,19 @@ mod tests {
     fn frame_convert_sibling() {
         let (mut r, a, b) = setup();
         let c = r
-            .add_frame("C", a, DAffine3::from_translation(DVec3::new(1.0, 2.0, 3.0)))
+            .add_frame(
+                "C",
+                a,
+                DAffine3::from_translation(DVec3::new(1.0, 2.0, 3.0)),
+            )
             .unwrap();
         let p = WorldPos::from_xyz(b, 0.5, 0.25, -2.0).unwrap();
         let got = r.convert(p, c).unwrap();
         let tb = r.to_parent(b).unwrap();
         let tc = r.to_parent(c).unwrap();
-        let manual = tc.inverse().transform_point3(tb.transform_point3(p.local()));
+        let manual = tc
+            .inverse()
+            .transform_point3(tb.transform_point3(p.local()));
         assert!(near(got.local(), manual, 1e-9));
     }
 
@@ -298,7 +314,10 @@ mod tests {
     fn frame_worldpos_rejects_non_finite() {
         let r = FrameRegistry::new();
         let root = r.root();
-        assert_eq!(WorldPos::from_xyz(root, f64::NAN, 0.0, 0.0), Err(MathError::NonFinite));
+        assert_eq!(
+            WorldPos::from_xyz(root, f64::NAN, 0.0, 0.0),
+            Err(MathError::NonFinite)
+        );
         assert_eq!(
             WorldPos::from_xyz(root, 0.0, f64::INFINITY, 0.0),
             Err(MathError::NonFinite)
@@ -315,7 +334,10 @@ mod tests {
         let (big, _a, b) = setup();
         let small = FrameRegistry::new();
         let p = WorldPos::from_xyz(b, 1.0, 1.0, 1.0).unwrap();
-        assert_eq!(small.convert(p, small.root()), Err(MathError::UnknownFrame(b)));
+        assert_eq!(
+            small.convert(p, small.root()),
+            Err(MathError::UnknownFrame(b))
+        );
         let q = WorldPos::from_xyz(small.root(), 1.0, 1.0, 1.0).unwrap();
         assert_eq!(small.convert(q, b), Err(MathError::UnknownFrame(b)));
         assert!(big.convert(q, b).is_ok());

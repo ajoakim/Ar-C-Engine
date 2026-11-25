@@ -1,7 +1,7 @@
 //! Deterministic integration tests for the job scheduler.
 
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
 
 use engine_jobs::{JobStatus, JobSystem, Priority};

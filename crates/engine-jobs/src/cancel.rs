@@ -1,7 +1,7 @@
 //! Cooperative cancellation token.
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// Shared cancellation flag; clones observe the same state.
 #[derive(Clone, Debug, Default)]

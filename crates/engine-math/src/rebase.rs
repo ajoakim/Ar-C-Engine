@@ -135,7 +135,10 @@ mod tests {
     use glam::Vec3;
 
     fn assert_vec_near(a: DVec3, b: DVec3, tol: f64) {
-        assert!((a - b).abs().max_element() <= tol, "{a:?} vs {b:?} (tol {tol})");
+        assert!(
+            (a - b).abs().max_element() <= tol,
+            "{a:?} vs {b:?} (tol {tol})"
+        );
     }
 
     struct Scene {
@@ -148,17 +151,33 @@ mod tests {
 
     fn scene() -> Scene {
         let mut frames = FrameRegistry::new();
-        let world = frames.add_frame("world", frames.root(), DAffine3::IDENTITY).unwrap();
+        let world = frames
+            .add_frame("world", frames.root(), DAffine3::IDENTITY)
+            .unwrap();
         let vehicle = frames
-            .add_frame("vehicle", world, DAffine3::from_translation(DVec3::new(6.4e6 + 10.0, 0.0, 0.0)))
+            .add_frame(
+                "vehicle",
+                world,
+                DAffine3::from_translation(DVec3::new(6.4e6 + 10.0, 0.0, 0.0)),
+            )
             .unwrap();
         let mut store = PositionStore::new();
         let mut ids = Vec::new();
-        for (x, y, z) in [(6.4e6, 0.0, 0.0), (6.4e6 + 0.001, 0.0, 0.0), (6.4e6, 1.5, -2.25)] {
+        for (x, y, z) in [
+            (6.4e6, 0.0, 0.0),
+            (6.4e6 + 0.001, 0.0, 0.0),
+            (6.4e6, 1.5, -2.25),
+        ] {
             ids.push(store.insert(WorldPos::from_xyz(world, x, y, z).unwrap()));
         }
         ids.push(store.insert(WorldPos::from_xyz(vehicle, 0.5, 0.0, 0.0).unwrap()));
-        Scene { frames, store, world, vehicle, ids }
+        Scene {
+            frames,
+            store,
+            world,
+            vehicle,
+            ids,
+        }
     }
 
     fn pairwise(s: &Scene) -> Vec<DVec3> {
@@ -176,7 +195,12 @@ mod tests {
         let root = s.frames.root();
         s.ids
             .iter()
-            .map(|&i| s.frames.convert(s.store.get(i).unwrap(), root).unwrap().local())
+            .map(|&i| {
+                s.frames
+                    .convert(s.store.get(i).unwrap(), root)
+                    .unwrap()
+                    .local()
+            })
             .collect()
     }
 
@@ -191,8 +215,16 @@ mod tests {
             assert_vec_near(*a, b, 1e-8);
         }
         rebase(&mut s.frames, &mut s.store, s.world, -o).unwrap();
-        assert_vec_near(s.store.get(s.ids[0]).unwrap().local(), DVec3::new(6.4e6, 0.0, 0.0), 1e-8);
-        assert_vec_near(s.store.get(s.ids[1]).unwrap().local(), DVec3::new(6.4e6 + 0.001, 0.0, 0.0), 1e-8);
+        assert_vec_near(
+            s.store.get(s.ids[0]).unwrap().local(),
+            DVec3::new(6.4e6, 0.0, 0.0),
+            1e-8,
+        );
+        assert_vec_near(
+            s.store.get(s.ids[1]).unwrap().local(),
+            DVec3::new(6.4e6 + 0.001, 0.0, 0.0),
+            1e-8,
+        );
         for (a, b) in before.iter().zip(pairwise(&s)) {
             assert_vec_near(*a, b, 1e-8);
         }
@@ -203,11 +235,21 @@ mod tests {
         let mut s = scene();
         let before = roots(&s);
         let veh_before = s.frames.to_root(s.vehicle).unwrap().translation;
-        rebase(&mut s.frames, &mut s.store, s.world, DVec3::new(6.4e6, 3.0, -7.0)).unwrap();
+        rebase(
+            &mut s.frames,
+            &mut s.store,
+            s.world,
+            DVec3::new(6.4e6, 3.0, -7.0),
+        )
+        .unwrap();
         for (a, b) in before.iter().zip(roots(&s)) {
             assert_vec_near(*a, b, 1e-8);
         }
-        assert_vec_near(s.frames.to_root(s.vehicle).unwrap().translation, veh_before, 1e-8);
+        assert_vec_near(
+            s.frames.to_root(s.vehicle).unwrap().translation,
+            veh_before,
+            1e-8,
+        );
     }
 
     #[test]
@@ -228,7 +270,13 @@ mod tests {
         let big = std::hint::black_box(6.4e6_f32);
         assert!((big + 0.001_f32) == big);
         let mut s = scene();
-        rebase(&mut s.frames, &mut s.store, s.world, DVec3::new(6.4e6, 0.0, 0.0)).unwrap();
+        rebase(
+            &mut s.frames,
+            &mut s.store,
+            s.world,
+            DVec3::new(6.4e6, 0.0, 0.0),
+        )
+        .unwrap();
         let p0 = s.store.get(s.ids[0]).unwrap();
         let p1 = s.store.get(s.ids[1]).unwrap();
         let v = s.frames.camera_relative_f32(p1, p0).unwrap();
@@ -246,7 +294,12 @@ mod tests {
             Err(MathError::RootFrame)
         );
         assert_eq!(
-            rebase(&mut s.frames, &mut s.store, s.world, DVec3::new(f64::NAN, 0.0, 0.0)),
+            rebase(
+                &mut s.frames,
+                &mut s.store,
+                s.world,
+                DVec3::new(f64::NAN, 0.0, 0.0)
+            ),
             Err(MathError::NonFinite)
         );
         assert_eq!(s.store.iter().collect::<Vec<_>>(), locals);
@@ -258,7 +311,13 @@ mod tests {
         let mut s = scene();
         let rp = WorldPos::from_xyz(s.frames.root(), 5.0, 6.0, 7.0).unwrap();
         let id = s.store.insert(rp);
-        rebase(&mut s.frames, &mut s.store, s.world, DVec3::new(100.0, 0.0, 0.0)).unwrap();
+        rebase(
+            &mut s.frames,
+            &mut s.store,
+            s.world,
+            DVec3::new(100.0, 0.0, 0.0),
+        )
+        .unwrap();
         assert_eq!(s.store.get(id), Some(rp));
     }
 
@@ -270,7 +329,8 @@ mod tests {
         let a = st.insert(WorldPos::from_xyz(f, 1.0, 0.0, 0.0).unwrap());
         let b = st.insert(WorldPos::from_xyz(f, 2.0, 0.0, 0.0).unwrap());
         assert_eq!(st.len(), 2);
-        st.set(a, WorldPos::from_xyz(f, 3.0, 0.0, 0.0).unwrap()).unwrap();
+        st.set(a, WorldPos::from_xyz(f, 3.0, 0.0, 0.0).unwrap())
+            .unwrap();
         assert_eq!(st.get(a).unwrap().local().x, 3.0);
         assert!(st.remove(a).is_some());
         assert_eq!(st.get(a), None);

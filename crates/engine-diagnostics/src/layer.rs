@@ -4,11 +4,11 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
-use tracing::span::Attributes;
 use tracing::Id;
+use tracing::span::Attributes;
+use tracing_subscriber::Layer;
 use tracing_subscriber::layer::{Context, SubscriberExt};
 use tracing_subscriber::registry::LookupSpan;
-use tracing_subscriber::Layer;
 
 /// Accumulated timing for one span name.
 ///
@@ -109,10 +109,7 @@ where
 
     fn on_close(&self, id: Id, ctx: Context<'_, S>) {
         if let Some(span) = ctx.span(&id) {
-            let elapsed = span
-                .extensions()
-                .get::<SpanStart>()
-                .map(|s| s.0.elapsed());
+            let elapsed = span.extensions().get::<SpanStart>().map(|s| s.0.elapsed());
             if let Some(elapsed) = elapsed {
                 self.handle.record(span.metadata().name(), elapsed);
             }
