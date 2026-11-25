@@ -7,3 +7,4 @@ To add an ADR, copy `0000-template.md` to the next free number (4-digit zero-pad
 | [0001](0001-conventions.md) | Engine Conventions | accepted |
 | [0002](0002-workspace-crate-layout.md) | Workspace Crate Layout, Render Split and License | accepted |
 | [0003](0003-dependency-enforcement.md) | Dependency-Direction Enforcement and CI | accepted |
+| [0004](0004-worldpos-frames-rebasing.md) | WorldPos, Coordinate Frames and Origin Rebasing | accepted |
