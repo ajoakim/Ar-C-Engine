@@ -10,6 +10,7 @@ mod layer;
 
 pub use error::DiagnosticsError;
 pub use frame_stats::{FrameClock, FrameStats};
+pub use init::{init, DiagnosticsConfig};
 pub use layer::{
     frame_timing_subscriber, FrameTimingHandle, FrameTimingLayer, SpanTiming,
 };
