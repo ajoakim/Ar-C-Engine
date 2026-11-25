@@ -16,3 +16,5 @@ mod registry;
 pub use config::{EngineConfig, EngineSection, ModuleConfig, MAX_CONFIG_BYTES};
 pub use error::{ConfigError, LifecycleError, ModuleError, RegistryError};
 pub use lifecycle::{is_legal_transition, EnginePhase, Lifecycle};
+pub use module::Module;
+pub use registry::ModuleRegistry;
