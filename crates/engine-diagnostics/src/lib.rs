@@ -2,3 +2,15 @@
 //!
 //! Tier 0 crate. Allowed dependencies and layering rules are documented in
 //! `docs/architecture/dependency-direction.md`.
+
+mod error;
+mod frame_stats;
+mod init;
+mod layer;
+
+pub use error::DiagnosticsError;
+pub use frame_stats::{FrameClock, FrameStats};
+pub use layer::{
+    frame_timing_subscriber, FrameTimingHandle, FrameTimingLayer, SpanTiming,
+};
+pub use tracing;
