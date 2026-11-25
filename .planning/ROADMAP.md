@@ -9,7 +9,7 @@ Build a small, stable Rust engine core and validate it with two reference apps. 
 **Phase Numbering:** Integer phases (1-8) are planned work. Decimal phases (e.g. 2.1) are urgent insertions.
 
 - [x] **Phase 1: Workspace, Toolchain & Guardrails** - Pinned toolchain, coarse crate layout, CI boundary checks, ADR template and conventions (completed 2026-11-25)
-- [ ] **Phase 2: Foundation (Core, Jobs, Diagnostics, Precision)** - Lifecycle, modules, job scheduler, diagnostics, WorldPos and origin rebasing
+- [x] **Phase 2: Foundation (Core, Jobs, Diagnostics, Precision)** - Lifecycle, modules, job scheduler, diagnostics, WorldPos and origin rebasing (completed 2026-11-25)
 - [ ] **Phase 3: Platform, Render Backend & Vertical Slice** - Window/input, engine-owned render boundary with wgpu and null backends, RenderScene extraction, triangle via SDK
 - [ ] **Phase 4: World, Spatial & Assets** - Entities and transforms, spatial queries, typed handles and residency state machine
 - [ ] **Phase 5: Conventional Reference App (Canary)** - Lit meshes, glTF, basic-scene app on SDK only, building without planetary crates
@@ -47,12 +47,12 @@ Plans:
   4. Positions are stored as opaque `WorldPos` across multiple coordinate spaces, and origin rebasing preserves relative positions in tests
 **Plans**: 6 plans
 Plans:
-- [ ] 02-01-PLAN.md — Pin Phase 2 third-party deps (glam, tracing, crossbeam, serde, ron, thiserror); guardrails stay green (wave 1)
-- [ ] 02-02-PLAN.md — engine-math: opaque WorldPos, coordinate frames, origin rebasing, ADR-0004 (wave 2)
-- [ ] 02-03-PLAN.md — engine-diagnostics: subscriber install, span-timing layer, FrameClock/FrameStats (wave 2)
-- [ ] 02-04-PLAN.md — engine-jobs: priority scheduler, cancel tokens, deterministic tests (wave 2)
-- [ ] 02-05-PLAN.md — engine-core: lifecycle state machine, RON EngineConfig, Module trait, registry (wave 2)
-- [ ] 02-06-PLAN.md — engine-core: Engine driver, end-to-end lifecycle tests, example app (wave 3)
+- [x] 02-01-PLAN.md — Pin Phase 2 third-party deps (glam, tracing, crossbeam, serde, ron, thiserror); guardrails stay green (wave 1)
+- [x] 02-02-PLAN.md — engine-math: opaque WorldPos, coordinate frames, origin rebasing, ADR-0004 (wave 2)
+- [x] 02-03-PLAN.md — engine-diagnostics: subscriber install, span-timing layer, FrameClock/FrameStats (wave 2)
+- [x] 02-04-PLAN.md — engine-jobs: priority scheduler, cancel tokens, deterministic tests (wave 2)
+- [x] 02-05-PLAN.md — engine-core: lifecycle state machine, RON EngineConfig, Module trait, registry (wave 2)
+- [x] 02-06-PLAN.md — engine-core: Engine driver, end-to-end lifecycle tests, example app (wave 3)
 
 ### Phase 3: Platform, Render Backend & Vertical Slice
 **Goal**: A window shows geometry rendered through an engine-owned backend boundary, with camera-relative precision proven
@@ -134,7 +134,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Workspace, Toolchain & Guardrails | 4/4 | Complete    | 2026-11-25 |
-| 2. Foundation | 0/6 | Planned | - |
+| 2. Foundation | 6/6 | Complete    | 2026-11-25 |
 | 3. Platform, Render Backend & Vertical Slice | 0/TBD | Not started | - |
 | 4. World, Spatial & Assets | 0/TBD | Not started | - |
 | 5. Conventional Reference App | 0/TBD | Not started | - |

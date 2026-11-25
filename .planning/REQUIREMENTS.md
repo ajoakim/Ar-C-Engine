@@ -15,18 +15,18 @@
 
 ### Engine Core
 
-- [ ] **CORE-01**: Application can drive the engine lifecycle Initialize → Load → Running → Suspend → Shutdown
-- [ ] **CORE-02**: Application can load configuration and register modules with the engine
+- [x] **CORE-01**: Application can drive the engine lifecycle Initialize → Load → Running → Suspend → Shutdown
+- [x] **CORE-02**: Application can load configuration and register modules with the engine
 - [ ] **CORE-03**: Application can use the engine through a minimal public SDK facade without depending on internal crates
-- [ ] **CORE-04**: Developer can submit prioritized, cancellable jobs to a job scheduler
-- [ ] **CORE-05**: Developer gets structured logging, tracing spans, and frame timing from a diagnostics module
+- [x] **CORE-04**: Developer can submit prioritized, cancellable jobs to a job scheduler
+- [x] **CORE-05**: Developer gets structured logging, tracing spans, and frame timing from a diagnostics module
 
 ### World & Precision
 
 - [ ] **WORLD-01**: Developer can create entities with stable generational identity and transform hierarchy
-- [ ] **WORLD-02**: Positions are stored in high-precision world coordinates (opaque `WorldPos`) across multiple coordinate spaces
+- [x] **WORLD-02**: Positions are stored in high-precision world coordinates (opaque `WorldPos`) across multiple coordinate spaces
 - [ ] **WORLD-03**: Renderer receives camera-relative f32 transforms, and a test at 6.4e6 m from the origin shows no visible jitter
-- [ ] **WORLD-04**: Engine supports origin rebasing for large worlds
+- [x] **WORLD-04**: Engine supports origin rebasing for large worlds
 - [ ] **WORLD-05**: Developer can run spatial queries (visibility, region lookup) through a pluggable spatial interface with one default backend
 
 ### Rendering
@@ -114,15 +114,15 @@
 | WS-03 | Phase 1 | Complete |
 | WS-04 | Phase 1 | Complete |
 | WS-05 | Phase 8 | Pending |
-| CORE-01 | Phase 2 | Pending |
-| CORE-02 | Phase 2 | Pending |
+| CORE-01 | Phase 2 | Complete |
+| CORE-02 | Phase 2 | Complete |
 | CORE-03 | Phase 3 | Pending |
-| CORE-04 | Phase 2 | Pending |
-| CORE-05 | Phase 2 | Pending |
+| CORE-04 | Phase 2 | Complete |
+| CORE-05 | Phase 2 | Complete |
 | WORLD-01 | Phase 4 | Pending |
-| WORLD-02 | Phase 2 | Pending |
+| WORLD-02 | Phase 2 | Complete |
 | WORLD-03 | Phase 3 | Pending |
-| WORLD-04 | Phase 2 | Pending |
+| WORLD-04 | Phase 2 | Complete |
 | WORLD-05 | Phase 4 | Pending |
 | REND-01 | Phase 3 | Pending |
 | REND-02 | Phase 3 | Pending |
