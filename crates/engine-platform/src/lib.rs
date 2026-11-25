@@ -2,4 +2,10 @@
 //!
 //! Tier 2 crate. Allowed dependencies and layering rules are documented in
 //! `docs/architecture/dependency-direction.md`.
-//! winit itself is added in Phase 3; no other crate may depend on winit.
+//! Wraps winit 0.30; no winit type appears in the public API.
+
+mod error;
+mod input;
+
+pub use error::{HandlerError, PlatformError};
+pub use input::{InputEvent, KeyCode, MouseButton};
