@@ -45,7 +45,14 @@ Plans:
   2. A developer can submit prioritized jobs, cancel them, and see higher-priority jobs run first
   3. Logs, tracing spans and per-frame timing are emitted by the diagnostics module
   4. Positions are stored as opaque `WorldPos` across multiple coordinate spaces, and origin rebasing preserves relative positions in tests
-**Plans**: TBD
+**Plans**: 6 plans
+Plans:
+- [ ] 02-01-PLAN.md — Pin Phase 2 third-party deps (glam, tracing, crossbeam, serde, ron, thiserror); guardrails stay green (wave 1)
+- [ ] 02-02-PLAN.md — engine-math: opaque WorldPos, coordinate frames, origin rebasing, ADR-0004 (wave 2)
+- [ ] 02-03-PLAN.md — engine-diagnostics: subscriber install, span-timing layer, FrameClock/FrameStats (wave 2)
+- [ ] 02-04-PLAN.md — engine-jobs: priority scheduler, cancel tokens, deterministic tests (wave 2)
+- [ ] 02-05-PLAN.md — engine-core: lifecycle state machine, RON EngineConfig, Module trait, registry (wave 2)
+- [ ] 02-06-PLAN.md — engine-core: Engine driver, end-to-end lifecycle tests, example app (wave 3)
 
 ### Phase 3: Platform, Render Backend & Vertical Slice
 **Goal**: A window shows geometry rendered through an engine-owned backend boundary, with camera-relative precision proven
@@ -127,7 +134,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Workspace, Toolchain & Guardrails | 4/4 | Complete    | 2026-11-25 |
-| 2. Foundation | 0/TBD | Not started | - |
+| 2. Foundation | 0/6 | Planned | - |
 | 3. Platform, Render Backend & Vertical Slice | 0/TBD | Not started | - |
 | 4. World, Spatial & Assets | 0/TBD | Not started | - |
 | 5. Conventional Reference App | 0/TBD | Not started | - |
