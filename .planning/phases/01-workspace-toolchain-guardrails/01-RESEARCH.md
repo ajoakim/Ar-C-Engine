@@ -310,16 +310,16 @@ These are recommendations for the planner to write as an accepted ADR; they are 
 | A3 | cargo-deny option names (`allow-wildcard-paths`, license ids, `[graph]`) | deny.toml | Run `cargo deny init` and diff; deny will print config errors |
 | A4 | cargo-deny behavior for denying workspace-internal crates | Enforcement | Mitigated by xtask being authoritative |
 | A5 | taiki-e/install-action supports cargo-deny on both OSes | CI | Fall back to `cargo install cargo-deny --locked` |
-| A6 | Conventions (Y-up, RH, -Z forward, reversed-Z, CCW, UV top-left) | ADR-0001 | User may prefer Z-up; confirm before ADR acceptance. Cheap now, costly later |
-| A7 | License choice MIT OR Apache-2.0 | Cargo.toml | Project is open-source per PROJECT.md but license unspecified; ask user |
+| A6 | Conventions (Y-up, RH, -Z forward, reversed-Z, CCW, UV top-left) | ADR-0001 | User may prefer Z-up; confirm before ADR acceptance. Cheap now, costly later (CONFIRMED by orchestrator default) |
+| A7 | License choice MIT OR Apache-2.0 | Cargo.toml | Project is open-source per PROJECT.md but license unspecified; ask user (CONFIRMED by orchestrator default) |
 | A8 | Rust 1.99.0 is a suitable pin (1.99 is newer than the 1.95 floor; newer stable may exist by today's date) | Toolchain | None functionally; pinned version is installed locally already |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **License** (A7): not specified anywhere; needed for `cargo-deny` license config and Cargo.toml. Recommend MIT OR Apache-2.0, confirm.
-2. **Y-up vs Z-up world convention** (A6): recommend Y-up RH; confirm in ADR review.
-3. **Render crate name:** `engine-render-wgpu` vs `engine-render-backend`; pick one in plan.
-4. **Remote/CI host:** Is the repo hosted on GitHub? (Assumed; `.github/workflows` written regardless, cannot be exercised locally.) CI cannot be run in this environment; local equivalent is the same commands.
+1. **License** (A7): not specified anywhere; needed for `cargo-deny` license config and Cargo.toml. Recommend MIT OR Apache-2.0, confirm. RESOLVED: MIT OR Apache-2.0 (orchestrator default, ADR-0002; reversible).
+2. **Y-up vs Z-up world convention** (A6): recommend Y-up RH; confirm in ADR review. RESOLVED: Y-up right-handed, -Z forward (ADR-0001).
+3. **Render crate name:** `engine-render-wgpu` vs `engine-render-backend`; pick one in plan. RESOLVED: `engine-render-wgpu` (ADR-0002).
+4. **Remote/CI host:** Is the repo hosted on GitHub? (Assumed; `.github/workflows` written regardless, cannot be exercised locally.) CI cannot be run in this environment; local equivalent is the same commands. RESOLVED: GitHub Actions (ADR-0003); hosted run is a manual-verification item.
 
 ## Environment Availability
 
