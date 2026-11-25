@@ -107,16 +107,54 @@
 
 ## Traceability
 
-Populated during roadmap creation.
-
 | Requirement | Phase | Status |
 |-------------|-------|--------|
+| WS-01 | Phase 1 | Pending |
+| WS-02 | Phase 1 | Pending |
+| WS-03 | Phase 1 | Pending |
+| WS-04 | Phase 1 | Pending |
+| WS-05 | Phase 8 | Pending |
+| CORE-01 | Phase 2 | Pending |
+| CORE-02 | Phase 2 | Pending |
+| CORE-03 | Phase 3 | Pending |
+| CORE-04 | Phase 2 | Pending |
+| CORE-05 | Phase 2 | Pending |
+| WORLD-01 | Phase 4 | Pending |
+| WORLD-02 | Phase 2 | Pending |
+| WORLD-03 | Phase 3 | Pending |
+| WORLD-04 | Phase 2 | Pending |
+| WORLD-05 | Phase 4 | Pending |
+| REND-01 | Phase 3 | Pending |
+| REND-02 | Phase 3 | Pending |
+| REND-03 | Phase 3 | Pending |
+| REND-04 | Phase 5 | Pending |
+| REND-05 | Phase 5 | Pending |
+| ASSET-01 | Phase 4 | Pending |
+| ASSET-02 | Phase 4 | Pending |
+| ASSET-03 | Phase 4 | Pending |
+| STRM-01 | Phase 6 | Pending |
+| STRM-02 | Phase 6 | Pending |
+| PROC-01 | Phase 6 | Pending |
+| PROC-02 | Phase 6 | Pending |
+| PLAN-01 | Phase 5 | Pending |
+| PLAN-02 | Phase 7 | Pending |
+| PLAN-03 | Phase 7 | Pending |
+| PLAN-04 | Phase 7 | Pending |
+| PLAN-05 | Phase 7 | Pending |
+| PLAN-06 | Phase 7 | Pending |
+| PLAN-07 | Phase 7 | Pending |
+| PLAN-08 | Phase 8 | Pending |
+| APP-01 | Phase 5 | Pending |
+| APP-02 | Phase 7 | Pending |
+| QA-01 | Phase 8 | Pending |
+| QA-02 | Phase 8 | Pending |
+| QA-03 | Phase 8 | Pending |
 
 **Coverage:**
-- v1 requirements: 35 total
-- Mapped to phases: 0
-- Unmapped: 35 ⚠️
+- v1 requirements: 40 total (the earlier count of 35 was a miscount)
+- Mapped to phases: 40
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-11-25*
-*Last updated: 2026-11-25 after initial definition*
+*Last updated: 2026-11-25 after roadmap creation*
