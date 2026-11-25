@@ -7,10 +7,10 @@
 
 ### Workspace & Guardrails
 
-- [ ] **WS-01**: Developer can build the whole workspace on a pinned Rust toolchain (>= 1.95, edition 2024) via `rust-toolchain.toml` on Windows and Linux
-- [ ] **WS-02**: Workspace is split into coarse crates with documented dependency direction (core never depends on extensions)
-- [ ] **WS-03**: CI fails if any core crate depends on an extension crate, or if wgpu/winit appear outside their designated crates
-- [ ] **WS-04**: An ADR template exists and a conventions ADR fixes units (meters), axes, handedness, and depth range
+- [x] **WS-01**: Developer can build the whole workspace on a pinned Rust toolchain (>= 1.95, edition 2024) via `rust-toolchain.toml` on Windows and Linux
+- [x] **WS-02**: Workspace is split into coarse crates with documented dependency direction (core never depends on extensions)
+- [x] **WS-03**: CI fails if any core crate depends on an extension crate, or if wgpu/winit appear outside their designated crates
+- [x] **WS-04**: An ADR template exists and a conventions ADR fixes units (meters), axes, handedness, and depth range
 - [ ] **WS-05**: Open technical decisions (rendering API, ECS, spatial backend, LOD transition technique) are each recorded as ADRs backed by prototype or benchmark
 
 ### Engine Core
@@ -109,10 +109,10 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| WS-01 | Phase 1 | Pending |
-| WS-02 | Phase 1 | Pending |
-| WS-03 | Phase 1 | Pending |
-| WS-04 | Phase 1 | Pending |
+| WS-01 | Phase 1 | Complete |
+| WS-02 | Phase 1 | Complete |
+| WS-03 | Phase 1 | Complete |
+| WS-04 | Phase 1 | Complete |
 | WS-05 | Phase 8 | Pending |
 | CORE-01 | Phase 2 | Pending |
 | CORE-02 | Phase 2 | Pending |

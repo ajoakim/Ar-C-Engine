@@ -8,7 +8,7 @@ Build a small, stable Rust engine core and validate it with two reference apps. 
 
 **Phase Numbering:** Integer phases (1-8) are planned work. Decimal phases (e.g. 2.1) are urgent insertions.
 
-- [ ] **Phase 1: Workspace, Toolchain & Guardrails** - Pinned toolchain, coarse crate layout, CI boundary checks, ADR template and conventions
+- [x] **Phase 1: Workspace, Toolchain & Guardrails** - Pinned toolchain, coarse crate layout, CI boundary checks, ADR template and conventions (completed 2026-11-25)
 - [ ] **Phase 2: Foundation (Core, Jobs, Diagnostics, Precision)** - Lifecycle, modules, job scheduler, diagnostics, WorldPos and origin rebasing
 - [ ] **Phase 3: Platform, Render Backend & Vertical Slice** - Window/input, engine-owned render boundary with wgpu and null backends, RenderScene extraction, triangle via SDK
 - [ ] **Phase 4: World, Spatial & Assets** - Entities and transforms, spatial queries, typed handles and residency state machine
@@ -31,10 +31,10 @@ Build a small, stable Rust engine core and validate it with two reference apps. 
 **Plans**: 4 plans
 
 Plans:
-- [ ] 01-01-PLAN.md — Pinned toolchain (1.99.0, MSRV 1.95, edition 2024) and 13-crate workspace with tiered path deps
-- [ ] 01-02-PLAN.md — Dependency-direction doc, ADR template, ADR-0001 conventions, ADR-0002 layout/render split/license, ADR-0003 enforcement/CI
-- [ ] 01-03-PLAN.md — xtask check-deps (cargo_metadata, rules R1-R6), negative fixtures, metadata/docs policy tests
-- [ ] 01-04-PLAN.md — cargo-deny (wgpu/winit wrappers, licenses, advisories) and GitHub Actions ubuntu+windows CI
+- [x] 01-01-PLAN.md — Pinned toolchain (1.99.0, MSRV 1.95, edition 2024) and 13-crate workspace with tiered path deps
+- [x] 01-02-PLAN.md — Dependency-direction doc, ADR template, ADR-0001 conventions, ADR-0002 layout/render split/license, ADR-0003 enforcement/CI
+- [x] 01-03-PLAN.md — xtask check-deps (cargo_metadata, rules R1-R6), negative fixtures, metadata/docs policy tests
+- [x] 01-04-PLAN.md — cargo-deny (wgpu/winit wrappers, licenses, advisories) and GitHub Actions ubuntu+windows CI
 
 ### Phase 2: Foundation (Core, Jobs, Diagnostics, Precision)
 **Goal**: Applications can drive an engine lifecycle with modules, jobs and diagnostics, on a precision-safe position model
@@ -126,7 +126,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Workspace, Toolchain & Guardrails | 0/4 | Not started | - |
+| 1. Workspace, Toolchain & Guardrails | 4/4 | Complete    | 2026-11-25 |
 | 2. Foundation | 0/TBD | Not started | - |
 | 3. Platform, Render Backend & Vertical Slice | 0/TBD | Not started | - |
 | 4. World, Spatial & Assets | 0/TBD | Not started | - |
