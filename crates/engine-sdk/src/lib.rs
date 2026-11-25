@@ -10,6 +10,7 @@
 
 mod app;
 mod error;
+mod run;
 mod runtime;
 
 pub use app::{App, AppControl, Resources, SceneState};
@@ -24,12 +25,13 @@ pub use engine_render::{
     VertexPosColor,
 };
 pub use error::SdkError;
+pub use run::{AppConfig, run_app};
 pub use runtime::Runtime;
 
 /// Convenient glob import for apps.
 pub mod prelude {
     pub use crate::{
-        App, AppControl, Camera, DQuat, DVec3, InputEvent, KeyCode, Quat, RenderItem, Resources,
-        SceneState, SdkError, Vec3, VertexPosColor, WorldPos,
+        App, AppConfig, AppControl, Camera, DQuat, DVec3, InputEvent, KeyCode, Quat, RenderItem,
+        Resources, SceneState, SdkError, Vec3, VertexPosColor, WorldPos, run_app,
     };
 }
