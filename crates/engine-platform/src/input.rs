@@ -81,7 +81,11 @@ pub(crate) fn translate_physical_key(key: PhysicalKey) -> KeyCode {
     }
 }
 
-pub(crate) fn translate_key(physical: PhysicalKey, state: ElementState, repeat: bool) -> InputEvent {
+pub(crate) fn translate_key(
+    physical: PhysicalKey,
+    state: ElementState,
+    repeat: bool,
+) -> InputEvent {
     let key = translate_physical_key(physical);
     match state {
         ElementState::Pressed => InputEvent::KeyPressed { key, repeat },
@@ -146,17 +150,38 @@ mod tests {
 
     #[test]
     fn input_maps_wasd_and_escape() {
-        assert_eq!(translate_physical_key(PhysicalKey::Code(WK::KeyW)), KeyCode::W);
-        assert_eq!(translate_physical_key(PhysicalKey::Code(WK::KeyA)), KeyCode::A);
-        assert_eq!(translate_physical_key(PhysicalKey::Code(WK::KeyS)), KeyCode::S);
-        assert_eq!(translate_physical_key(PhysicalKey::Code(WK::KeyD)), KeyCode::D);
-        assert_eq!(translate_physical_key(PhysicalKey::Code(WK::Escape)), KeyCode::Escape);
-        assert_eq!(translate_physical_key(PhysicalKey::Code(WK::ArrowUp)), KeyCode::Up);
+        assert_eq!(
+            translate_physical_key(PhysicalKey::Code(WK::KeyW)),
+            KeyCode::W
+        );
+        assert_eq!(
+            translate_physical_key(PhysicalKey::Code(WK::KeyA)),
+            KeyCode::A
+        );
+        assert_eq!(
+            translate_physical_key(PhysicalKey::Code(WK::KeyS)),
+            KeyCode::S
+        );
+        assert_eq!(
+            translate_physical_key(PhysicalKey::Code(WK::KeyD)),
+            KeyCode::D
+        );
+        assert_eq!(
+            translate_physical_key(PhysicalKey::Code(WK::Escape)),
+            KeyCode::Escape
+        );
+        assert_eq!(
+            translate_physical_key(PhysicalKey::Code(WK::ArrowUp)),
+            KeyCode::Up
+        );
     }
 
     #[test]
     fn input_unmapped_key_is_other() {
-        assert_eq!(translate_physical_key(PhysicalKey::Code(WK::F7)), KeyCode::Other);
+        assert_eq!(
+            translate_physical_key(PhysicalKey::Code(WK::F7)),
+            KeyCode::Other
+        );
         assert_eq!(
             translate_physical_key(PhysicalKey::Unidentified(NativeKeyCode::Unidentified)),
             KeyCode::Other
@@ -168,7 +193,10 @@ mod tests {
         let k = PhysicalKey::Code(WK::KeyW);
         assert_eq!(
             translate_key(k, ElementState::Pressed, true),
-            InputEvent::KeyPressed { key: KeyCode::W, repeat: true }
+            InputEvent::KeyPressed {
+                key: KeyCode::W,
+                repeat: true
+            }
         );
         assert_eq!(
             translate_key(k, ElementState::Released, false),
@@ -180,12 +208,30 @@ mod tests {
     fn input_mouse_buttons() {
         use winit::event::MouseButton as M;
         let p = ElementState::Pressed;
-        assert_eq!(translate_mouse_button(M::Left, p), InputEvent::MouseButtonPressed(MouseButton::Left));
-        assert_eq!(translate_mouse_button(M::Right, p), InputEvent::MouseButtonPressed(MouseButton::Right));
-        assert_eq!(translate_mouse_button(M::Middle, p), InputEvent::MouseButtonPressed(MouseButton::Middle));
-        assert_eq!(translate_mouse_button(M::Back, p), InputEvent::MouseButtonPressed(MouseButton::Back));
-        assert_eq!(translate_mouse_button(M::Forward, p), InputEvent::MouseButtonPressed(MouseButton::Forward));
-        assert_eq!(translate_mouse_button(M::Other(7), p), InputEvent::MouseButtonPressed(MouseButton::Other(7)));
+        assert_eq!(
+            translate_mouse_button(M::Left, p),
+            InputEvent::MouseButtonPressed(MouseButton::Left)
+        );
+        assert_eq!(
+            translate_mouse_button(M::Right, p),
+            InputEvent::MouseButtonPressed(MouseButton::Right)
+        );
+        assert_eq!(
+            translate_mouse_button(M::Middle, p),
+            InputEvent::MouseButtonPressed(MouseButton::Middle)
+        );
+        assert_eq!(
+            translate_mouse_button(M::Back, p),
+            InputEvent::MouseButtonPressed(MouseButton::Back)
+        );
+        assert_eq!(
+            translate_mouse_button(M::Forward, p),
+            InputEvent::MouseButtonPressed(MouseButton::Forward)
+        );
+        assert_eq!(
+            translate_mouse_button(M::Other(7), p),
+            InputEvent::MouseButtonPressed(MouseButton::Other(7))
+        );
         assert_eq!(
             translate_mouse_button(M::Left, ElementState::Released),
             InputEvent::MouseButtonReleased(MouseButton::Left)
@@ -205,14 +251,25 @@ mod tests {
     fn input_wheel_line_and_pixel() {
         assert_eq!(
             translate_wheel(MouseScrollDelta::LineDelta(1.0, -2.0)),
-            Some(InputEvent::MouseWheel { lines_x: 1.0, lines_y: -2.0 })
+            Some(InputEvent::MouseWheel {
+                lines_x: 1.0,
+                lines_y: -2.0
+            })
         );
         assert_eq!(
-            translate_wheel(MouseScrollDelta::PixelDelta(PhysicalPosition::new(80.0, 40.0))),
-            Some(InputEvent::MouseWheel { lines_x: 2.0, lines_y: 1.0 })
+            translate_wheel(MouseScrollDelta::PixelDelta(PhysicalPosition::new(
+                80.0, 40.0
+            ))),
+            Some(InputEvent::MouseWheel {
+                lines_x: 2.0,
+                lines_y: 1.0
+            })
         );
         assert_eq!(
-            translate_wheel(MouseScrollDelta::PixelDelta(PhysicalPosition::new(f64::INFINITY, 0.0))),
+            translate_wheel(MouseScrollDelta::PixelDelta(PhysicalPosition::new(
+                f64::INFINITY,
+                0.0
+            ))),
             None
         );
     }
@@ -221,11 +278,17 @@ mod tests {
     fn input_resize() {
         assert_eq!(
             translate_resize(PhysicalSize::new(800, 600)),
-            InputEvent::Resized { width: 800, height: 600 }
+            InputEvent::Resized {
+                width: 800,
+                height: 600
+            }
         );
         assert_eq!(
             translate_resize(PhysicalSize::new(0, 0)),
-            InputEvent::Resized { width: 0, height: 0 }
+            InputEvent::Resized {
+                width: 0,
+                height: 0
+            }
         );
     }
 }
