@@ -80,3 +80,47 @@ pub enum RegistryError {
     #[error("dependency cycle among modules {0:?}")]
     DependencyCycle(Vec<String>),
 }
+
+/// Failure reported by the [`Engine`](crate::Engine) driver.
+#[derive(Debug, thiserror::Error)]
+pub enum EngineError {
+    /// Illegal lifecycle transition.
+    #[error(transparent)]
+    Lifecycle(#[from] LifecycleError),
+    /// Module registry failure.
+    #[error(transparent)]
+    Registry(#[from] RegistryError),
+    /// Configuration failure.
+    #[error(transparent)]
+    Config(#[from] ConfigError),
+    /// Diagnostics failure.
+    #[error(transparent)]
+    Diagnostics(#[from] engine_diagnostics::DiagnosticsError),
+    /// A module hook failed.
+    #[error("module `{module}` failed: {source}")]
+    Module {
+        /// Module name.
+        module: &'static str,
+        /// Underlying error.
+        #[source]
+        source: ModuleError,
+    },
+    /// Registration attempted after initialization began.
+    #[error("modules can only be registered before initialize (phase {phase:?})")]
+    RegistrationClosed {
+        /// Current phase.
+        phase: EnginePhase,
+    },
+    /// The engine has not been (successfully) initialized.
+    #[error("engine has not been initialized")]
+    NotInitialized,
+    /// `initialize` was already called.
+    #[error("engine is already initialized")]
+    AlreadyInitialized,
+    /// `tick` outside the Running phase.
+    #[error("tick requires the Running phase, current phase is {phase:?}")]
+    NotRunning {
+        /// Current phase.
+        phase: EnginePhase,
+    },
+}

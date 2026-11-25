@@ -8,13 +8,15 @@
 #![allow(clippy::result_large_err)]
 
 mod config;
+mod engine;
 mod error;
 mod lifecycle;
 mod module;
 mod registry;
 
-pub use config::{EngineConfig, EngineSection, ModuleConfig, MAX_CONFIG_BYTES};
-pub use error::{ConfigError, LifecycleError, ModuleError, RegistryError};
-pub use lifecycle::{is_legal_transition, EnginePhase, Lifecycle};
+pub use config::{EngineConfig, EngineSection, MAX_CONFIG_BYTES, ModuleConfig};
+pub use engine::Engine;
+pub use error::{ConfigError, EngineError, LifecycleError, ModuleError, RegistryError};
+pub use lifecycle::{EnginePhase, Lifecycle, is_legal_transition};
 pub use module::Module;
 pub use registry::ModuleRegistry;

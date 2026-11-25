@@ -186,7 +186,10 @@ mod tests {
         let m = c.module_config("absent");
         assert!(!m.is_present());
         assert_eq!(m.parse::<AudioCfg>().unwrap(), None);
-        assert_eq!(m.parse_or_default::<AudioCfg>().unwrap(), AudioCfg::default());
+        assert_eq!(
+            m.parse_or_default::<AudioCfg>().unwrap(),
+            AudioCfg::default()
+        );
         assert_eq!(ModuleConfig::empty("x").name(), "x");
     }
 
@@ -212,8 +215,7 @@ mod tests {
 
     #[test]
     fn config_bad_module_section() {
-        let c =
-            EngineConfig::from_ron_str(r#"(modules: { "audio": (volume: "loud") })"#).unwrap();
+        let c = EngineConfig::from_ron_str(r#"(modules: { "audio": (volume: "loud") })"#).unwrap();
         match c.module_config("audio").parse::<AudioCfg>() {
             Err(ConfigError::ModuleSection { module, .. }) => assert_eq!(module, "audio"),
             other => panic!("unexpected {other:?}"),
