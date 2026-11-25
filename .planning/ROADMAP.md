@@ -63,7 +63,15 @@ Plans:
   2. The same frame runs headless on the null backend in tests, and wgpu types do not appear outside the backend crate
   3. Each frame is built by extracting a geometry-agnostic camera-relative `RenderScene` and executing a render graph
   4. A test with the camera at 6.4e6 m from the origin shows no visible jitter
-**Plans**: TBD
+**Plans**: 7 plans
+Plans:
+- [ ] 03-01-PLAN.md — Pin wgpu/winit/rwh/pollster/bytemuck, deny+check-deps green, ADR-0005 rendering API (wave 1)
+- [ ] 03-02-PLAN.md — engine-render boundary: handles, RenderBackend, FramePacket, ResourceTable, NullBackend (wave 2)
+- [ ] 03-03-PLAN.md — engine-platform: InputEvent translation, PlatformWindow, winit ApplicationHandler run loop (wave 2)
+- [ ] 03-04-PLAN.md — engine-render: Camera, camera-relative extract, render graph, 6.4e6 m precision tests (wave 3)
+- [ ] 03-05-PLAN.md — engine-render-wgpu: WgpuBackend, WGSL pipeline, reverse-Z, surface handling (wave 3)
+- [ ] 03-06-PLAN.md — engine-sdk: App, Runtime, run_app, headless tests, triangle example (wave 4)
+- [ ] 03-07-PLAN.md — Phase gate + MANUAL triangle window smoke run (wave 5, human verify)
 **UI hint**: yes
 
 ### Phase 4: World, Spatial & Assets
@@ -135,7 +143,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. Workspace, Toolchain & Guardrails | 4/4 | Complete    | 2026-11-25 |
 | 2. Foundation | 6/6 | Complete    | 2026-11-25 |
-| 3. Platform, Render Backend & Vertical Slice | 0/TBD | Not started | - |
+| 3. Platform, Render Backend & Vertical Slice | 0/7 | Planned | - |
 | 4. World, Spatial & Assets | 0/TBD | Not started | - |
 | 5. Conventional Reference App | 0/TBD | Not started | - |
 | 6. Streaming & Procedural Framework | 0/TBD | Not started | - |
