@@ -2,4 +2,11 @@
 //!
 //! Tier 4 crate. Allowed dependencies and layering rules are documented in
 //! `docs/architecture/dependency-direction.md`.
-//! wgpu itself is added in Phase 3; no other crate may depend on wgpu.
+//! No other crate may depend on wgpu.
+
+mod backend;
+mod pipeline;
+mod target;
+
+pub use backend::WgpuBackend;
+pub use pipeline::DRAW_UNIFORM_STRIDE;
