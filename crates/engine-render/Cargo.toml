@@ -1,0 +1,17 @@
+[package]
+name = "engine-render"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Backend-agnostic render scene, extraction, render graph and backend trait. Contains no GPU API types."
+
+[dependencies]
+engine-core.workspace = true
+engine-math.workspace = true
+engine-world.workspace = true
+engine-assets.workspace = true
+
+[lints]
+workspace = true

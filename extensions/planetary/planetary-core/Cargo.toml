@@ -1,0 +1,14 @@
+[package]
+name = "planetary-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Planetary extension core (cube-sphere topology, terrain LOD). Nothing in the engine depends on it."
+
+[dependencies]
+engine-sdk.workspace = true
+
+[lints]
+workspace = true

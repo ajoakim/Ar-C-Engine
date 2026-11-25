@@ -1,0 +1,15 @@
+[package]
+name = "engine-world"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Entities, transforms and coordinate spaces."
+
+[dependencies]
+engine-core.workspace = true
+engine-math.workspace = true
+
+[lints]
+workspace = true
