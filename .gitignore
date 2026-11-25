@@ -1,0 +1,3 @@
+/target
+/xtask/fixtures/**/target
+/xtask/fixtures/**/Cargo.lock

@@ -1,0 +1,44 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/engine-math",
+    "crates/engine-diagnostics",
+    "crates/engine-core",
+    "crates/engine-jobs",
+    "crates/engine-platform",
+    "crates/engine-assets",
+    "crates/engine-world",
+    "crates/engine-spatial",
+    "crates/engine-render",
+    "crates/engine-render-wgpu",
+    "crates/engine-sdk",
+    "extensions/conventional-3d",
+    "extensions/planetary/planetary-core",
+]
+exclude = ["xtask/fixtures"]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.95"
+license = "MIT OR Apache-2.0"
+publish = false
+version = "0.1.0"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+
+[workspace.dependencies]
+engine-math = { path = "crates/engine-math" }
+engine-diagnostics = { path = "crates/engine-diagnostics" }
+engine-core = { path = "crates/engine-core" }
+engine-jobs = { path = "crates/engine-jobs" }
+engine-platform = { path = "crates/engine-platform" }
+engine-assets = { path = "crates/engine-assets" }
+engine-world = { path = "crates/engine-world" }
+engine-spatial = { path = "crates/engine-spatial" }
+engine-render = { path = "crates/engine-render" }
+engine-render-wgpu = { path = "crates/engine-render-wgpu" }
+engine-sdk = { path = "crates/engine-sdk" }
