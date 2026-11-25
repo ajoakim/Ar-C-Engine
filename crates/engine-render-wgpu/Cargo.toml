@@ -10,6 +10,11 @@ description = "wgpu render backend. The only crate allowed to depend on wgpu."
 [dependencies]
 engine-render.workspace = true
 engine-core.workspace = true
+wgpu.workspace = true
+pollster.workspace = true
+bytemuck.workspace = true
+raw-window-handle.workspace = true
+tracing.workspace = true
 
 [lints]
 workspace = true

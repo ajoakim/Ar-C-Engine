@@ -9,6 +9,10 @@ description = "Windowing and input. The only crate allowed to depend on winit."
 
 [dependencies]
 engine-core.workspace = true
+winit.workspace = true
+raw-window-handle.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
 
 [lints]
 workspace = true

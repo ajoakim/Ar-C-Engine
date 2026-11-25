@@ -18,6 +18,8 @@ engine-world.workspace = true
 engine-spatial.workspace = true
 engine-render.workspace = true
 engine-render-wgpu.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
 
 [lints]
 workspace = true
