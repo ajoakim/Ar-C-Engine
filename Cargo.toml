@@ -14,6 +14,7 @@ members = [
     "crates/engine-sdk",
     "extensions/conventional-3d",
     "extensions/planetary/planetary-core",
+    "xtask",
 ]
 exclude = ["xtask/fixtures"]
 
@@ -42,3 +43,4 @@ engine-spatial = { path = "crates/engine-spatial" }
 engine-render = { path = "crates/engine-render" }
 engine-render-wgpu = { path = "crates/engine-render-wgpu" }
 engine-sdk = { path = "crates/engine-sdk" }
+cargo_metadata = "0.23.1"
