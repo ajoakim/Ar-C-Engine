@@ -9,6 +9,9 @@ description = "Prioritized, cancellable job scheduling."
 
 [dependencies]
 engine-diagnostics.workspace = true
+tracing.workspace = true
+crossbeam-channel.workspace = true
+thiserror.workspace = true
 
 [lints]
 workspace = true

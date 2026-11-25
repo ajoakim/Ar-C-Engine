@@ -44,3 +44,10 @@ engine-render = { path = "crates/engine-render" }
 engine-render-wgpu = { path = "crates/engine-render-wgpu" }
 engine-sdk = { path = "crates/engine-sdk" }
 cargo_metadata = "0.23.1"
+glam = "0.34.3"
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+crossbeam-channel = "0.5.17"
+serde = { version = "1.0.229", features = ["derive"] }
+ron = "0.12.3"
+thiserror = "2.0.21"

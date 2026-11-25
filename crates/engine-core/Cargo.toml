@@ -10,6 +10,10 @@ description = "Engine lifecycle, configuration and module registry."
 [dependencies]
 engine-math.workspace = true
 engine-diagnostics.workspace = true
+tracing.workspace = true
+serde.workspace = true
+ron.workspace = true
+thiserror.workspace = true
 
 [lints]
 workspace = true

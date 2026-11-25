@@ -7,5 +7,10 @@ license.workspace = true
 publish.workspace = true
 description = "Logging, tracing spans, metrics and frame timing."
 
+[dependencies]
+tracing.workspace = true
+tracing-subscriber.workspace = true
+thiserror.workspace = true
+
 [lints]
 workspace = true
