@@ -68,6 +68,15 @@ pub enum RenderError {
     /// Math error.
     #[error(transparent)]
     Math(#[from] engine_math::MathError),
+    /// Render graph error.
+    #[error("render graph: {0}")]
+    Graph(#[from] crate::graph::GraphError),
+    /// Pass does not target the backbuffer.
+    #[error("pass {pass} does not write the backbuffer")]
+    UnsupportedPassTarget {
+        /// Pass name.
+        pass: String,
+    },
     /// Backend-specific failure.
     #[error("backend error: {0}")]
     Backend(String),
