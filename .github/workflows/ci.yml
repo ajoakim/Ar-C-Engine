@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+
+defaults:
+  run:
+    shell: bash   # required so `!` negation works on windows-latest (default shell there is pwsh)
+
+jobs:
+  build:
+    name: build (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned toolchain from rust-toolchain.toml
+        run: rustup toolchain install
+      - name: Assert pinned toolchain is active
+        run: rustc --version | grep -F "1.99.0"
+      - uses: Swatinem/rust-cache@v2
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Build
+        run: cargo build --workspace --locked
+      - name: Test
+        run: cargo test --workspace --locked
+      - name: Dependency direction (must pass)
+        run: cargo run --locked -p xtask -- check-deps
+      - name: Negative - core depends on extension (must fail)
+        run: "! cargo run --locked -p xtask -- check-deps --manifest-path xtask/fixtures/core-depends-on-ext/Cargo.toml"
+      - name: Negative - wgpu/winit misplaced (must fail)
+        run: "! cargo run --locked -p xtask -- check-deps --manifest-path xtask/fixtures/wgpu-winit-misplaced/Cargo.toml"
+
+  deny:
+    name: cargo-deny
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned toolchain from rust-toolchain.toml
+        run: rustup toolchain install
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny
+      - name: cargo deny (bans, licenses, sources, advisories)
+        run: cargo deny check bans licenses sources advisories
+      - name: Negative - cargo-deny rejects misplaced wgpu (must fail)
+        run: "! cargo deny --manifest-path xtask/fixtures/wgpu-winit-misplaced/Cargo.toml --config deny.toml check bans"
