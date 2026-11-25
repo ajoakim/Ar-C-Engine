@@ -28,7 +28,13 @@ Build a small, stable Rust engine core and validate it with two reference apps. 
   2. The workspace has coarse crates with a documented dependency direction
   3. CI fails when a core crate depends on an extension crate, or when wgpu/winit appear outside their designated crates (demonstrated by a failing negative test)
   4. An ADR template exists, and a conventions ADR fixes meters, axes, handedness and depth range
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — Pinned toolchain (1.99.0, MSRV 1.95, edition 2024) and 13-crate workspace with tiered path deps
+- [ ] 01-02-PLAN.md — Dependency-direction doc, ADR template, ADR-0001 conventions, ADR-0002 layout/render split/license, ADR-0003 enforcement/CI
+- [ ] 01-03-PLAN.md — xtask check-deps (cargo_metadata, rules R1-R6), negative fixtures, metadata/docs policy tests
+- [ ] 01-04-PLAN.md — cargo-deny (wgpu/winit wrappers, licenses, advisories) and GitHub Actions ubuntu+windows CI
 
 ### Phase 2: Foundation (Core, Jobs, Diagnostics, Precision)
 **Goal**: Applications can drive an engine lifecycle with modules, jobs and diagnostics, on a precision-safe position model
@@ -120,7 +126,7 @@ Build a small, stable Rust engine core and validate it with two reference apps. 
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Workspace, Toolchain & Guardrails | 0/TBD | Not started | - |
+| 1. Workspace, Toolchain & Guardrails | 0/4 | Not started | - |
 | 2. Foundation | 0/TBD | Not started | - |
 | 3. Platform, Render Backend & Vertical Slice | 0/TBD | Not started | - |
 | 4. World, Spatial & Assets | 0/TBD | Not started | - |
