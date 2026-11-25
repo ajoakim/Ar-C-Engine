@@ -159,7 +159,10 @@ mod tests {
     #[test]
     fn encode_vertices_is_24_bytes_per_vertex() {
         let v = [
-            VertexPosColor { position: [1.0, 2.0, 3.0], color: [0.0, 0.5, 1.0] },
+            VertexPosColor {
+                position: [1.0, 2.0, 3.0],
+                color: [0.0, 0.5, 1.0],
+            },
             VertexPosColor::default(),
         ];
         let bytes = encode_vertices(&v);

@@ -6,6 +6,8 @@
 mod backend;
 mod error;
 mod handles;
+mod null;
+mod resources;
 
 pub use backend::{
     BufferDesc, BufferUsage, DrawCommand, FramePacket, MAX_BUFFER_BYTES, MAX_DRAWS_PER_FRAME,
@@ -15,3 +17,5 @@ pub use backend::{
 pub use error::RenderError;
 pub use glam::{Mat4, Quat};
 pub use handles::{BufferId, MeshHandle, PipelineId, TextureId};
+pub use null::NullBackend;
+pub use resources::{BufferInfo, ResourceTable};
