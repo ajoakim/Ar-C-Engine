@@ -1,0 +1,4 @@
+[workspace]
+resolver = "3"
+members = ["crates/engine-core", "crates/engine-world", "crates/engine-render-wgpu"]
+exclude = ["vendor"]

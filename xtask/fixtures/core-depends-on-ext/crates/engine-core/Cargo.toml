@@ -1,0 +1,8 @@
+[package]
+name = "engine-core"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+planetary-core = { path = "../../extensions/planetary/planetary-core" }
