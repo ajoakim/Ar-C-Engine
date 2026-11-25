@@ -1,0 +1,9 @@
+# Architecture Decision Records
+
+To add an ADR, copy `0000-template.md` to the next free number (4-digit zero-padded) with a kebab-case title, for example `0004-my-decision.md`, and fill in every section. Never rewrite the decision of an accepted ADR: supersede it with a new ADR and set the old one's status to `superseded by ADR-XXXX`, so decision history stays auditable in git.
+
+| ADR | Title | Status |
+|-----|-------|--------|
+| [0001](0001-conventions.md) | Engine Conventions | accepted |
+| [0002](0002-workspace-crate-layout.md) | Workspace Crate Layout, Render Split and License | accepted |
+| [0003](0003-dependency-enforcement.md) | Dependency-Direction Enforcement and CI | accepted |
