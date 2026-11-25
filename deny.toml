@@ -25,7 +25,7 @@ confidence-threshold = 0.93
 ignore = true
 
 [bans]
-multiple-versions = "warn"   # wgpu/winit stacks duplicate often; revisit after Phase 3
+multiple-versions = "warn"   # wgpu/winit stacks duplicate; kept at warn per ADR-0005
 wildcards = "deny"
 allow-wildcard-paths = true  # workspace path deps of publish = false crates
 deny = [
