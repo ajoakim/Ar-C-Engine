@@ -478,3 +478,80 @@ fn retained_culled_cells_respect_the_leaf_budget() {
     assert!(r.rejected > 0, "{r:?}");
     assert!(is_partition(&leaves) && is_balanced(&leaves));
 }
+
+fn hex_model() -> LodModel {
+    let hex = planetary_core::HexSphere::new(16).expect("hex");
+    LodModel {
+        sample_angle0: planetary_core::Topology::sample_angle0(&hex),
+        cells_per_edge: 16,
+        ..model()
+    }
+}
+
+#[test]
+fn refine_distance_is_the_selector_threshold() {
+    use planetary_core::lod::refine_distance;
+    let view = view_at(x_eye(2.0 * R));
+    let tau = LodParams::default().tau_px;
+    for m in [model(), hex_model()] {
+        for level in 1..=16u8 {
+            let d = refine_distance(&m, view.proj_scale, tau, level);
+            let rho = m.geometric_error(level) * view.proj_scale / d;
+            assert!((rho - tau).abs() <= 1e-9 * tau, "level {level}: {rho}");
+        }
+    }
+    // Same construction as the selector test: the real screen-space error at the distance.
+    let m = model();
+    let id = planetary_core::locate(DVec3::new(1.0, 0.0, 0.0), 5);
+    let dir = planetary_core::patch_center_dir(id);
+    let d = refine_distance(&m, view.proj_scale, tau, 5);
+    let s = R + m.height.max + d;
+    let eye = DVec3::new(dir.x * s, dir.y * s, dir.z * s);
+    let at = screen_space_error(&m, &view_at(eye), id, m.height, 1.0);
+    assert!((at - tau).abs() < 1e-6 * tau, "{at}");
+    assert_eq!(refine_distance(&m, 1.0, 0.0, 3), f64::INFINITY);
+}
+
+#[test]
+fn morph_factor_shape_and_guards() {
+    use planetary_core::lod::morph_factor;
+    assert_eq!(morph_factor(10.0, 10.0, 5.0), 1.0);
+    assert_eq!(morph_factor(11.0, 10.0, 5.0), 1.0);
+    assert_eq!(morph_factor(5.0, 10.0, 5.0), 0.0);
+    assert_eq!(morph_factor(1.0, 10.0, 5.0), 0.0);
+    assert_eq!(morph_factor(7.5, 10.0, 5.0), 0.5);
+    let mut prev = 1.0;
+    for i in (0..=200).rev() {
+        let f = morph_factor(f64::from(i) * 0.1, 10.0, 5.0);
+        assert!((0.0..=1.0).contains(&f) && f <= prev);
+        prev = f;
+    }
+    assert_eq!(morph_factor(7.0, 5.0, 10.0), 0.0);
+    assert_eq!(morph_factor(7.0, 5.0, 5.0), 0.0);
+    for bad in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+        assert_eq!(morph_factor(bad, 10.0, 5.0), 0.0);
+        assert_eq!(morph_factor(7.0, bad, 5.0), 0.0);
+        assert_eq!(morph_factor(7.0, 10.0, bad), 0.0);
+    }
+}
+
+#[test]
+fn morph_chain_parent_finished_where_children_start() {
+    use planetary_core::lod::{morph_factor, refine_distance};
+    let view = view_at(x_eye(2.0 * R));
+    let tau = LodParams::default().tau_px;
+    for m in [model(), hex_model()] {
+        for l in 2..=16u8 {
+            let split = refine_distance(&m, view.proj_scale, tau, l - 1);
+            let parent_end = 1.25 * split;
+            assert!(parent_end >= split);
+            // Parent (level l-1) is fully morphed at its split distance; the child (level l)
+            // starts at 1 there; each level's ramp is non-degenerate.
+            let p_start = refine_distance(&m, view.proj_scale, tau, l - 2);
+            assert_eq!(morph_factor(split, p_start, parent_end), 0.0);
+            let c_end = 1.25 * refine_distance(&m, view.proj_scale, tau, l);
+            assert_eq!(morph_factor(split, split, c_end), 1.0);
+            assert!(c_end < split, "level {l}: ramp must be non-degenerate");
+        }
+    }
+}

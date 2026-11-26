@@ -63,3 +63,31 @@ pub fn screen_space_error(
     let d = if d > min_distance { d } else { min_distance };
     model.geometric_error(id.level()) * view.proj_scale / d
 }
+
+/// Distance below which a cell of `level` is refined: the selector splits it when
+/// `geometric_error(level) * proj_scale / d > tau_px`, i.e. `d < refine_distance(..)`
+/// (ADR-0012). The single source of the per-level threshold used by the geomorph factor.
+/// Returns `f64::INFINITY` when `tau_px <= 0` or not finite.
+#[must_use]
+pub fn refine_distance(model: &LodModel, proj_scale: f64, tau_px: f64, level: u8) -> f64 {
+    if !(tau_px > 0.0 && tau_px.is_finite()) {
+        return f64::INFINITY;
+    }
+    model.geometric_error(level) * proj_scale / tau_px
+}
+
+/// Geomorph factor: 1 at `d >= d_start`, 0 at `d <= d_end`, linear in `d` between. Returns 0.0
+/// when `d_start <= d_end` or any input is not finite (never NaN).
+#[must_use]
+pub fn morph_factor(d: f64, d_start: f64, d_end: f64) -> f64 {
+    if !(d.is_finite() && d_start.is_finite() && d_end.is_finite()) || d_start <= d_end {
+        return 0.0;
+    }
+    if d >= d_start {
+        1.0
+    } else if d <= d_end {
+        0.0
+    } else {
+        (d - d_end) / (d_start - d_end)
+    }
+}
