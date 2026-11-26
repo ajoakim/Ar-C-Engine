@@ -17,7 +17,7 @@
 
 - [x] **CORE-01**: Application can drive the engine lifecycle Initialize → Load → Running → Suspend → Shutdown
 - [x] **CORE-02**: Application can load configuration and register modules with the engine
-- [ ] **CORE-03**: Application can use the engine through a minimal public SDK facade without depending on internal crates
+- [x] **CORE-03**: Application can use the engine through a minimal public SDK facade without depending on internal crates
 - [x] **CORE-04**: Developer can submit prioritized, cancellable jobs to a job scheduler
 - [x] **CORE-05**: Developer gets structured logging, tracing spans, and frame timing from a diagnostics module
 
@@ -25,15 +25,15 @@
 
 - [ ] **WORLD-01**: Developer can create entities with stable generational identity and transform hierarchy
 - [x] **WORLD-02**: Positions are stored in high-precision world coordinates (opaque `WorldPos`) across multiple coordinate spaces
-- [ ] **WORLD-03**: Renderer receives camera-relative f32 transforms, and a test at 6.4e6 m from the origin shows no visible jitter
+- [x] **WORLD-03**: Renderer receives camera-relative f32 transforms, and a test at 6.4e6 m from the origin shows no visible jitter
 - [x] **WORLD-04**: Engine supports origin rebasing for large worlds
 - [ ] **WORLD-05**: Developer can run spatial queries (visibility, region lookup) through a pluggable spatial interface with one default backend
 
 ### Rendering
 
-- [ ] **REND-01**: Rendering goes through an engine-owned backend boundary, with wgpu as the first implementation and a null backend for headless tests
-- [ ] **REND-02**: Application can open a window and receive input events through a platform layer
-- [ ] **REND-03**: Frame is built by extracting a geometry-agnostic, camera-relative `RenderScene` and executing a render graph
+- [x] **REND-01**: Rendering goes through an engine-owned backend boundary, with wgpu as the first implementation and a null backend for headless tests
+- [x] **REND-02**: Application can open a window and receive input events through a platform layer
+- [x] **REND-03**: Frame is built by extracting a geometry-agnostic, camera-relative `RenderScene` and executing a render graph
 - [ ] **REND-04**: Application can render lit meshes with materials and a directional light using reverse-Z depth
 - [ ] **REND-05**: Application can load glTF meshes and textures
 
@@ -116,17 +116,17 @@
 | WS-05 | Phase 8 | Pending |
 | CORE-01 | Phase 2 | Complete |
 | CORE-02 | Phase 2 | Complete |
-| CORE-03 | Phase 3 | Pending |
+| CORE-03 | Phase 3 | Complete |
 | CORE-04 | Phase 2 | Complete |
 | CORE-05 | Phase 2 | Complete |
 | WORLD-01 | Phase 4 | Pending |
 | WORLD-02 | Phase 2 | Complete |
-| WORLD-03 | Phase 3 | Pending |
+| WORLD-03 | Phase 3 | Complete |
 | WORLD-04 | Phase 2 | Complete |
 | WORLD-05 | Phase 4 | Pending |
-| REND-01 | Phase 3 | Pending |
-| REND-02 | Phase 3 | Pending |
-| REND-03 | Phase 3 | Pending |
+| REND-01 | Phase 3 | Complete |
+| REND-02 | Phase 3 | Complete |
+| REND-03 | Phase 3 | Complete |
 | REND-04 | Phase 5 | Pending |
 | REND-05 | Phase 5 | Pending |
 | ASSET-01 | Phase 4 | Pending |

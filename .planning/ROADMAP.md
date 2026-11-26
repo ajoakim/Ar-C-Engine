@@ -10,7 +10,7 @@ Build a small, stable Rust engine core and validate it with two reference apps. 
 
 - [x] **Phase 1: Workspace, Toolchain & Guardrails** - Pinned toolchain, coarse crate layout, CI boundary checks, ADR template and conventions (completed 2026-11-25)
 - [x] **Phase 2: Foundation (Core, Jobs, Diagnostics, Precision)** - Lifecycle, modules, job scheduler, diagnostics, WorldPos and origin rebasing (completed 2026-11-25)
-- [ ] **Phase 3: Platform, Render Backend & Vertical Slice** - Window/input, engine-owned render boundary with wgpu and null backends, RenderScene extraction, triangle via SDK
+- [x] **Phase 3: Platform, Render Backend & Vertical Slice** - Window/input, engine-owned render boundary with wgpu and null backends, RenderScene extraction, triangle via SDK (completed 2026-11-26)
 - [ ] **Phase 4: World, Spatial & Assets** - Entities and transforms, spatial queries, typed handles and residency state machine
 - [ ] **Phase 5: Conventional Reference App (Canary)** - Lit meshes, glTF, basic-scene app on SDK only, building without planetary crates
 - [ ] **Phase 6: Streaming & Procedural Framework** - Generic streaming with fallback, deterministic seeded generator layers
@@ -65,12 +65,12 @@ Plans:
   4. A test with the camera at 6.4e6 m from the origin shows no visible jitter
 **Plans**: 7 plans
 Plans:
-- [ ] 03-01-PLAN.md — Pin wgpu/winit/rwh/pollster/bytemuck, deny+check-deps green, ADR-0005 rendering API (wave 1)
-- [ ] 03-02-PLAN.md — engine-render boundary: handles, RenderBackend, FramePacket, ResourceTable, NullBackend (wave 2)
-- [ ] 03-03-PLAN.md — engine-platform: InputEvent translation, PlatformWindow, winit ApplicationHandler run loop (wave 2)
-- [ ] 03-04-PLAN.md — engine-render: Camera, camera-relative extract, render graph, 6.4e6 m precision tests (wave 3)
-- [ ] 03-05-PLAN.md — engine-render-wgpu: WgpuBackend, WGSL pipeline, reverse-Z, surface handling (wave 3)
-- [ ] 03-06-PLAN.md — engine-sdk: App, Runtime, run_app, headless tests, triangle example (wave 4)
+- [x] 03-01-PLAN.md — Pin wgpu/winit/rwh/pollster/bytemuck, deny+check-deps green, ADR-0005 rendering API (wave 1)
+- [x] 03-02-PLAN.md — engine-render boundary: handles, RenderBackend, FramePacket, ResourceTable, NullBackend (wave 2)
+- [x] 03-03-PLAN.md — engine-platform: InputEvent translation, PlatformWindow, winit ApplicationHandler run loop (wave 2)
+- [x] 03-04-PLAN.md — engine-render: Camera, camera-relative extract, render graph, 6.4e6 m precision tests (wave 3)
+- [x] 03-05-PLAN.md — engine-render-wgpu: WgpuBackend, WGSL pipeline, reverse-Z, surface handling (wave 3)
+- [x] 03-06-PLAN.md — engine-sdk: App, Runtime, run_app, headless tests, triangle example (wave 4)
 - [ ] 03-07-PLAN.md — Phase gate + MANUAL triangle window smoke run (wave 5, human verify)
 **UI hint**: yes
 
@@ -143,7 +143,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. Workspace, Toolchain & Guardrails | 4/4 | Complete    | 2026-11-25 |
 | 2. Foundation | 6/6 | Complete    | 2026-11-25 |
-| 3. Platform, Render Backend & Vertical Slice | 0/7 | Planned | - |
+| 3. Platform, Render Backend & Vertical Slice | 6/7 | Complete    | 2026-11-26 |
 | 4. World, Spatial & Assets | 0/TBD | Not started | - |
 | 5. Conventional Reference App | 0/TBD | Not started | - |
 | 6. Streaming & Procedural Framework | 0/TBD | Not started | - |
