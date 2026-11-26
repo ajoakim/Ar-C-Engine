@@ -23,6 +23,8 @@ pub struct LodModel {
     /// nearest of its grid samples (see [`LodModel::from_terrain`]).
     pub residual: [f64; RESIDUAL_LEVELS],
     pub cells_per_edge: u32,
+    /// Sample spacing angle (radians) at level 0; level `L` uses `sample_angle0 / 2^L`.
+    pub sample_angle0: f64,
     pub kappa: f64,
 }
 
@@ -79,6 +81,13 @@ impl LodModel {
     /// variation. The `max` with sea level is 1-Lipschitz, so the bound carries over.
     #[must_use]
     pub fn from_terrain(t: &PlanetTerrain, kappa: f64) -> LodModel {
+        Self::for_topology(t, kappa, FRAC_PI_2 / f64::from(t.cells_per_edge()))
+    }
+
+    /// Like [`LodModel::from_terrain`] for a topology whose level-0 sample spacing angle is
+    /// `sample_angle0` (`Topology::sample_angle0`).
+    #[must_use]
+    pub fn for_topology(t: &PlanetTerrain, kappa: f64, sample_angle0: f64) -> LodModel {
         let p = t.params();
         let top = p.base_amplitude + p.detail_amplitude;
         let height = HeightRange {
@@ -90,6 +99,7 @@ impl LodModel {
             height,
             residual: [0.0; RESIDUAL_LEVELS],
             cells_per_edge: t.cells_per_edge(),
+            sample_angle0,
             kappa,
         };
         for level in 0..RESIDUAL_LEVELS {
@@ -105,7 +115,7 @@ impl LodModel {
     }
 
     fn theta(&self, level: u8) -> f64 {
-        FRAC_PI_2 / (f64::from(self.cells_per_edge) * f64::from(1u32 << level))
+        self.sample_angle0 / f64::from(1u32 << level)
     }
 
     /// Cell size in meters at `level` (arc length at the reference radius).

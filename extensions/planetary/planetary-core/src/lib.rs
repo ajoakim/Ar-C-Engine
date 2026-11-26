@@ -16,14 +16,21 @@ pub use mapping::{
     equal_angle_t, face_of_dir, is_valid_cells_per_edge, lattice_dir, locate, patch_center_dir,
     patch_corner_dirs, vertex_dir,
 };
+pub mod cell_payload;
 pub mod lod;
 pub mod mesh;
 pub mod payload;
+pub use cell_payload::{
+    CELL_HEADER_LEN, CELL_PAYLOAD_MAGIC, CELL_PAYLOAD_VERSION, decode_cell_payload,
+    encode_cell_payload,
+};
 pub use mesh::{
     PatchMesh, SKIRT_MARGIN, border_positions_f64, build_patch, build_patch_cancellable,
     grid_indices, index_count, skirt_depth, vertex_count, vertex_position_f64,
 };
 pub use payload::{PayloadError, decode_payload, encode_payload, payload_len};
+pub mod topology;
+pub use topology::{CellMesh, IndexVariant, Piece, Topology, cube::CubeSphere};
 pub mod terrain;
 pub use terrain::{
     BASE_LAYER, BaseLayer, DETAIL_LAYER, DetailLayer, LAYER_VERSION, LayerSeeds, MASK_LAYER,

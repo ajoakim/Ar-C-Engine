@@ -21,6 +21,7 @@ fn model() -> LodModel {
         },
         residual: [0.0; 25],
         cells_per_edge: 32,
+        sample_angle0: core::f64::consts::FRAC_PI_2 / 32.0,
         kappa: 0.25,
     }
 }
