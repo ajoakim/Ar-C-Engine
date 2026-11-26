@@ -213,8 +213,15 @@ fn no_wall_clock_in_planetary_crates() {
             files.extend(rs_files(&base.join(sub)));
         }
     }
+    let telemetry = root()
+        .join("src")
+        .join("telemetry.rs")
+        .canonicalize()
+        .unwrap();
+    let instant = ["Inst", "ant"].concat();
     let mut scanned = 0usize;
     for f in files {
+        let is_telemetry = f.canonicalize().is_ok_and(|c| c == telemetry);
         let name = f.file_name().and_then(|n| n.to_str()).unwrap_or_default();
         // banned_ops.rs is the float/hash scanner itself; sdk_only.rs is this file.
         if name == "banned_ops.rs" || name == "sdk_only.rs" {
@@ -223,6 +230,9 @@ fn no_wall_clock_in_planetary_crates() {
         scanned += 1;
         for l in code_lines(&f) {
             for tok in &banned {
+                if is_telemetry && *tok == instant {
+                    continue;
+                }
                 assert!(
                     !l.contains(tok.as_str()),
                     "{} uses `{tok}`: {l}",
@@ -232,4 +242,34 @@ fn no_wall_clock_in_planetary_crates() {
         }
     }
     assert!(scanned >= 10, "only {scanned} files scanned");
+}
+
+#[test]
+fn wall_clock_only_in_telemetry_module() {
+    let instant = ["Inst", "ant"].concat();
+    let telemetry = root().join("src").join("telemetry.rs");
+    assert!(telemetry.exists());
+    let telemetry = telemetry.canonicalize().unwrap();
+    assert!(
+        code_lines(&telemetry).iter().any(|l| l.contains(&instant)),
+        "telemetry.rs must hold the wall clock"
+    );
+    let mut files = Vec::new();
+    for base in [
+        root(),
+        sibling("planetary-core"),
+        sibling("planetary-terrain"),
+    ] {
+        for sub in ["src", "tests", "examples"] {
+            files.extend(rs_files(&base.join(sub)));
+        }
+    }
+    for f in files {
+        if f.canonicalize().is_ok_and(|c| c == telemetry) {
+            continue;
+        }
+        for l in code_lines(&f) {
+            assert!(!l.contains(&instant), "{} uses `{instant}`", f.display());
+        }
+    }
 }

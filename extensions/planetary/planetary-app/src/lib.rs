@@ -5,6 +5,7 @@
 //! Engine crates under crates/ must never depend on this crate.
 
 pub mod descent;
+pub mod telemetry;
 
 use engine_sdk::tracing;
 use engine_sdk::{App, AppControl, DVec3, InputEvent, Resources, SceneState, SdkError};
@@ -15,6 +16,10 @@ use planetary_terrain::{
 };
 
 pub use descent::DescentScript;
+pub use telemetry::{
+    ALTITUDE_BANDS, Clock, FrameSample, PerfSettings, PerfSummary, SimClock, Telemetry, WallClock,
+    band_of, summarize,
+};
 
 /// Planetary app settings.
 #[derive(Clone, Debug, PartialEq)]
@@ -26,6 +31,8 @@ pub struct AppSettings {
     pub viewport_height: u32,
     /// Scripted descent; `None` means the interactive camera.
     pub script: Option<DescentScript>,
+    /// Frame telemetry options (all off by default).
+    pub perf: PerfSettings,
 }
 
 impl Default for AppSettings {
@@ -36,6 +43,7 @@ impl Default for AppSettings {
             start_altitude: TerrainParams::default().radius,
             viewport_height: 720,
             script: None,
+            perf: PerfSettings::default(),
         }
     }
 }
@@ -49,6 +57,10 @@ pub struct PlanetaryApp {
     time: f64,
     last_view: Option<View>,
     quit: bool,
+    nominal_radius: f64,
+    telemetry: Telemetry,
+    frames: u64,
+    exit_after_frames: Option<u64>,
 }
 
 impl PlanetaryApp {
@@ -58,6 +70,15 @@ impl PlanetaryApp {
     /// `SdkError::App` for an invalid configuration or camera start.
     #[allow(clippy::result_large_err)] // SdkError is the SDK-wide error type.
     pub fn new(settings: AppSettings) -> Result<Self, SdkError> {
+        Self::with_clock(settings, Box::new(SimClock::new(16_666_667)))
+    }
+
+    /// Like [`PlanetaryApp::new`] with an explicit telemetry clock.
+    ///
+    /// # Errors
+    /// `SdkError::App` for an invalid configuration, camera start or perf log.
+    #[allow(clippy::result_large_err)]
+    pub fn with_clock(settings: AppSettings, clock: Box<dyn Clock>) -> Result<Self, SdkError> {
         let terrain = TerrainSystem::new(settings.terrain.clone())?;
         let radius = settings.terrain.terrain.radius;
         let surface = |d: DVec3| terrain.surface_radius_at(d);
@@ -74,7 +95,13 @@ impl PlanetaryApp {
             camera.set_pose(pos, q);
         }
         let viewport_h = settings.viewport_height.max(1);
+        let telemetry = Telemetry::new(clock, &settings.perf)
+            .map_err(|e| SdkError::App(format!("perf log: {e}")))?;
         Ok(Self {
+            nominal_radius: radius,
+            telemetry,
+            frames: 0,
+            exit_after_frames: settings.perf.exit_after_frames,
             script: settings.script,
             terrain,
             camera,
@@ -106,8 +133,20 @@ impl PlanetaryApp {
         self.time
     }
 
+    #[must_use]
+    pub fn telemetry(&self) -> &Telemetry {
+        &self.telemetry
+    }
+
+    /// Frames recorded by telemetry.
+    #[must_use]
+    pub fn frames_recorded(&self) -> u64 {
+        self.frames
+    }
+
     /// Stops the terrain worker pool.
-    pub fn shutdown(self) {
+    pub fn shutdown(mut self) {
+        self.telemetry.flush();
         self.terrain.shutdown();
     }
 
@@ -176,9 +215,12 @@ impl App for PlanetaryApp {
             self.last_view = Some(view);
         }
         if let Some(view) = self.last_view {
+            self.telemetry.begin_phase();
             self.terrain.prepare(&view);
+            self.telemetry.end_prepare();
         }
-        if self.quit || self.camera.exit_requested() {
+        let frames_done = self.exit_after_frames.is_some_and(|n| self.frames >= n);
+        if self.quit || self.camera.exit_requested() || frames_done {
             AppControl::Exit
         } else {
             AppControl::Continue
@@ -190,6 +232,45 @@ impl App for PlanetaryApp {
         resources: &mut Resources<'_>,
         scene: &mut SceneState,
     ) -> Result<(), SdkError> {
-        self.terrain.gpu_frame(resources, scene)
+        self.telemetry.measure_gpu_frame_start();
+        let result = self.terrain.gpu_frame(resources, scene);
+        let pos = self.camera.position();
+        let len = pos.length();
+        let altitude_m = if len > 0.0 {
+            len - self.terrain.surface_radius_at(pos / len)
+        } else {
+            0.0
+        };
+        let r = self.terrain.report();
+        let sample = FrameSample {
+            frame: self.frames + 1,
+            sim_time_s: self.time,
+            altitude_m,
+            nominal_altitude_m: len - self.nominal_radius,
+            center_distance_m: len,
+            nodes_visited: r.select.nodes_visited,
+            leaves: r.select.leaves,
+            wanted_leaves: r.wanted_leaves,
+            drawn_leaves: r.drawn_leaves,
+            held_meshes: r.held_meshes,
+            pending: r.stream.pending,
+            in_flight: r.stream.in_flight,
+            awaiting_upload: r.stream.awaiting_upload,
+            started: r.stream.started,
+            completions: r.stream.completions_applied,
+            uploads: r.stream.uploads,
+            uploaded_bytes: r.stream.uploaded_bytes,
+            evicted: r.stream.evicted,
+            cancelled: r.stream.cancelled,
+            destroyed: r.destroyed,
+            upload_rejects: r.upload_rejects,
+            draw_overflow: r.draw_overflow,
+            tau_eff: r.select.tau_eff,
+            tau_steps: r.select.tau_steps,
+            ..FrameSample::default()
+        };
+        self.telemetry.record(sample);
+        self.frames += 1;
+        result
     }
 }
