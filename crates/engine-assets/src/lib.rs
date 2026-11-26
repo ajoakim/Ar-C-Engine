@@ -10,10 +10,12 @@ mod manager;
 mod registry;
 mod residency;
 
-pub use manager::{AssetClass, ClassBudget, MemoryPool, ResidencyManager};
+pub use manager::{
+    AssetClass, ClassBudget, ClassStats, MemoryPool, ResidencyManager, ResidencyStats,
+};
 pub use residency::ResidencyState;
 
 pub use error::AssetError;
 pub use handle::Handle;
+pub use id::{ASSET_NAMESPACE, AssetId, normalize_key};
 pub use registry::AssetRegistry;
-pub use id::{normalize_key, AssetId, ASSET_NAMESPACE};

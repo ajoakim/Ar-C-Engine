@@ -121,7 +121,11 @@ mod tests {
         let mut legal = 0;
         for a in ResidencyState::ALL {
             for b in ResidencyState::ALL {
-                assert_eq!(a.can_transition(b), expected[a.index()][b.index()], "{a:?}->{b:?}");
+                assert_eq!(
+                    a.can_transition(b),
+                    expected[a.index()][b.index()],
+                    "{a:?}->{b:?}"
+                );
                 if a.can_transition(b) {
                     legal += 1;
                 }
@@ -144,7 +148,10 @@ mod tests {
         assert_eq!(s, Requested);
         assert_eq!(
             s.transition(GpuResident),
-            Err(AssetError::IllegalTransition { from: Requested, to: GpuResident })
+            Err(AssetError::IllegalTransition {
+                from: Requested,
+                to: GpuResident
+            })
         );
         assert_eq!(s, Requested);
     }
@@ -152,7 +159,10 @@ mod tests {
     #[test]
     fn residency_state_in_flight() {
         for s in ResidencyState::ALL {
-            assert_eq!(s.is_in_flight(), matches!(s, Requested | Generating | Uploading));
+            assert_eq!(
+                s.is_in_flight(),
+                matches!(s, Requested | Generating | Uploading)
+            );
         }
     }
 }
