@@ -179,7 +179,8 @@ Plans:
   4. Sphere spikes (cell nesting/coverage, pentagons, IDs/adjacency, skirt gap bound) pass, or the documented fallback is chosen, at an explicit go/no-go with the user before the full hex build
   5. A `Topology` trait has cube-sphere and half-cell hex implementations; the hex cut covers the sphere exactly once with balanced neighbors, and its seam/coverage proofs (with negative controls) pass
   6. The hex planet runs the full scripted orbit-to-surface descent at real defaults in the planetary app (SDK only), and the user's window flight confirms detail rendering in on descent and aggregating on ascent
-**Plans:** 18 plans (13 waves; 07.1-07 and 07.1-18 are checkpoints)
+  7. The flight feedback items are fixed or measured with evidence and confirmed in the human flight: flicker cause established (plan 20), seamless level changes via geomorphing (plans 21-24), scale and contrast with mountain ranges, colour bands, relief light and distance haze (plan 25; the haze is a generic precursor that Phase 8 atmosphere PLAN-08 supersedes), present mode and window readout (plan 26), hex streaming speed (plan 27)
+**Plans:** 28 plans (27 numbered plus 07.1-16b; 21 waves; 07.1-07 and 07.1-18 are checkpoints; plans 19-27 were added after the user's flight feedback and 07.1-18 is the last wave)
 
 Plans:
 - [ ] 07.1-01-PLAN.md — Telemetry (Clock/SimClock/WallClock, CSV, --bench-descent at real defaults) + evidence-based crash/stutter diagnosis on the baseline (G3, G2 diagnosis)
@@ -199,7 +200,17 @@ Plans:
 - [ ] 07.1-15-PLAN.md — Hex sector meshes, 8 index variants, skirts incl. diagonals, seam proofs with negative control (go-dependent)
 - [ ] 07.1-16-PLAN.md — HexSphere: Topology, hex selection at real parameters, legacy cube paths removed (go-dependent)
 - [ ] 07.1-17-PLAN.md — App on hex (default) + cube fallback, hex descent/ascent at real defaults, benches, ADR-0011 accepted, docs (go-dependent)
-- [ ] 07.1-18-PLAN.md — CHECKPOINT: full gate + human window flight with telemetry
+- [ ] 07.1-16b (summary only, no plan file) — parents-only hex balance closure, hex_selection_reaches_max_level un-ignored
+- [ ] 07.1-19-PLAN.md — Streaming throughput: windowed-realistic harness, adaptive caps, nearest-first ordering, coarse fallback partition, lag bounds (added after the Phase 7.1 flight feedback)
+- [ ] 07.1-20-PLAN.md — Flicker diagnosis with counters (level_changes, appear/disappear, cull_toggles, overlap_pairs, flipflops), absolute invariants, targeted fix or documented finding (reconciled with the existing 0.2 selection hysteresis)
+- [ ] 07.1-21-PLAN.md — Generic render path: morph vertex layout (stride 52), per-draw morph, per-frame distance fog, identity tests (morph 0 and density 0 bit-identical)
+- [ ] 07.1-22-PLAN.md — Morph targets: parent-mesh surface at the vertex direction for cube and hex (oracle, seam proof with negative controls)
+- [ ] 07.1-23-PLAN.md — Cell payload v4, morph upload and byte budgets, ADR-0014
+- [ ] 07.1-24-PLAN.md — Morph driving from the selector refine distance, child appears at morph 1, handover continuity proofs and benches
+- [ ] 07.1-25-PLAN.md — Scale and contrast: generator v2 ridge layer, bounds, colour ramp and slope rock, relief light, distance haze (precursor to Phase 8 atmosphere), ADR-0015
+- [ ] 07.1-26-PLAN.md — Present mode setting, startup info and window title readout, strict flags, measured table, ADR-0016
+- [ ] 07.1-27-PLAN.md — Hex prepare speed: profile first, orientation-safe re-selection skip, equality proofs, stated targets
+- [ ] 07.1-18-PLAN.md — CHECKPOINT (last wave, depends on 17 and 19-27): full gate + human window flight with telemetry; the flight covers every Pending (human) item of plans 20-27
 
 
 ### Phase 8: Hardening & Decisions
