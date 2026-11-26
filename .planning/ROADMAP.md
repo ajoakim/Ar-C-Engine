@@ -11,7 +11,7 @@ Build a small, stable Rust engine core and validate it with two reference apps. 
 - [x] **Phase 1: Workspace, Toolchain & Guardrails** - Pinned toolchain, coarse crate layout, CI boundary checks, ADR template and conventions (completed 2026-11-25)
 - [x] **Phase 2: Foundation (Core, Jobs, Diagnostics, Precision)** - Lifecycle, modules, job scheduler, diagnostics, WorldPos and origin rebasing (completed 2026-11-25)
 - [x] **Phase 3: Platform, Render Backend & Vertical Slice** - Window/input, engine-owned render boundary with wgpu and null backends, RenderScene extraction, triangle via SDK (completed 2026-11-26)
-- [ ] **Phase 4: World, Spatial & Assets** - Entities and transforms, spatial queries, typed handles and residency state machine
+- [x] **Phase 4: World, Spatial & Assets** - Entities and transforms, spatial queries, typed handles and residency state machine (completed 2026-11-26)
 - [ ] **Phase 5: Conventional Reference App (Canary)** - Lit meshes, glTF, basic-scene app on SDK only, building without planetary crates
 - [ ] **Phase 6: Streaming & Procedural Framework** - Generic streaming with fallback, deterministic seeded generator layers
 - [ ] **Phase 7: Planetary Extension & Terrain LOD** - Cube-sphere, quadtree SSE LOD, crack-free transitions, planetary camera, planetary app
@@ -86,14 +86,14 @@ Plans:
 **Plans**: 8 plans
 
 Plans:
-- [ ] 04-01-PLAN.md — Pin slotmap/uuid, wire world/spatial/assets manifests, ADR-0006 spatial index hash grid first (wave 1)
-- [ ] 04-02-PLAN.md — engine-world: EntityId, Transform, World spawn/despawn/hierarchy with stale/cycle rejection (wave 2)
-- [ ] 04-03-PLAN.md — engine-assets: AssetId (uuid v5, golden-pinned), Handle<T>, AssetRegistry<T> (wave 2)
-- [ ] 04-04-PLAN.md — engine-world: WorldTransform, dirty-flag top-down update, rebase, 6.4e6 m precision tests (wave 3)
-- [ ] 04-05-PLAN.md — engine-spatial: f64 volumes, SpatialIndex trait, LinearIndex oracle backend (wave 3)
-- [ ] 04-06-PLAN.md — engine-assets: residency transition table, ResidencyManager budgets/upload cap/LRU/stats (wave 3)
-- [ ] 04-07-PLAN.md — engine-spatial: HashGridIndex default backend + oracle and trait-object tests (wave 4)
-- [ ] 04-08-PLAN.md — engine-assets: AsyncLoader on JobSystem (load, cancel, panic, stale generation) (wave 4)
+- [x] 04-01-PLAN.md — Pin slotmap/uuid, wire world/spatial/assets manifests, ADR-0006 spatial index hash grid first (wave 1)
+- [x] 04-02-PLAN.md — engine-world: EntityId, Transform, World spawn/despawn/hierarchy with stale/cycle rejection (wave 2)
+- [x] 04-03-PLAN.md — engine-assets: AssetId (uuid v5, golden-pinned), Handle<T>, AssetRegistry<T> (wave 2)
+- [x] 04-04-PLAN.md — engine-world: WorldTransform, dirty-flag top-down update, rebase, 6.4e6 m precision tests (wave 3)
+- [x] 04-05-PLAN.md — engine-spatial: f64 volumes, SpatialIndex trait, LinearIndex oracle backend (wave 3)
+- [x] 04-06-PLAN.md — engine-assets: residency transition table, ResidencyManager budgets/upload cap/LRU/stats (wave 3)
+- [x] 04-07-PLAN.md — engine-spatial: HashGridIndex default backend + oracle and trait-object tests (wave 4)
+- [x] 04-08-PLAN.md — engine-assets: AsyncLoader on JobSystem (load, cancel, panic, stale generation) (wave 4)
 
 ### Phase 5: Conventional Reference App (Canary)
 **Goal**: A conventional 3D scene runs on the SDK alone, proving the core is general-purpose
@@ -154,7 +154,7 @@ Plans:
 | 1. Workspace, Toolchain & Guardrails | 4/4 | Complete    | 2026-11-25 |
 | 2. Foundation | 6/6 | Complete    | 2026-11-25 |
 | 3. Platform, Render Backend & Vertical Slice | 6/7 | Complete    | 2026-11-26 |
-| 4. World, Spatial & Assets | 0/TBD | Not started | - |
+| 4. World, Spatial & Assets | 8/8 | Complete    | 2026-11-26 |
 | 5. Conventional Reference App | 0/TBD | Not started | - |
 | 6. Streaming & Procedural Framework | 0/TBD | Not started | - |
 | 7. Planetary Extension & Terrain LOD | 0/TBD | Not started | - |

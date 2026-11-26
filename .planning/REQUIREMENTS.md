@@ -23,11 +23,11 @@
 
 ### World & Precision
 
-- [ ] **WORLD-01**: Developer can create entities with stable generational identity and transform hierarchy
+- [x] **WORLD-01**: Developer can create entities with stable generational identity and transform hierarchy
 - [x] **WORLD-02**: Positions are stored in high-precision world coordinates (opaque `WorldPos`) across multiple coordinate spaces
 - [x] **WORLD-03**: Renderer receives camera-relative f32 transforms, and a test at 6.4e6 m from the origin shows no visible jitter
 - [x] **WORLD-04**: Engine supports origin rebasing for large worlds
-- [ ] **WORLD-05**: Developer can run spatial queries (visibility, region lookup) through a pluggable spatial interface with one default backend
+- [x] **WORLD-05**: Developer can run spatial queries (visibility, region lookup) through a pluggable spatial interface with one default backend
 
 ### Rendering
 
@@ -39,9 +39,9 @@
 
 ### Assets & Residency
 
-- [ ] **ASSET-01**: Resources have stable identifiers and typed handles
-- [ ] **ASSET-02**: Resources move through a CPU/GPU residency state machine (Unloaded → Requested → Generating → CpuReady → Uploading → GpuResident → Evicting / Failed)
-- [ ] **ASSET-03**: Resource caching and memory budgets are enforced, with per-frame upload caps
+- [x] **ASSET-01**: Resources have stable identifiers and typed handles
+- [x] **ASSET-02**: Resources move through a CPU/GPU residency state machine (Unloaded → Requested → Generating → CpuReady → Uploading → GpuResident → Evicting / Failed)
+- [x] **ASSET-03**: Resource caching and memory budgets are enforced, with per-frame upload caps
 
 ### Streaming & Procedural Generation
 
@@ -119,19 +119,19 @@
 | CORE-03 | Phase 3 | Complete |
 | CORE-04 | Phase 2 | Complete |
 | CORE-05 | Phase 2 | Complete |
-| WORLD-01 | Phase 4 | Pending |
+| WORLD-01 | Phase 4 | Complete |
 | WORLD-02 | Phase 2 | Complete |
 | WORLD-03 | Phase 3 | Complete |
 | WORLD-04 | Phase 2 | Complete |
-| WORLD-05 | Phase 4 | Pending |
+| WORLD-05 | Phase 4 | Complete |
 | REND-01 | Phase 3 | Complete |
 | REND-02 | Phase 3 | Complete |
 | REND-03 | Phase 3 | Complete |
 | REND-04 | Phase 5 | Pending |
 | REND-05 | Phase 5 | Pending |
-| ASSET-01 | Phase 4 | Pending |
-| ASSET-02 | Phase 4 | Pending |
-| ASSET-03 | Phase 4 | Pending |
+| ASSET-01 | Phase 4 | Complete |
+| ASSET-02 | Phase 4 | Complete |
+| ASSET-03 | Phase 4 | Complete |
 | STRM-01 | Phase 6 | Pending |
 | STRM-02 | Phase 6 | Pending |
 | PROC-01 | Phase 6 | Pending |
