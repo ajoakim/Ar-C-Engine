@@ -32,6 +32,7 @@ impl App for Harness {
         self.sys.prepare(&View {
             eye,
             proj_scale: 720.0 / (2.0 * TAN_HALF_FOV_Y),
+            frustum: None,
         });
         self.frame += 1;
         AppControl::Continue

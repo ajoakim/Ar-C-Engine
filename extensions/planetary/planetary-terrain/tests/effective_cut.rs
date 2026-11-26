@@ -27,7 +27,7 @@ fn wanted_sets() -> Vec<BTreeSet<PatchId>> {
         .into_iter()
         .map(|(_, eye)| {
             let view = View::new(eye, 720, planetary_terrain::TAN_HALF_FOV_Y).expect("view");
-            select(&model, &lod, &view, &BTreeSet::new()).split
+            select(&model, &lod, &view, &BTreeSet::new(), &|_| None).split
         })
         .collect()
 }

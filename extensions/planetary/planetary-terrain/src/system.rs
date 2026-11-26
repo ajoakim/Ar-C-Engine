@@ -206,7 +206,9 @@ impl TerrainSystem {
             frame: self.frame,
             ..TerrainReport::default()
         };
-        let sel = select(&self.model, &self.cfg.lod, view, &self.prev_split);
+        let sel = select(&self.model, &self.cfg.lod, view, &self.prev_split, &|_| {
+            None
+        });
         self.prev_split.clone_from(&sel.split);
         self.wanted_split = sel.split;
         self.wanted = sel.leaves;

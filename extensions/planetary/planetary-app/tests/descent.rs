@@ -124,10 +124,7 @@ fn assert_caps(r: &FrameRecord, cfg: &TerrainConfig, i: usize) {
     );
     assert!(rep.stream.pending <= cfg.stream.max_pending, "f{i} pending");
     assert!(rep.select.nodes_visited <= NODE_VISIT_CAP, "f{i} visits");
-    assert!(
-        rep.select.leaves <= cfg.lod.max_leaves || rep.select.tau_steps == cfg.lod.max_tau_steps,
-        "f{i} leaves"
-    );
+    assert!(rep.select.leaves <= cfg.lod.max_leaves, "f{i} leaves");
     assert!(r.draws <= MAX_DRAWS_PER_FRAME, "f{i} draws");
     assert_eq!(rep.draw_overflow, 0, "f{i} overflow");
     assert_eq!(rep.request_errors, 0, "f{i} request errors");

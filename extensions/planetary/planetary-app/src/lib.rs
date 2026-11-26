@@ -266,7 +266,12 @@ impl App for PlanetaryApp {
             upload_rejects: r.upload_rejects,
             draw_overflow: r.draw_overflow,
             tau_eff: r.select.tau_eff,
-            tau_steps: r.select.tau_steps,
+            forced_splits: r.select.forced_splits,
+            trimmed_splits: r.select.trimmed_splits,
+            culled_horizon: r.select.culled_horizon,
+            culled_frustum: r.select.culled_frustum,
+            node_budget_hit: r.select.node_budget_hit,
+            leaf_budget_hit: r.select.leaf_budget_hit,
             ..FrameSample::default()
         };
         self.telemetry.record(sample);

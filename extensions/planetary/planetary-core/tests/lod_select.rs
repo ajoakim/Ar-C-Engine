@@ -301,3 +301,64 @@ fn prev_split_unused_ids_are_harmless() {
     );
     assert!(is_partition(&s.leaves) && is_balanced(&s.leaves));
 }
+
+/// Prints node/leaf/level numbers for the real terrain model (run with `--nocapture`); with
+/// global ranges and with ranges measured from the terrain for every cell (an ideal resident set).
+#[test]
+fn reference_stats_report() {
+    use std::cell::RefCell;
+    use std::collections::BTreeMap;
+
+    use planetary_core::{PlanetTerrain, TerrainParams, vertex_dir};
+    let t = PlanetTerrain::new(7, TerrainParams::default(), 32).expect("terrain");
+    let m = LodModel::from_terrain(&t, planetary_core::lod::DEFAULT_KAPPA);
+    let p = LodParams::default();
+    let cache: RefCell<BTreeMap<PatchId, HeightRange>> = RefCell::new(BTreeMap::new());
+    let measured = |id: PatchId| -> Option<HeightRange> {
+        if id.level() < 6 {
+            return None;
+        }
+        let mut c = cache.borrow_mut();
+        Some(*c.entry(id).or_insert_with(|| {
+            let mut r = HeightRange {
+                min: f64::INFINITY,
+                max: f64::NEG_INFINITY,
+            };
+            for j in 0..=32 {
+                for i in 0..=32 {
+                    let h = t.height_at_dir(vertex_dir(id, 32, i, j));
+                    r.min = r.min.min(h);
+                    r.max = r.max.max(h);
+                }
+            }
+            r
+        }))
+    };
+    for h in [3.0, 1000.0, 100_000.0] {
+        let eye = x_eye(m.radius + m.height.max + h);
+        let v = view_at(eye);
+        let g = select(&m, &p, &v, &BTreeSet::new(), &|_| None);
+        let top = |s: &Selection| s.leaves.iter().map(|l| l.level()).max().unwrap_or(0);
+        eprintln!(
+            "STATS h={h} global: nodes={} leaves={} max_level={} forced={} trimmed={} node_budget={} leaf_budget={}",
+            g.stats.nodes_visited,
+            g.leaves.len(),
+            top(&g),
+            g.stats.forced_splits,
+            g.stats.trimmed_splits,
+            g.stats.node_budget_hit,
+            g.stats.leaf_budget_hit
+        );
+        if h <= 1000.0 {
+            let r = select(&m, &p, &v, &BTreeSet::new(), &measured);
+            eprintln!(
+                "STATS h={h} resident: nodes={} leaves={} max_level={} forced={} trimmed={}",
+                r.stats.nodes_visited,
+                r.leaves.len(),
+                top(&r),
+                r.stats.forced_splits,
+                r.stats.trimmed_splits
+            );
+        }
+    }
+}
