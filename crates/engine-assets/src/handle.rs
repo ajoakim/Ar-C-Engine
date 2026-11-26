@@ -17,7 +17,10 @@ pub struct Handle<T> {
 
 impl<T> Handle<T> {
     pub(crate) fn from_key(key: DefaultKey) -> Self {
-        Self { key, _t: PhantomData }
+        Self {
+            key,
+            _t: PhantomData,
+        }
     }
 
     pub(crate) fn key(&self) -> DefaultKey {

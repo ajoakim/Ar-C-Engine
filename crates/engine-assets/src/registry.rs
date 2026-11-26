@@ -29,7 +29,10 @@ impl<T> AssetRegistry<T> {
     /// Creates an empty registry.
     #[must_use]
     pub fn new() -> Self {
-        Self { slots: SlotMap::new(), by_id: HashMap::new() }
+        Self {
+            slots: SlotMap::new(),
+            by_id: HashMap::new(),
+        }
     }
 
     /// Registers an ID (idempotent) and returns its handle.

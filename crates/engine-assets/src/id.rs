@@ -87,7 +87,10 @@ mod tests {
 
     #[test]
     fn id_golden_values() {
-        assert_eq!(AssetId::from_key("meshes/cube.gltf").unwrap().to_string(), CUBE);
+        assert_eq!(
+            AssetId::from_key("meshes/cube.gltf").unwrap().to_string(),
+            CUBE
+        );
         assert_eq!(
             AssetId::from_key("textures/grass.png").unwrap().to_string(),
             "d2b52f2b-6b78-5164-a03d-8654200399c2"
@@ -96,19 +99,30 @@ mod tests {
 
     #[test]
     fn id_same_key_same_id() {
-        assert_eq!(AssetId::from_key("x/y").unwrap(), AssetId::from_key("x/y").unwrap());
+        assert_eq!(
+            AssetId::from_key("x/y").unwrap(),
+            AssetId::from_key("x/y").unwrap()
+        );
     }
 
     #[test]
     fn id_normalization_equivalence() {
-        for k in ["  .\\Meshes\\\\Cube.GLTF ", "./meshes//cube.gltf", "meshes/cube.gltf"] {
+        for k in [
+            "  .\\Meshes\\\\Cube.GLTF ",
+            "./meshes//cube.gltf",
+            "meshes/cube.gltf",
+        ] {
             assert_eq!(AssetId::from_key(k).unwrap().to_string(), CUBE);
         }
     }
 
     #[test]
     fn id_normalize_key_cases() {
-        for k in ["  .\\Meshes\\\\Cube.GLTF ", "./meshes//cube.gltf", "meshes/cube.gltf"] {
+        for k in [
+            "  .\\Meshes\\\\Cube.GLTF ",
+            "./meshes//cube.gltf",
+            "meshes/cube.gltf",
+        ] {
             assert_eq!(normalize_key(k), "meshes/cube.gltf");
         }
     }
@@ -121,6 +135,9 @@ mod tests {
 
     #[test]
     fn id_distinct_keys_distinct_ids() {
-        assert_ne!(AssetId::from_key("a").unwrap(), AssetId::from_key("b").unwrap());
+        assert_ne!(
+            AssetId::from_key("a").unwrap(),
+            AssetId::from_key("b").unwrap()
+        );
     }
 }
