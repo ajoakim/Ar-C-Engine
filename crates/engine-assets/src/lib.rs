@@ -10,7 +10,7 @@ mod manager;
 mod registry;
 mod residency;
 
-pub use manager::{AssetClass, MemoryPool};
+pub use manager::{AssetClass, ClassBudget, MemoryPool, ResidencyManager};
 pub use residency::ResidencyState;
 
 pub use error::AssetError;
