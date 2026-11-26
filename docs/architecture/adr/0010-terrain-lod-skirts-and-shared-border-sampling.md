@@ -1,6 +1,6 @@
 # ADR-0010: Terrain LOD - Skirts, Shared-Border Sampling and 2:1 Balance
 
-- Status: accepted
+- Status: accepted (LOD selection parameters superseded by ADR-0012)
 - Date: 2026-11-25
 - Requirement/Phase: PLAN-03, PLAN-04, PLAN-05, WS-05 / Phase 7
 
@@ -60,3 +60,7 @@ Source: `extensions/planetary/planetary-app/tests/descent.rs`, simulated clock d
 | Production path | no settle: 600 frames complete, caps and max jump <= 1 hold, partition and balance checked once all 6 faces are drawn |
 
 Final tunables: tau = 2 px (escalates up to 4 steps of x1.5 during the descent), h = 0.2, kappa = 0.25, skirt margin 1.5, max_leaves 700, N = 32 for the demo and 16 for the tests, test max level 13, demo default max level 19 (PatchId MAX_LEVEL 24), UPLOADS_PER_FRAME 4, REQUESTS_PER_FRAME 16, max_starts 8, max_completions 8, CONVERGE_WITHIN 240.
+
+## Amendment (Phase 7.1)
+
+The following parts of this ADR are superseded by [ADR-0012](0012-terrain-lod-selection-tight-bounds-culling-budgets.md): the leaf cap 700 with `tau *= 1.5` escalation (escalation is removed; budgets are enforced by trimming), the demo max level 19 (default is now 16), the "no frustum or horizon culling" limitation, and the relief-inflated bounds consequence (bounds are now tight and measured). The crack-free technique (skirts, shared-border sampling, 2:1 balance, effective cut) is unchanged. The evidence below was gathered with the Phase 7 parameters; current descent evidence is in ADR-0012.

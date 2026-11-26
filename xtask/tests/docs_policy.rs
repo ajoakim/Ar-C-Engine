@@ -171,3 +171,19 @@ fn adr_0010_lod_technique_present() {
         require(f, &t, lit);
     }
 }
+
+#[test]
+fn adr_0012_lod_selection_present() {
+    let f = "docs/architecture/adr/0012-terrain-lod-selection-tight-bounds-culling-budgets.md";
+    let t = read(f);
+    for lit in [
+        "Status: accepted",
+        "horizon",
+        "frustum",
+        "node-visit budget",
+        "max_level 16",
+        "## Evidence",
+    ] {
+        require(f, &t, lit);
+    }
+}
