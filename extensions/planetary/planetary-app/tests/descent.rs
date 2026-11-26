@@ -128,7 +128,7 @@ fn assert_caps(r: &FrameRecord, cfg: &TerrainConfig, i: usize) {
         rep.select.leaves <= cfg.lod.max_leaves || rep.select.tau_steps == cfg.lod.max_tau_steps,
         "f{i} leaves"
     );
-    assert!(r.draws <= MAX_DRAWS_PER_FRAME as usize, "f{i} draws");
+    assert!(r.draws <= MAX_DRAWS_PER_FRAME, "f{i} draws");
     assert_eq!(rep.draw_overflow, 0, "f{i} overflow");
     assert_eq!(rep.request_errors, 0, "f{i} request errors");
     assert_eq!(rep.upload_rejects, 0, "f{i} upload rejects");

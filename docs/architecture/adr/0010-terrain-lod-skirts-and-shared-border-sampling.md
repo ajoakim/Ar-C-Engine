@@ -1,12 +1,12 @@
 # ADR-0010: Terrain LOD - Skirts, Shared-Border Sampling and 2:1 Balance
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-11-25
 - Requirement/Phase: PLAN-03, PLAN-04, PLAN-05, WS-05 / Phase 7
 
 ## Context
 
-Cube-sphere terrain is drawn as a quadtree of fixed-size patches at mixed levels. Where patches of different levels meet, T-junctions open cracks. The user locked the crack-free technique in the phase context (CONTEXT.md); this ADR records it as a checkable decision and stays proposed until the seam and descent evidence lands.
+Cube-sphere terrain is drawn as a quadtree of fixed-size patches at mixed levels. Where patches of different levels meet, T-junctions open cracks. The user locked the crack-free technique in the phase context (CONTEXT.md); this ADR records it as a checkable decision and is accepted with the seam and descent evidence below.
 
 ## Decision
 
@@ -26,13 +26,14 @@ Cube-sphere terrain is drawn as a quadtree of fixed-size patches at mixed levels
 ## Consequences
 
 - Limitations: f32 per-patch origin quantisation (Pitfall 4), cross-level normals differ slightly, no frustum or horizon culling in Phase 7 (the leaf cap is the guard instead), cross-OS goldens pending hosted CI.
+- Cross-OS goldens (GOLDEN_HEIGHTS, GOLDEN_DIRS, GOLDEN_MESH) are Windows-computed; Linux/macOS confirmation is pending hosted CI (same status as ADR-0008). The manual window run result is recorded in the 07-10 SUMMARY.
+- Relief-inflated node bounds (`max_relief` about 6 km) make every patch within that distance of the camera split to `max_level`; with 700 leaves the usable `max_level` is bounded (13 for the descent test, where cells are about 75 m at the leaf level). `tau` escalation cannot reduce this count.
 - The effective cut costs an extra pass per frame over the leaf set.
 
 ## Evidence
 
 | Measurement | Value | Source test |
 | --- | --- | --- |
-
 | Same-level border vertex pairs (levels 0..=4, n = 8) | 73656 checked, all bit-identical in f64 | `same_level_borders_bit_identical` in `extensions/planetary/planetary-core/tests/seam.rs` |
 | Cube edges / corners (level 2) | 12/12 edges and 8/8 corners bit-identical | `cube_edges_and_corners_explicit` in `extensions/planetary/planetary-core/tests/seam.rs` |
 | Mixed-level L/L+1 junctions (30 reference views, max level 14, n = 8) | 4272 junctions, 34176 odd fine vertices; even vertices equal coarse bit-exactly; max gap / min skirt depth = 0.035 (<= 1) | `mixed_level_gap_bounded_by_skirts` in `extensions/planetary/planetary-core/tests/seam.rs` |
@@ -43,4 +44,19 @@ Cube-sphere terrain is drawn as a quadtree of fixed-size patches at mixed levels
 
 Golden hashes (mesh, generator) are Windows-computed; cross-platform CI confirmation is pending.
 
-Pending: scripted descent evidence from 07-10.
+### Scripted descent (07-10)
+
+Source: `extensions/planetary/planetary-app/tests/descent.rs`, simulated clock dt = 1/60, no wall-clock, N = 16 cells, workers 2, settle each frame.
+
+| Measurement | Value |
+| --- | --- |
+| Run | 600 frames (10 simulated seconds: 8 s descent from orbit to 3 m above the surface, then hover); convergence run 720 frames |
+| Max per frame | started 8, uploads 4, uploaded_bytes 76656, nodes_visited 13618, drawn 612, held meshes 1820, tau_eff 10.125 |
+| Crack-freedom | drawn set is a partition and 2:1 balanced on every frame after warm-up (10 frames) |
+| Convergence | drawn == wanted at frame 590, 110 frames after the descent ends (bound 240) |
+| Determinism | two runs give identical per-frame started, completions_applied, uploads and drawn sets |
+| Degradation | max_starts = 1 and max_completions = 1: at most 1 start per frame, still a balanced partition, never empty after warm-up |
+| Leaks | buffer_count == 2 * held every frame; detail budget 60 forced 1473 evictions with the invariant intact |
+| Production path | no settle: 600 frames complete, caps and max jump <= 1 hold, partition and balance checked once all 6 faces are drawn |
+
+Final tunables: tau = 2 px (escalates up to 4 steps of x1.5 during the descent), h = 0.2, kappa = 0.25, skirt margin 1.5, max_leaves 700, N = 32 for the demo and 16 for the tests, test max level 13, demo default max level 19 (PatchId MAX_LEVEL 24), UPLOADS_PER_FRAME 4, REQUESTS_PER_FRAME 16, max_starts 8, max_completions 8, CONVERGE_WITHIN 240.

@@ -166,6 +166,7 @@ fn adr_0010_lod_technique_present() {
         "effective cut",
         "## Evidence",
         "T(s)",
+        "Status: accepted",
     ] {
         require(f, &t, lit);
     }
