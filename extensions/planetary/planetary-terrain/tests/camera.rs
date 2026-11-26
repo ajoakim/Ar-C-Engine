@@ -165,3 +165,176 @@ fn invalid_dt_and_pose_rejected() {
     assert_eq!(cam.position(), p);
     assert!(PlanetaryCamera::new(DVec3::ZERO, CameraParams::default()).is_none());
 }
+
+fn release(cam: &mut PlanetaryCamera, key: KeyCode) {
+    cam.handle_input(&InputEvent::KeyReleased { key });
+}
+
+fn cam_at(alt: f64, f: &Fixture) -> PlanetaryCamera {
+    let dir = DVec3::new(1.0, 0.0, 0.0);
+    let surf = f.radius + f.terrain.height_at_dir(dir);
+    PlanetaryCamera::new(dir * (surf + alt), CameraParams::default()).unwrap()
+}
+
+fn surf_fn(f: &Fixture) -> impl Fn(DVec3) -> f64 + '_ {
+    move |d| f.radius + f.terrain.height_at_dir(d)
+}
+
+#[test]
+fn key_press_and_release_move_forward_then_stop() {
+    let f = fixture();
+    let s = surf_fn(&f);
+    let mut cam = cam_at(1.0e4, &f);
+    press(&mut cam, KeyCode::W);
+    let (p0, fwd) = (cam.position(), cam.forward());
+    cam.update(0.1, &s, 0.0);
+    assert!((cam.position() - p0).dot(fwd) > 0.0);
+    release(&mut cam, KeyCode::W);
+    let p1 = cam.position();
+    cam.update(0.1, &s, 0.0);
+    assert_eq!(cam.position(), p1);
+}
+
+#[test]
+fn arrows_mirror_wasd() {
+    let f = fixture();
+    let s = surf_fn(&f);
+    for (a, b) in [
+        (KeyCode::W, KeyCode::Up),
+        (KeyCode::S, KeyCode::Down),
+        (KeyCode::A, KeyCode::Left),
+        (KeyCode::D, KeyCode::Right),
+    ] {
+        let (mut c1, mut c2) = (cam_at(1.0e4, &f), cam_at(1.0e4, &f));
+        press(&mut c1, a);
+        press(&mut c2, b);
+        c1.update(0.1, &s, 0.0);
+        c2.update(0.1, &s, 0.0);
+        assert_eq!(c1.position(), c2.position());
+    }
+}
+
+#[test]
+fn vertical_keys_change_radius() {
+    let f = fixture();
+    let s = surf_fn(&f);
+    for key in [KeyCode::E, KeyCode::Space] {
+        let mut c = cam_at(1.0e4, &f);
+        let r0 = c.position().length();
+        press(&mut c, key);
+        c.update(0.1, &s, 0.0);
+        assert!(c.position().length() > r0);
+    }
+    for key in [KeyCode::Q, KeyCode::ControlLeft] {
+        let mut c = cam_at(1.0e4, &f);
+        let r0 = c.position().length();
+        press(&mut c, key);
+        c.update(0.1, &s, 0.0);
+        assert!(c.position().length() < r0);
+    }
+}
+
+#[test]
+fn repeat_events_change_nothing() {
+    let f = fixture();
+    let s = surf_fn(&f);
+    let mut c = cam_at(1.0e4, &f);
+    c.handle_input(&InputEvent::KeyPressed {
+        key: KeyCode::W,
+        repeat: true,
+    });
+    let p = c.position();
+    c.update(0.1, &s, 0.0);
+    assert_eq!(c.position(), p);
+}
+
+fn cursor(c: &mut PlanetaryCamera, x: f64, y: f64) {
+    c.handle_input(&InputEvent::CursorMoved { x, y });
+}
+
+#[test]
+fn mouse_look_requires_right_button() {
+    let f = fixture();
+    let s = surf_fn(&f);
+    let mut c = cam_at(1.0e4, &f);
+    let o = c.orientation();
+    cursor(&mut c, 100.0, 100.0);
+    cursor(&mut c, 110.0, 100.0);
+    c.update(0.1, &s, 0.0);
+    assert_eq!(c.orientation(), o);
+
+    c.handle_input(&InputEvent::MouseButtonPressed(
+        engine_sdk::MouseButton::Right,
+    ));
+    cursor(&mut c, 100.0, 100.0); // first move only records
+    c.update(0.1, &s, 0.0);
+    assert_eq!(c.orientation(), o);
+    cursor(&mut c, 110.0, 100.0);
+    c.update(0.1, &s, 0.0);
+    let o2 = c.orientation();
+    assert_ne!(o2, o);
+
+    c.handle_input(&InputEvent::MouseButtonReleased(
+        engine_sdk::MouseButton::Right,
+    ));
+    cursor(&mut c, 200.0, 100.0);
+    c.update(0.1, &s, 0.0);
+    assert_eq!(c.orientation(), o2);
+}
+
+#[test]
+fn pitch_is_clamped_near_surface() {
+    let f = fixture();
+    let s = surf_fn(&f);
+    let mut c = cam_at(1.0e3, &f);
+    c.handle_input(&InputEvent::MouseButtonPressed(
+        engine_sdk::MouseButton::Right,
+    ));
+    cursor(&mut c, 0.0, 0.0);
+    cursor(&mut c, 0.0, -1.0e6);
+    c.update(0.1, &s, 0.0);
+    let up = c.position().normalize();
+    let pitch = c.forward().dot(up).clamp(-1.0, 1.0).asin();
+    assert!(pitch <= CameraParams::default().max_pitch + 1e-9);
+}
+
+#[test]
+fn focus_loss_clears_state_and_escape_exits() {
+    let f = fixture();
+    let s = surf_fn(&f);
+    let mut c = cam_at(1.0e4, &f);
+    press(&mut c, KeyCode::W);
+    c.handle_input(&InputEvent::Focused(false));
+    let p = c.position();
+    c.update(0.1, &s, 0.0);
+    assert_eq!(c.position(), p);
+    assert!(!c.exit_requested());
+    press(&mut c, KeyCode::Escape);
+    assert!(c.exit_requested());
+}
+
+#[test]
+fn irrelevant_events_are_ignored() {
+    let f = fixture();
+    let s = surf_fn(&f);
+    let mut c = cam_at(1.0e4, &f);
+    let (p, o) = (c.position(), c.orientation());
+    press(&mut c, KeyCode::Other);
+    press(&mut c, KeyCode::Enter);
+    c.handle_input(&InputEvent::MouseWheel {
+        lines_x: 1.0,
+        lines_y: 2.0,
+    });
+    c.handle_input(&InputEvent::Resized {
+        width: 10,
+        height: 10,
+    });
+    c.handle_input(&InputEvent::CloseRequested);
+    c.handle_input(&InputEvent::CursorMoved {
+        x: f64::NAN,
+        y: 0.0,
+    });
+    c.update(0.1, &s, 0.0);
+    assert_eq!(c.position(), p);
+    assert_eq!(c.orientation(), o);
+}
