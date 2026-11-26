@@ -22,11 +22,15 @@ pub use engine_diagnostics::{FrameStats, tracing};
 pub use engine_jobs::{CancelToken, JobError, JobHandle, JobStatus, JobSystem, Priority};
 pub use engine_math::{DQuat, DVec3, FrameId, FrameRegistry, MathError, Vec3, WorldPos};
 pub use engine_platform::{InputEvent, KeyCode, MouseButton, WindowConfig};
+/// Deterministic procedural generation (re-export of `engine-procedural`).
+pub use engine_procedural as procedural;
 pub use engine_render::{
     Camera, DirectionalLight, MAX_TEXTURE_DIMENSION, Mat3, Mat4, Material, MaterialId,
     MaterialTable, MeshHandle, NullBackend, Quat, RenderBackend, RenderError, RenderItem,
     TextureId, VertexPosColor, VertexPosNormalUv,
 };
+/// Generic asynchronous streaming (re-export of `engine-streaming`).
+pub use engine_streaming as streaming;
 pub use engine_world::{EntityId, Transform, World, WorldError, WorldTransform};
 pub use error::SdkError;
 pub use run::{AppConfig, run_app};

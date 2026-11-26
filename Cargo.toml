@@ -5,10 +5,12 @@ members = [
     "crates/engine-diagnostics",
     "crates/engine-core",
     "crates/engine-jobs",
+    "crates/engine-procedural",
     "crates/engine-platform",
     "crates/engine-assets",
     "crates/engine-world",
     "crates/engine-spatial",
+    "crates/engine-streaming",
     "crates/engine-render",
     "crates/engine-render-wgpu",
     "crates/engine-sdk",
@@ -36,10 +38,12 @@ engine-math = { path = "crates/engine-math" }
 engine-diagnostics = { path = "crates/engine-diagnostics" }
 engine-core = { path = "crates/engine-core" }
 engine-jobs = { path = "crates/engine-jobs" }
+engine-procedural = { path = "crates/engine-procedural" }
 engine-platform = { path = "crates/engine-platform" }
 engine-assets = { path = "crates/engine-assets" }
 engine-world = { path = "crates/engine-world" }
 engine-spatial = { path = "crates/engine-spatial" }
+engine-streaming = { path = "crates/engine-streaming" }
 engine-render = { path = "crates/engine-render" }
 engine-render-wgpu = { path = "crates/engine-render-wgpu" }
 engine-sdk = { path = "crates/engine-sdk" }
