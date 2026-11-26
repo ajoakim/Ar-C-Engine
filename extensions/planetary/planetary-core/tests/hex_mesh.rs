@@ -7,7 +7,6 @@ use std::collections::BTreeSet;
 use engine_sdk::DVec3;
 use engine_sdk::procedural::{Fnv1a64, splitmix64};
 use planetary_core::CellMesh;
-use planetary_core::encode_cell_payload;
 use planetary_core::hex::adjacency::is_pentagon;
 use planetary_core::hex::mesh::{
     build_hex_cell, hex_index_variants, vertex_count_hex, vertex_count_pentagon,
@@ -16,10 +15,14 @@ use planetary_core::hex::pieces::{VARIANT_FULL_HEX, VARIANT_FULL_PENTAGON, half_
 use planetary_core::hex::{CellFrame, CellId};
 use planetary_core::lod::{DEFAULT_KAPPA, LodModel};
 use planetary_core::{PlanetTerrain, TerrainParams};
+use planetary_core::{encode_cell_payload, encode_cell_payload_v3};
 
 const SEED: u64 = 0x0007_5EED_2026_0001;
 /// Windows-computed; cross-OS pending hosted CI.
-const GOLDEN_HEX_MESH: u64 = 0xa826_ad7e_fa59_59b6;
+const GOLDEN_HEX_MESH_V3: u64 = 0xa826_ad7e_fa59_59b6;
+/// Payload v4 (morph fields included). Record with
+/// `cargo test -p planetary-core --test hex_mesh golden_hex_mesh_v4 -- --nocapture`.
+const GOLDEN_HEX_MESH_V4: u64 = 0x17a0_7e46_1b54_c31b;
 
 fn terrain(n: u32) -> PlanetTerrain {
     PlanetTerrain::new(SEED, TerrainParams::default(), n).expect("terrain")
@@ -290,7 +293,7 @@ fn duplicate_vertices_identical() {
     assert!(pairs > 0);
 }
 
-fn golden_hash() -> u64 {
+fn golden_hash(encode: fn(&CellMesh) -> Vec<u8>) -> u64 {
     let t = terrain(16);
     let m = model(&t);
     let mut cells: Vec<CellId> = pentagons(2);
@@ -298,8 +301,8 @@ fn golden_hash() -> u64 {
     cells.extend(seeded_hexes(20, 0x601D));
     let mut h = Fnv1a64::new();
     for c in cells {
-        let a = encode_cell_payload(&build(c, &t, &m));
-        let b = encode_cell_payload(&build(c, &t, &m));
+        let a = encode(&build(c, &t, &m));
+        let b = encode(&build(c, &t, &m));
         assert_eq!(a, b, "{c:?} not deterministic");
         h.write(&a);
     }
@@ -307,10 +310,17 @@ fn golden_hash() -> u64 {
 }
 
 #[test]
-fn golden_hex_mesh() {
-    let h = golden_hash();
-    eprintln!("GOLDEN_HEX_MESH = {h:#018x}");
-    assert_eq!(h, GOLDEN_HEX_MESH);
+fn golden_hex_mesh_v3() {
+    let h = golden_hash(encode_cell_payload_v3);
+    eprintln!("GOLDEN_HEX_MESH_V3 = {h:#018x}");
+    assert_eq!(h, GOLDEN_HEX_MESH_V3);
+}
+
+#[test]
+fn golden_hex_mesh_v4() {
+    let h = golden_hash(encode_cell_payload);
+    eprintln!("GOLDEN_HEX_MESH_V4 = {h:#018x}");
+    assert_eq!(h, GOLDEN_HEX_MESH_V4);
 }
 
 #[test]

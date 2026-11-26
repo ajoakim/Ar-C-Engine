@@ -22,8 +22,8 @@ pub mod lod;
 pub mod mesh;
 pub mod morph;
 pub use cell_payload::{
-    CELL_HEADER_LEN, CELL_PAYLOAD_MAGIC, CELL_PAYLOAD_VERSION, PayloadError, decode_cell_payload,
-    encode_cell_payload,
+    CELL_HEADER_LEN, CELL_PAYLOAD_MAGIC, CELL_PAYLOAD_VERSION, CELL_VERTEX_BYTES, PayloadError,
+    decode_cell_payload, encode_cell_payload, encode_cell_payload_v3,
 };
 pub use mesh::{
     PatchMesh, SKIRT_MARGIN, border_positions_f64, build_patch, build_patch_cancellable,

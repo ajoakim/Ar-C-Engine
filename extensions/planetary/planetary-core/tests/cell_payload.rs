@@ -1,9 +1,10 @@
-//! Cell payload v3: round trip and robustness against hostile bytes.
+//! Cell payload v4: round trip and robustness against hostile bytes.
 
 use planetary_core::lod::{DEFAULT_KAPPA, LodModel};
 use planetary_core::{
-    CELL_HEADER_LEN, CELL_PAYLOAD_MAGIC, CELL_PAYLOAD_VERSION, CubeSphere, PatchId, PayloadError,
-    PlanetTerrain, TerrainParams, Topology, decode_cell_payload, encode_cell_payload, vertex_count,
+    CELL_HEADER_LEN, CELL_PAYLOAD_MAGIC, CELL_PAYLOAD_VERSION, CELL_VERTEX_BYTES, CubeSphere,
+    PatchId, PayloadError, PlanetTerrain, TerrainParams, Topology, decode_cell_payload,
+    encode_cell_payload, encode_cell_payload_v3, vertex_count,
 };
 
 const SEED: u64 = 0x0007_5EED_2026_0001;
@@ -30,18 +31,44 @@ fn count(class: u8) -> Option<u32> {
 fn cell_payload_round_trip() {
     let (m, raw) = sample();
     let bytes = encode_cell_payload(&m);
-    assert_eq!(bytes.len(), CELL_HEADER_LEN + vertex_count(N) * 32);
-    let back = decode_cell_payload(&bytes, raw, &count).expect("decode");
-    // The v3 payload carries no morph targets (plan 23 adds them): the decoder fills the identity,
-    // every other field round-trips exactly.
+    assert_eq!(CELL_VERTEX_BYTES, 52);
     assert_eq!(
-        back.morph,
-        planetary_core::morph::identity_morph(&back.vertices)
+        bytes.len(),
+        CELL_HEADER_LEN + vertex_count(N) * CELL_VERTEX_BYTES
     );
+    let back = decode_cell_payload(&bytes, raw, &count).expect("decode");
     assert_eq!(m.morph.len(), m.vertices.len());
-    let mut want = m.clone();
-    want.morph = back.morph.clone();
-    assert_eq!(back, want);
+    assert_eq!(back, m);
+}
+
+#[test]
+fn cell_payload_v3_is_rejected() {
+    let (m, raw) = sample();
+    let v3 = encode_cell_payload_v3(&m);
+    assert_eq!(v3.len(), CELL_HEADER_LEN + vertex_count(N) * 32);
+    assert_eq!(
+        decode_cell_payload(&v3, raw, &count),
+        Err(PayloadError::BadVersion(3))
+    );
+    // A v4 payload with the version field patched to 3 is rejected too.
+    let mut b = encode_cell_payload(&m);
+    b[4..8].copy_from_slice(&3u32.to_le_bytes());
+    assert_eq!(
+        decode_cell_payload(&b, raw, &count),
+        Err(PayloadError::BadVersion(3))
+    );
+}
+
+#[test]
+fn v3_encoder_bytes_exclude_morph_fields() {
+    let (m, _) = sample();
+    let mut other = m.clone();
+    for t in &mut other.morph {
+        t.position = [9.0, 9.0, 9.0];
+        t.uv = [7.0, 7.0];
+    }
+    assert_eq!(encode_cell_payload_v3(&m), encode_cell_payload_v3(&other));
+    assert_ne!(encode_cell_payload(&m), encode_cell_payload(&other));
 }
 
 #[test]
@@ -111,7 +138,12 @@ fn cell_payload_rejects_non_finite_and_bad_range() {
     let mut b = bytes.clone();
     b[48..52].copy_from_slice(&f32::INFINITY.to_le_bytes());
     assert!(matches!(dec(&b), Err(PayloadError::NonFinite)));
-    for off in (CELL_HEADER_LEN..CELL_HEADER_LEN + 32).step_by(4) {
+    // All 13 floats of the first vertex and of the last vertex (morph region included).
+    let last = CELL_HEADER_LEN + (vertex_count(N) - 1) * CELL_VERTEX_BYTES;
+    for off in (CELL_HEADER_LEN..CELL_HEADER_LEN + CELL_VERTEX_BYTES)
+        .step_by(4)
+        .chain((last..last + CELL_VERTEX_BYTES).step_by(4))
+    {
         let mut b = bytes.clone();
         b[off..off + 4].copy_from_slice(&f32::NAN.to_le_bytes());
         assert!(matches!(dec(&b), Err(PayloadError::NonFinite)), "off {off}");

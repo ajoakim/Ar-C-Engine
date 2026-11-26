@@ -1,13 +1,19 @@
-//! Topology-agnostic cell payload (version 3): vertices, vertex class and height range, no
-//! indices (those are shared per [`crate::IndexVariant`]). Little-endian, fully validated.
+//! Topology-agnostic cell payload (version 4): vertices with morph targets, vertex class and height
+//! range, no indices (those are shared per [`crate::IndexVariant`]). Little-endian, fully
+//! validated. Version 3 (no morph targets) is rejected by the decoder.
 
 use engine_sdk::{DVec3, VertexPosNormalUv};
 
+use crate::morph::MorphVertex;
 use crate::topology::CellMesh;
 
 /// `b"CELL"` little-endian.
 pub const CELL_PAYLOAD_MAGIC: u32 = 0x4C4C_4543;
-pub const CELL_PAYLOAD_VERSION: u32 = 3;
+pub const CELL_PAYLOAD_VERSION: u32 = 4;
+/// Version 3 (legacy, 8 floats per vertex); only the doc-hidden v3 encoder writes it.
+const CELL_PAYLOAD_VERSION_V3: u32 = 3;
+/// Bytes of one v4 vertex: position(3), normal(3), uv(2), morph_position(3), morph_uv(2) as f32.
+pub const CELL_VERTEX_BYTES: usize = 52;
 /// magic u32, version u32, raw u64, vertex_class u8 + 3 zero bytes, vertex_count u32,
 /// origin 3*f64, bound_radius f32, skirt_depth f64, height_min f64, height_max f64.
 pub const CELL_HEADER_LEN: usize = 76;
@@ -49,12 +55,10 @@ impl core::fmt::Display for PayloadError {
 
 impl std::error::Error for PayloadError {}
 
-/// Serialises `mesh` (the vertex count is taken from the mesh).
-#[must_use]
-pub fn encode_cell_payload(m: &CellMesh) -> Vec<u8> {
-    let mut out = Vec::with_capacity(CELL_HEADER_LEN + m.vertices.len() * 32);
+fn write_header(m: &CellMesh, version: u32, vertex_bytes: usize) -> Vec<u8> {
+    let mut out = Vec::with_capacity(CELL_HEADER_LEN + m.vertices.len() * vertex_bytes);
     out.extend_from_slice(&CELL_PAYLOAD_MAGIC.to_le_bytes());
-    out.extend_from_slice(&CELL_PAYLOAD_VERSION.to_le_bytes());
+    out.extend_from_slice(&version.to_le_bytes());
     out.extend_from_slice(&m.raw.to_le_bytes());
     out.extend_from_slice(&[m.vertex_class, 0, 0, 0]);
     out.extend_from_slice(&(m.vertices.len() as u32).to_le_bytes());
@@ -65,6 +69,36 @@ pub fn encode_cell_payload(m: &CellMesh) -> Vec<u8> {
     out.extend_from_slice(&m.skirt_depth.to_le_bytes());
     out.extend_from_slice(&m.height_min.to_le_bytes());
     out.extend_from_slice(&m.height_max.to_le_bytes());
+    out
+}
+
+/// Serialises `mesh` as a v4 payload (the vertex count is taken from the mesh; `morph` must have
+/// one entry per vertex).
+#[must_use]
+pub fn encode_cell_payload(m: &CellMesh) -> Vec<u8> {
+    debug_assert_eq!(m.morph.len(), m.vertices.len());
+    let mut out = write_header(m, CELL_PAYLOAD_VERSION, CELL_VERTEX_BYTES);
+    for (v, t) in m.vertices.iter().zip(&m.morph) {
+        for f in v
+            .position
+            .iter()
+            .chain(&v.normal)
+            .chain(&v.uv)
+            .chain(&t.position)
+            .chain(&t.uv)
+        {
+            out.extend_from_slice(&f.to_le_bytes());
+        }
+    }
+    out
+}
+
+/// Legacy v3 encoder (no morph fields). Kept only so the v3 byte goldens stay as `*_v3` tests; the
+/// decoder never accepts its output.
+#[doc(hidden)]
+#[must_use]
+pub fn encode_cell_payload_v3(m: &CellMesh) -> Vec<u8> {
+    let mut out = write_header(m, CELL_PAYLOAD_VERSION_V3, 32);
     for v in &m.vertices {
         for f in v.position.iter().chain(&v.normal).chain(&v.uv) {
             out.extend_from_slice(&f.to_le_bytes());
@@ -130,7 +164,7 @@ pub fn decode_cell_payload(
             indices: 0,
         });
     }
-    let want = CELL_HEADER_LEN + vc as usize * 32;
+    let want = CELL_HEADER_LEN + vc as usize * CELL_VERTEX_BYTES;
     if bytes.len() != want {
         return Err(truncated(want));
     }
@@ -156,9 +190,10 @@ pub fn decode_cell_payload(
         return Err(PayloadError::BadRange);
     }
     let mut vertices = Vec::with_capacity(vc as usize);
+    let mut morph = Vec::with_capacity(vc as usize);
     let mut o = CELL_HEADER_LEN;
     for _ in 0..vc {
-        let mut f = [0.0f32; 8];
+        let mut f = [0.0f32; 13];
         for slot in &mut f {
             let v = f32_at(bytes, o).ok_or(PayloadError::NonFinite)?;
             if !v.is_finite() {
@@ -172,8 +207,11 @@ pub fn decode_cell_payload(
             normal: [f[3], f[4], f[5]],
             uv: [f[6], f[7]],
         });
+        morph.push(MorphVertex {
+            position: [f[8], f[9], f[10]],
+            uv: [f[11], f[12]],
+        });
     }
-    let morph = crate::morph::identity_morph(&vertices);
     Ok(CellMesh {
         raw,
         vertex_class: class,
