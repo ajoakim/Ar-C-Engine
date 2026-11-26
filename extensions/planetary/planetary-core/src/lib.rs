@@ -17,6 +17,7 @@ pub use mapping::{
     patch_corner_dirs, vertex_dir,
 };
 pub mod cell_payload;
+pub mod hex;
 pub mod lod;
 pub mod mesh;
 pub mod payload;
