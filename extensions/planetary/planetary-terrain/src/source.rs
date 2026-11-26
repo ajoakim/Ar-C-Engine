@@ -1,24 +1,23 @@
-//! Worker-side cell producer (v3 cell payloads), generic over the topology.
+//! Worker-side cell producer (v4 cell payloads), generic over the topology.
 
 use std::sync::Arc;
 
 use engine_sdk::CancelToken;
 use engine_sdk::streaming::StreamSource;
 use planetary_core::lod::LodModel;
-use planetary_core::{CELL_HEADER_LEN, PlanetTerrain, Topology, encode_cell_payload};
+use planetary_core::{
+    CELL_HEADER_LEN, CELL_VERTEX_BYTES, PlanetTerrain, Topology, encode_cell_payload,
+};
 
 use crate::key::CellKey;
-
-/// Bytes of one vertex in a cell payload (position, normal, uv as f32).
-const VERTEX_BYTES: usize = 32;
 
 /// Estimated payload size for a cell with `max_vertex_count` vertices.
 #[must_use]
 pub fn cell_payload_estimate(max_vertex_count: u32) -> u64 {
-    (CELL_HEADER_LEN + max_vertex_count as usize * VERTEX_BYTES) as u64
+    (CELL_HEADER_LEN + max_vertex_count as usize * CELL_VERTEX_BYTES) as u64
 }
 
-/// Builds cell meshes on worker threads and encodes them as validated v3 payloads.
+/// Builds cell meshes on worker threads and encodes them as validated v4 payloads.
 pub struct CellSource<T: Topology> {
     topo: Arc<T>,
     terrain: Arc<PlanetTerrain>,

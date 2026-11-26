@@ -8,12 +8,16 @@ use engine_sdk::{
     App, AppControl, DVec3, Engine, EngineConfig, MAX_DRAWS_PER_FRAME, NullBackend, Resources,
     Runtime, SceneState, SdkError,
 };
+use planetary_core::lod::{DEFAULT_KAPPA, LodModel};
 use planetary_core::lod::{LodParams, View, is_partition};
 use planetary_core::topology::select::select_cells;
-use planetary_core::{CubeSphere, Face, PatchId};
+use planetary_core::{
+    CELL_HEADER_LEN, CELL_VERTEX_BYTES, CubeSphere, Face, PatchId, PlanetTerrain, TerrainParams,
+    Topology, encode_cell_payload, vertex_count,
+};
 use planetary_terrain::{
     BudgetLimits, CameraParams, DRAW_MARGIN, GpuUploader, PatchKey, PlanetaryCamera, StreamBudget,
-    TAN_HALF_FOV_Y, TerrainConfig, TerrainReport, TerrainSystem,
+    TAN_HALF_FOV_Y, TerrainConfig, TerrainReport, TerrainSystem, cell_payload_estimate,
 };
 
 const RADIUS: f64 = 6_371_000.0;
@@ -23,6 +27,10 @@ struct Harness {
     eyes: Vec<DVec3>,
     frame: usize,
     frustum: bool,
+    /// Items seen at `gpu_frame` and how many violated the plan-23 invariants (morph layout,
+    /// morph factor 0).
+    items_seen: usize,
+    items_bad: usize,
 }
 
 impl App for Harness {
@@ -47,7 +55,15 @@ impl App for Harness {
     }
 
     fn gpu_frame(&mut self, r: &mut Resources<'_>, s: &mut SceneState) -> Result<(), SdkError> {
-        self.sys.gpu_frame(r, s)
+        self.sys.gpu_frame(r, s)?;
+        for item in &s.items {
+            self.items_seen += 1;
+            // `VertexLayout` is not re-exported by engine-sdk; compare by its variant name.
+            if format!("{:?}", item.mesh.layout) != "PosNormalUvMorph" || item.morph != 0.0 {
+                self.items_bad += 1;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -73,6 +89,8 @@ fn start(cfg: TerrainConfig, eyes: Vec<DVec3>) -> (Runtime<NullBackend>, Harness
         eyes,
         frame: 0,
         frustum: false,
+        items_seen: 0,
+        items_bad: 0,
     };
     rt.setup(&mut app).expect("setup");
     (rt, app)
@@ -693,4 +711,123 @@ fn moving_view_with_diagnostics_reports_churn_and_no_overlap() {
     }
     assert!(appeared > 0, "the counters never saw a change");
     app.sys.shutdown();
+}
+
+#[test]
+fn terrain_items_use_morph_layout_at_factor_zero() {
+    let (mut rt, mut app) = start(test_cfg(), orbit(40, 2000.0));
+    for _ in 0..80 {
+        step(&mut rt, &mut app);
+    }
+    assert!(app.items_seen > 0, "nothing was drawn");
+    assert_eq!(app.items_bad, 0, "non-morph layout or morph != 0");
+    app.sys.shutdown();
+}
+
+#[test]
+fn estimate_matches_real_payload() {
+    const N: u32 = 8;
+    assert_eq!(CELL_VERTEX_BYTES, 52);
+    let vc = vertex_count(N) as u32;
+    assert_eq!(
+        cell_payload_estimate(vc),
+        (CELL_HEADER_LEN + vc as usize * 52) as u64
+    );
+    let terrain = PlanetTerrain::new(7, TerrainParams::default(), N).expect("terrain");
+    let model = LodModel::from_terrain(&terrain, DEFAULT_KAPPA);
+    let cube = CubeSphere::new(N);
+    let m = cube
+        .build_mesh(PatchId::root(Face::PosX), &terrain, &model, false, &|| {
+            false
+        })
+        .expect("mesh");
+    assert_eq!(
+        encode_cell_payload(&m).len() as u64,
+        cell_payload_estimate(vc)
+    );
+}
+
+struct Upload {
+    payload: Vec<u8>,
+    key: PatchKey,
+    n_vertices: u32,
+    layout_ok: bool,
+    held: usize,
+    accepted: bool,
+    rejected: usize,
+}
+
+impl App for Upload {
+    fn setup(&mut self, _r: &mut Resources<'_>, _s: &mut SceneState) -> Result<(), SdkError> {
+        Ok(())
+    }
+
+    fn update(&mut self, _dt: f64, _s: &mut SceneState) -> AppControl {
+        AppControl::Continue
+    }
+
+    fn gpu_frame(&mut self, r: &mut Resources<'_>, _s: &mut SceneState) -> Result<(), SdkError> {
+        let mut held = BTreeMap::new();
+        let counts = [Some(self.n_vertices)];
+        let mut up = GpuUploader {
+            resources: r,
+            held: &mut held,
+            vertex_counts: &counts,
+            rejected: Vec::new(),
+        };
+        self.accepted = up.upload(&self.key, &self.payload);
+        self.rejected = up.rejected.len();
+        self.held = held.len();
+        if let Some(h) = held.values().next() {
+            self.layout_ok = format!("{:?}", h.mesh.layout) == "PosNormalUvMorph"
+                && h.mesh.vertex_count == self.n_vertices;
+        }
+        Ok(())
+    }
+}
+
+fn run_upload(payload: Vec<u8>, key: PatchKey, n_vertices: u32) -> Upload {
+    let mut rt =
+        Runtime::new(Engine::new(EngineConfig::default()), NullBackend::new()).expect("runtime");
+    let mut app = Upload {
+        payload,
+        key,
+        n_vertices,
+        layout_ok: false,
+        held: 0,
+        accepted: false,
+        rejected: 0,
+    };
+    rt.setup(&mut app).expect("setup");
+    rt.frame(&mut app, 1.0 / 60.0).expect("frame");
+    app
+}
+
+#[test]
+fn valid_v4_payload_uploads_as_morph_layout_and_morph_flip_is_rejected() {
+    const N: u32 = 8;
+    let topo = std::sync::Arc::new(CubeSphere::new(N));
+    let terrain = PlanetTerrain::new(7, TerrainParams::default(), N).expect("terrain");
+    let model = LodModel::from_terrain(&terrain, DEFAULT_KAPPA);
+    let id = PatchId::root(Face::PosX);
+    let m = topo
+        .build_mesh(id, &terrain, &model, false, &|| false)
+        .expect("mesh");
+    let key = PatchKey::new(&topo, 1, id).expect("key");
+    let vc = vertex_count(N) as u32;
+    let bytes = encode_cell_payload(&m);
+
+    let ok = run_upload(bytes.clone(), key.clone(), vc);
+    assert!(ok.accepted && ok.rejected == 0 && ok.held == 1);
+    assert!(ok.layout_ok, "uploaded mesh is not the morph layout");
+
+    // A NaN in the morph_position / morph_uv region (floats 8..13 of the first vertex).
+    for slot in 8..13 {
+        let mut b = bytes.clone();
+        let off = CELL_HEADER_LEN + slot * 4;
+        b[off..off + 4].copy_from_slice(&f32::NAN.to_le_bytes());
+        let bad = run_upload(b, key.clone(), vc);
+        assert!(bad.accepted, "corrupt payload must not be retried");
+        assert_eq!((bad.rejected, bad.held), (1, 0), "slot {slot}");
+    }
 }

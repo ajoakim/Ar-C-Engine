@@ -1,10 +1,10 @@
-//! Frame-thread GPU uploader: validated v3 decode then a vertex-only upload.
+//! Frame-thread GPU uploader: validated v4 decode then a vertex-only upload.
 
 use std::collections::BTreeMap;
 use std::fmt;
 
 use engine_sdk::streaming::Uploader;
-use engine_sdk::{DVec3, MeshHandle, Resources};
+use engine_sdk::{DVec3, MeshHandle, Resources, VertexPosNormalUvMorph};
 use planetary_core::lod::HeightRange;
 use planetary_core::{Topology, decode_cell_payload};
 
@@ -63,9 +63,22 @@ impl<T: Topology> Uploader<CellKey<T>> for GpuUploader<'_, '_, T> {
             self.rejected.push(key.clone());
             return true;
         };
+        // decode guarantees `morph.len() == vertices.len()`.
+        let verts: Vec<VertexPosNormalUvMorph> = mesh
+            .vertices
+            .iter()
+            .zip(&mesh.morph)
+            .map(|(v, t)| VertexPosNormalUvMorph {
+                position: v.position,
+                normal: v.normal,
+                uv: v.uv,
+                morph_position: t.position,
+                morph_uv: t.uv,
+            })
+            .collect();
         match self
             .resources
-            .create_lit_vertices("terrain-cell", &mesh.vertices)
+            .create_lit_morph_vertices("terrain-cell", &verts)
         {
             Err(_) => false,
             Ok(h) => {
