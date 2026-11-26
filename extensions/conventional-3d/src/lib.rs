@@ -12,6 +12,7 @@ pub mod fly_camera;
 pub mod import;
 pub mod loader;
 pub mod procedural;
+pub mod scene_builder;
 
 pub use error::ImportError;
 pub use fly_camera::FlyCamera;
@@ -21,3 +22,4 @@ pub use import::{
     import_gltf_slice_with,
 };
 pub use loader::{LoadResult, LoadTicket, ModelAssets, ModelLoader, RegisteredModel};
+pub use scene_builder::{SceneBuilder, UploadedModel, upload_model, upload_registered};
