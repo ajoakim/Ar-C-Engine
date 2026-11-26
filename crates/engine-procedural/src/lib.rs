@@ -5,9 +5,14 @@
 //! `docs/architecture/dependency-direction.md`. Pure and GPU-free: no threads,
 //! clocks, I/O or global state; no planetary concepts.
 
+mod error;
+mod generator;
 mod hash;
 mod noise;
 mod seed;
+
+pub use error::ProcError;
+pub use generator::{Generator, LayerOutput, LayerStack, Params, hash_values};
 
 pub use noise::{fbm_3d, value_noise_2d, value_noise_3d};
 
