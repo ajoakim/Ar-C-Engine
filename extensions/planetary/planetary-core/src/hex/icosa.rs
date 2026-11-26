@@ -129,3 +129,12 @@ const fn build_diamonds() -> [Diamond; 10] {
 
 /// The 10 diamonds; diamond `d` (base id `d`) is `DIAMONDS[d - 1]`.
 pub const DIAMONDS: [Diamond; 10] = build_diamonds();
+
+/// Indexes `a` with a small integer. Keeps platform-width integers out of the border-critical
+/// files that only handle `u8`/`u32`/`u64` lattice values.
+///
+/// # Panics
+/// When `i` is out of bounds.
+pub fn at<T: Copy>(a: &[T], i: u8) -> T {
+    a[usize::from(i)]
+}

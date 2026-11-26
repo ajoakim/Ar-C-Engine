@@ -105,6 +105,11 @@ fn no_usize_in_border_critical_code() {
     let (_, _, bad) = width_scan("mapping.rs", &mapping, true);
     failures.extend(bad);
 
+    let hex_mapping =
+        fs::read_to_string(src_dir().join("hex").join("mapping.rs")).expect("hex/mapping.rs");
+    let (_, _, bad) = width_scan("hex/mapping.rs", &hex_mapping, true);
+    failures.extend(bad);
+
     let terrain = fs::read_to_string(src_dir().join("terrain.rs")).expect("terrain.rs");
     let (b, e, bad) = width_scan("terrain.rs", &terrain, false);
     assert!(b >= 1, "terrain.rs has no BORDER-CRITICAL marker pair");

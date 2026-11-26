@@ -15,14 +15,14 @@ pub const DIRS: [(i64, i64); 6] = [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1
 
 /// Integer barycentrics `w` on the face with vertices `v`; `sum(w) == n`.
 #[derive(Clone, Copy, Debug)]
-struct Bary {
-    v: [u8; 3],
-    w: [i64; 3],
-    n: i64,
+pub(super) struct Bary {
+    pub(super) v: [u8; 3],
+    pub(super) w: [i64; 3],
+    pub(super) n: i64,
 }
 
 impl Bary {
-    fn weight(&self, vertex: u8) -> i64 {
+    pub(super) fn weight(&self, vertex: u8) -> i64 {
         let mut total = 0;
         for k in 0..3 {
             if self.v[k] == vertex {
@@ -32,7 +32,7 @@ impl Bary {
         total
     }
 
-    fn supported_by(&self, tri: [u8; 3]) -> bool {
+    pub(super) fn supported_by(&self, tri: [u8; 3]) -> bool {
         (0..3).all(|k| self.w[k] <= 0 || tri.contains(&self.v[k]))
     }
 }
@@ -75,7 +75,7 @@ fn diamond_bary(d: u8, n: i64, i: i64, j: i64) -> Bary {
     }
 }
 
-fn bary_of(c: CellId) -> Bary {
+pub(super) fn bary_of(c: CellId) -> Bary {
     let n = 1i64 << c.level();
     match c.base() {
         0 => vertex_bary(0, n),
@@ -115,7 +115,7 @@ fn reflect(mut p: Bary) -> Option<Bary> {
 }
 
 /// The unique cell owning the lattice point `p` (non-negative weights).
-fn owner(p: Bary) -> Option<CellId> {
+pub(super) fn owner(p: Bary) -> Option<CellId> {
     let level = p.n.trailing_zeros() as u8;
     let mut support = 0;
     let mut last = 0;
