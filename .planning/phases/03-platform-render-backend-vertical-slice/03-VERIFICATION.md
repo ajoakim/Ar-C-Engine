@@ -1,7 +1,7 @@
 ---
 phase: 03-platform-render-backend-vertical-slice
 verified: 2026-11-25T00:00:00Z
-status: human_needed
+status: passed
 score: 3/4 roadmap truths fully verified automatically; 1 (real window triangle) needs human
 human_verification:
   - test: "Run `cargo run -p engine-sdk --example triangle`"
@@ -26,3 +26,8 @@ Requirements: REND-01, REND-02 (window/input code + translation tests; real run 
 Automated checks run: `cargo test --workspace` all green (1 ignored GPU test), `cargo run -p xtask -- check-deps` OK. No TODO/unimplemented found in crates.
 
 Gaps: none. Note: REQUIREMENTS.md checkboxes/traceability still show "Pending" for these IDs and ROADMAP plan checkboxes are unticked; update after the human run.
+
+
+## Human Verification Result
+
+Window run confirmed by the user on 2026-11-26: everything behaves as described (window opens, geometry renders, input received). Only hosted CI (GitHub Actions, blocked by billing) remains unrun.

@@ -34,8 +34,8 @@
 - [x] **REND-01**: Rendering goes through an engine-owned backend boundary, with wgpu as the first implementation and a null backend for headless tests
 - [x] **REND-02**: Application can open a window and receive input events through a platform layer
 - [x] **REND-03**: Frame is built by extracting a geometry-agnostic, camera-relative `RenderScene` and executing a render graph
-- [ ] **REND-04**: Application can render lit meshes with materials and a directional light using reverse-Z depth
-- [ ] **REND-05**: Application can load glTF meshes and textures
+- [x] **REND-04**: Application can render lit meshes with materials and a directional light using reverse-Z depth
+- [x] **REND-05**: Application can load glTF meshes and textures
 
 ### Assets & Residency
 
@@ -52,7 +52,7 @@
 
 ### Planetary Extension
 
-- [ ] **PLAN-01**: Planetary code lives only in extension crates; the conventional app builds and runs with those crates absent
+- [x] **PLAN-01**: Planetary code lives only in extension crates; the conventional app builds and runs with those crates absent
 - [ ] **PLAN-02**: Planet surface is represented as a cube-sphere with stable packed patch IDs and a tested face-adjacency table
 - [ ] **PLAN-03**: Planet patches form a quadtree with 2:1 balance and screen-space-error LOD selection with hysteresis
 - [ ] **PLAN-04**: Terrain LOD transitions are crack-free, including across cube-face edges and corners
@@ -63,7 +63,7 @@
 
 ### Reference Apps & Quality
 
-- [ ] **APP-01**: A conventional 3D reference app runs against the public SDK only
+- [x] **APP-01**: A conventional 3D reference app runs against the public SDK only
 - [ ] **APP-02**: A planetary reference app runs against the public SDK only
 - [ ] **QA-01**: Unit, integration, performance (criterion), and regression (image-diff on software adapter) tests exist and run in CI
 - [ ] **QA-02**: Debug overlays show LOD and streaming/memory budget state
@@ -127,8 +127,8 @@
 | REND-01 | Phase 3 | Complete |
 | REND-02 | Phase 3 | Complete |
 | REND-03 | Phase 3 | Complete |
-| REND-04 | Phase 5 | Pending |
-| REND-05 | Phase 5 | Pending |
+| REND-04 | Phase 5 | Complete |
+| REND-05 | Phase 5 | Complete |
 | ASSET-01 | Phase 4 | Complete |
 | ASSET-02 | Phase 4 | Complete |
 | ASSET-03 | Phase 4 | Complete |
@@ -136,7 +136,7 @@
 | STRM-02 | Phase 6 | Pending |
 | PROC-01 | Phase 6 | Pending |
 | PROC-02 | Phase 6 | Pending |
-| PLAN-01 | Phase 5 | Pending |
+| PLAN-01 | Phase 5 | Complete |
 | PLAN-02 | Phase 7 | Pending |
 | PLAN-03 | Phase 7 | Pending |
 | PLAN-04 | Phase 7 | Pending |
@@ -144,7 +144,7 @@
 | PLAN-06 | Phase 7 | Pending |
 | PLAN-07 | Phase 7 | Pending |
 | PLAN-08 | Phase 8 | Pending |
-| APP-01 | Phase 5 | Pending |
+| APP-01 | Phase 5 | Complete |
 | APP-02 | Phase 7 | Pending |
 | QA-01 | Phase 8 | Pending |
 | QA-02 | Phase 8 | Pending |

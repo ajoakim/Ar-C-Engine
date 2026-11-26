@@ -13,7 +13,7 @@ Build a small, stable Rust engine core and validate it with two reference apps. 
 - [x] **Phase 3: Platform, Render Backend & Vertical Slice** - Window/input, engine-owned render boundary with wgpu and null backends, RenderScene extraction, triangle via SDK (completed 2026-11-26)
 - [x] **Phase 4: World, Spatial & Assets** - Entities and transforms, spatial queries, typed handles and residency state machine
  (completed 2026-11-26)
-- [ ] **Phase 5: Conventional Reference App (Canary)** - Lit meshes, glTF, basic-scene app on SDK only, building without planetary crates
+- [x] **Phase 5: Conventional Reference App (Canary)** - Lit meshes, glTF, basic-scene app on SDK only, building without planetary crates (completed 2026-11-26)
 - [ ] **Phase 6: Streaming & Procedural Framework** - Generic streaming with fallback, deterministic seeded generator layers
 - [ ] **Phase 7: Planetary Extension & Terrain LOD** - Cube-sphere, quadtree SSE LOD, crack-free transitions, planetary camera, planetary app
 - [ ] **Phase 8: Hardening & Decisions** - Atmosphere, debug overlays, regression/perf tests, docs, decision ADRs
@@ -108,16 +108,16 @@ Plans:
 **Plans**: 10 plans
 
 Plans:
-- [ ] 05-01-PLAN.md — Pin gltf/image, conventional-3d manifest, cargo-deny wrappers, ADR-0007
-- [ ] 05-02-PLAN.md — xtask check-canary (transitive closure) + canary-leak negative fixture + docs
-- [ ] 05-03-PLAN.md — engine-render contract: Material/MaterialTable/DirectionalLight/TextureDesc, PosNormalUv, index buffers, texture table, NullBackend
-- [ ] 05-04-PLAN.md — engine-render frame flow: material/light-aware extract with normal matrix, PipelineSet, lit packet validation
-- [ ] 05-05-PLAN.md — engine-render-wgpu lit textured pipeline, textures, index draws, readback, GPU tests (Arc B580)
-- [ ] 05-06-PLAN.md — engine-sdk surface: re-exports, create_lit_mesh/create_texture, materials/light, two-pipeline Runtime
-- [ ] 05-07-PLAN.md — conventional-3d bounded glTF/image import, procedural fallback, textured_cube.glb fixture
-- [ ] 05-08-PLAN.md — conventional-3d ModelLoader on JobSystem + AssetRegistry, FlyCamera
-- [ ] 05-09-PLAN.md — conventional-3d SceneBuilder, basic_scene example (windowed + --headless), SDK-only policy test
-- [ ] 05-10-PLAN.md — CI canary job + steps, full local CI run, GPU tests, human window check
+- [x] 05-01-PLAN.md — Pin gltf/image, conventional-3d manifest, cargo-deny wrappers, ADR-0007
+- [x] 05-02-PLAN.md — xtask check-canary (transitive closure) + canary-leak negative fixture + docs
+- [x] 05-03-PLAN.md — engine-render contract: Material/MaterialTable/DirectionalLight/TextureDesc, PosNormalUv, index buffers, texture table, NullBackend
+- [x] 05-04-PLAN.md — engine-render frame flow: material/light-aware extract with normal matrix, PipelineSet, lit packet validation
+- [x] 05-05-PLAN.md — engine-render-wgpu lit textured pipeline, textures, index draws, readback, GPU tests (Arc B580)
+- [x] 05-06-PLAN.md — engine-sdk surface: re-exports, create_lit_mesh/create_texture, materials/light, two-pipeline Runtime
+- [x] 05-07-PLAN.md — conventional-3d bounded glTF/image import, procedural fallback, textured_cube.glb fixture
+- [x] 05-08-PLAN.md — conventional-3d ModelLoader on JobSystem + AssetRegistry, FlyCamera
+- [x] 05-09-PLAN.md — conventional-3d SceneBuilder, basic_scene example (windowed + --headless), SDK-only policy test
+- [x] 05-10-PLAN.md — CI canary job + steps, full local CI run, GPU tests, human window check
 **UI hint**: yes
 
 ### Phase 6: Streaming & Procedural Framework
@@ -168,7 +168,7 @@ Plans:
 | 2. Foundation | 6/6 | Complete    | 2026-11-25 |
 | 3. Platform, Render Backend & Vertical Slice | 6/7 | Complete    | 2026-11-26 |
 | 4. World, Spatial & Assets | 8/8 | Complete    | 2026-11-26 |
-| 5. Conventional Reference App | 0/TBD | Not started | - |
+| 5. Conventional Reference App | 10/10 | Complete    | 2026-11-26 |
 | 6. Streaming & Procedural Framework | 0/TBD | Not started | - |
 | 7. Planetary Extension & Terrain LOD | 0/TBD | Not started | - |
 | 8. Hardening & Decisions | 0/TBD | Not started | - |
