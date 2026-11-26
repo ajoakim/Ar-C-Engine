@@ -1,9 +1,9 @@
 //! Entity storage and hierarchy.
 
-use engine_math::FrameId;
+use engine_math::{FrameId, FrameRegistry, WorldPos};
 use slotmap::SlotMap;
 
-use crate::{EntityId, Transform, WorldError};
+use crate::{EntityId, Transform, WorldError, WorldTransform};
 
 struct Node {
     parent: Option<EntityId>,
@@ -11,6 +11,8 @@ struct Node {
     /// Meaningful for roots only.
     frame: FrameId,
     local: Transform,
+    dirty: bool,
+    cached: Option<WorldTransform>,
 }
 
 /// Entity world: generational ids plus a parent/child hierarchy.
@@ -46,6 +48,8 @@ impl World {
             children: Vec::new(),
             frame,
             local,
+            dirty: true,
+            cached: None,
         }))
     }
 
@@ -72,6 +76,8 @@ impl World {
             children: Vec::new(),
             frame,
             local,
+            dirty: true,
+            cached: None,
         });
         if let Some(p) = self.nodes.get_mut(parent) {
             p.children.push(id);
@@ -140,6 +146,7 @@ impl World {
             .get_mut(id)
             .ok_or(WorldError::StaleEntity(id))?
             .local = local;
+        self.mark_subtree_dirty(id);
         Ok(())
     }
 
@@ -213,6 +220,7 @@ impl World {
         if let Some(n) = self.nodes.get_mut(child) {
             n.parent = Some(parent);
         }
+        self.mark_subtree_dirty(child);
         Ok(())
     }
 
@@ -233,7 +241,92 @@ impl World {
             n.parent = None;
             n.frame = frame;
         }
+        self.mark_subtree_dirty(child);
         Ok(())
+    }
+
+    fn mark_subtree_dirty(&mut self, id: EntityId) {
+        let mut stack = vec![id];
+        while let Some(cur) = stack.pop() {
+            if let Some(n) = self.nodes.get_mut(cur) {
+                n.dirty = true;
+                n.cached = None;
+                stack.extend(n.children.iter().copied());
+            }
+        }
+    }
+
+    /// Recompute dirty world transforms top-down; returns the number recomputed.
+    ///
+    /// If composition overflows to non-finite, that node stays dirty (cached
+    /// `None`) and its subtree is skipped; nothing panics.
+    pub fn update_transforms(&mut self) -> usize {
+        let mut count = 0;
+        for root in self.roots() {
+            let mut stack: Vec<(EntityId, Option<WorldTransform>, bool)> =
+                vec![(root, None, false)];
+            while let Some((id, parent_world, force)) = stack.pop() {
+                let Some(node) = self.nodes.get(id) else {
+                    continue;
+                };
+                let recompute = node.dirty || force;
+                let world = if recompute {
+                    let res = match parent_world {
+                        None => WorldTransform::from_root(node.frame, &node.local),
+                        Some(pw) => pw.compose(&node.local),
+                    };
+                    let Ok(w) = res else {
+                        if let Some(n) = self.nodes.get_mut(id) {
+                            n.cached = None;
+                            n.dirty = true;
+                        }
+                        continue;
+                    };
+                    if let Some(n) = self.nodes.get_mut(id) {
+                        n.cached = Some(w);
+                        n.dirty = false;
+                    }
+                    count += 1;
+                    w
+                } else if let Some(w) = node.cached {
+                    w
+                } else {
+                    continue;
+                };
+                if let Some(n) = self.nodes.get(id) {
+                    for c in n.children.iter().rev() {
+                        stack.push((*c, Some(world), recompute));
+                    }
+                }
+            }
+        }
+        count
+    }
+
+    /// Cached world transform of `id`.
+    ///
+    /// # Errors
+    /// `StaleEntity` or `DirtyTransform`.
+    pub fn world_transform(&self, id: EntityId) -> Result<WorldTransform, WorldError> {
+        let n = self.nodes.get(id).ok_or(WorldError::StaleEntity(id))?;
+        match (n.dirty, n.cached) {
+            (false, Some(w)) => Ok(w),
+            _ => Err(WorldError::DirtyTransform(id)),
+        }
+    }
+
+    /// World position of `id` converted into `target`.
+    ///
+    /// # Errors
+    /// As [`World::world_transform`], plus frame conversion errors.
+    pub fn world_position_in(
+        &self,
+        id: EntityId,
+        frames: &FrameRegistry,
+        target: FrameId,
+    ) -> Result<WorldPos, WorldError> {
+        let pos = self.world_transform(id)?.position;
+        Ok(frames.convert(pos, target)?)
     }
 
     /// All live ids.
@@ -415,6 +508,103 @@ mod tests {
         let mut w = World::new();
         w.spawn(frame(), Transform::IDENTITY).unwrap();
         assert!(!w.contains(EntityId::default()));
+    }
+
+    fn at(x: f64, y: f64, z: f64) -> Transform {
+        Transform::from_translation(DVec3::new(x, y, z))
+    }
+
+    #[test]
+    fn transform_root_world_equals_local() {
+        let mut w = World::new();
+        let f = frame();
+        let a = w.spawn(f, at(1.0, 2.0, 3.0)).unwrap();
+        w.update_transforms();
+        let t = w.world_transform(a).unwrap();
+        assert_eq!(
+            t.position,
+            WorldPos::new(f, DVec3::new(1.0, 2.0, 3.0)).unwrap()
+        );
+        assert_eq!(t.rotation, glam::Quat::IDENTITY);
+        assert_eq!(t.scale, glam::Vec3::ONE);
+    }
+
+    #[test]
+    fn transform_child_follows_parent() {
+        let mut w = World::new();
+        let p = w
+            .spawn(
+                frame(),
+                Transform::new(
+                    DVec3::new(10.0, 0.0, 0.0),
+                    glam::Quat::from_rotation_y(std::f32::consts::FRAC_PI_2),
+                    glam::Vec3::splat(2.0),
+                ),
+            )
+            .unwrap();
+        let c = w.spawn_child(p, at(1.0, 0.0, 0.0)).unwrap();
+        w.update_transforms();
+        let l = w.world_transform(c).unwrap().position.local();
+        assert!((l - DVec3::new(10.0, 0.0, -2.0)).abs().max_element() < 1e-6);
+    }
+
+    #[test]
+    fn transform_dirty_before_update() {
+        let mut w = World::new();
+        let a = root(&mut w);
+        assert_eq!(w.world_transform(a), Err(WorldError::DirtyTransform(a)));
+        w.update_transforms();
+        assert!(w.world_transform(a).is_ok());
+    }
+
+    #[test]
+    fn transform_set_local_marks_subtree_dirty() {
+        let mut w = World::new();
+        let p = root(&mut w);
+        let c = child(&mut w, p);
+        let g = child(&mut w, c);
+        w.update_transforms();
+        w.set_local(p, at(5.0, 0.0, 0.0)).unwrap();
+        for id in [p, c, g] {
+            assert_eq!(w.world_transform(id), Err(WorldError::DirtyTransform(id)));
+        }
+        assert_eq!(w.update_transforms(), 3);
+        assert!((w.world_transform(g).unwrap().position.local().x - 5.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn transform_reparent_marks_dirty() {
+        let mut w = World::new();
+        let p1 = root(&mut w);
+        let p2 = root(&mut w);
+        let c = child(&mut w, p1);
+        let g = child(&mut w, c);
+        w.update_transforms();
+        w.set_parent(c, p2).unwrap();
+        assert!(w.world_transform(c).is_err() && w.world_transform(g).is_err());
+        w.update_transforms();
+        w.detach(c, frame()).unwrap();
+        assert!(w.world_transform(c).is_err() && w.world_transform(g).is_err());
+        assert_eq!(w.update_transforms(), 2);
+    }
+
+    #[test]
+    fn transform_second_update_recomputes_nothing() {
+        let mut w = World::new();
+        let p = root(&mut w);
+        let c = child(&mut w, p);
+        assert!(w.update_transforms() > 0);
+        assert_eq!(w.update_transforms(), 0);
+        w.set_local(c, at(1.0, 0.0, 0.0)).unwrap();
+        assert_eq!(w.update_transforms(), 1);
+    }
+
+    #[test]
+    fn transform_stale_id() {
+        let mut w = World::new();
+        let a = root(&mut w);
+        w.despawn(a).unwrap();
+        assert_eq!(w.world_transform(a), Err(WorldError::StaleEntity(a)));
     }
 
     #[test]

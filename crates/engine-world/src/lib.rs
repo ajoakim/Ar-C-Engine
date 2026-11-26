@@ -10,5 +10,5 @@ mod world;
 
 pub use entity::EntityId;
 pub use error::WorldError;
-pub use transform::Transform;
+pub use transform::{Transform, WorldTransform};
 pub use world::World;

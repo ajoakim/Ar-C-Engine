@@ -1,7 +1,9 @@
 //! Local transform data type.
 
-use engine_math::DVec3;
+use engine_math::{DVec3, FrameId, WorldPos};
 use glam::{Quat, Vec3};
+
+use crate::WorldError;
 
 /// Local translation/rotation/scale, relative to the parent entity (or, for
 /// roots, relative to the root's `FrameId`).
@@ -54,5 +56,46 @@ impl Transform {
 impl Default for Transform {
     fn default() -> Self {
         Self::IDENTITY
+    }
+}
+
+/// World-space transform: frame-aware f64 position plus accumulated rotation/scale.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct WorldTransform {
+    /// World position (frame + f64 local).
+    pub position: WorldPos,
+    /// Accumulated rotation.
+    pub rotation: Quat,
+    /// Accumulated scale.
+    pub scale: Vec3,
+}
+
+impl WorldTransform {
+    /// World transform of a root entity in `frame`.
+    ///
+    /// # Errors
+    /// `Math(NonFinite)` for non-finite translation.
+    pub fn from_root(frame: FrameId, local: &Transform) -> Result<Self, WorldError> {
+        Ok(Self {
+            position: WorldPos::new(frame, local.translation)?,
+            rotation: local.rotation,
+            scale: local.scale,
+        })
+    }
+
+    /// Compose with a child's local transform. Translation math is entirely f64.
+    ///
+    /// TRS only: non-uniform scale combined with rotated children cannot express shear.
+    ///
+    /// # Errors
+    /// `Math(NonFinite)` if the result overflows.
+    pub fn compose(&self, child: &Transform) -> Result<Self, WorldError> {
+        let offset = self.rotation.as_dquat() * (self.scale.as_dvec3() * child.translation);
+        let position = self.position.translated(offset)?;
+        Ok(Self {
+            position,
+            rotation: (self.rotation * child.rotation).normalize(),
+            scale: self.scale * child.scale,
+        })
     }
 }

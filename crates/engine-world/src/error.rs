@@ -22,6 +22,9 @@ pub enum WorldError {
     /// A transform contained NaN or infinite components.
     #[error("non-finite transform")]
     NonFinite,
+    /// The cached world transform is out of date.
+    #[error("world transform of {0:?} is dirty; call update_transforms")]
+    DirtyTransform(EntityId),
     /// A math-layer error.
     #[error(transparent)]
     Math(#[from] engine_math::MathError),
