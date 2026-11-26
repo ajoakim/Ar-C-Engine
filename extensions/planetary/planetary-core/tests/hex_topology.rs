@@ -155,7 +155,15 @@ fn check_meshes<T: Topology>(t: &T, n: u32, counts: &dyn Fn(u8) -> Option<u32>) 
         }
         let bytes = encode_cell_payload(&m);
         let back = decode_cell_payload(&bytes, m.raw, counts).expect("decode");
-        assert_eq!(back, m);
+        // The v3 payload carries no morph targets (plan 23): the decoder fills the identity.
+        assert_eq!(
+            back.morph,
+            planetary_core::morph::identity_morph(&back.vertices)
+        );
+        assert_eq!(m.morph.len(), m.vertices.len());
+        let mut want = m.clone();
+        want.morph = back.morph.clone();
+        assert_eq!(back, want);
         assert!(decode_cell_payload(&bytes, m.raw ^ 1, counts).is_err());
         assert!(decode_cell_payload(&bytes[..bytes.len() - 1], m.raw, counts).is_err());
         checked += 1;

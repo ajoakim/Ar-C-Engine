@@ -173,11 +173,13 @@ pub fn decode_cell_payload(
             uv: [f[6], f[7]],
         });
     }
+    let morph = crate::morph::identity_morph(&vertices);
     Ok(CellMesh {
         raw,
         vertex_class: class,
         origin,
         vertices,
+        morph,
         bound_radius,
         skirt_depth,
         height_min,

@@ -13,6 +13,7 @@ use std::collections::BTreeSet;
 use engine_sdk::{DVec3, VertexPosNormalUv};
 
 use crate::lod::{Footprint, LodModel};
+use crate::morph::MorphVertex;
 use crate::terrain::PlanetTerrain;
 
 /// One drawable piece of a selection: a cell drawn with one index variant.
@@ -40,6 +41,10 @@ pub struct CellMesh {
     pub vertex_class: u8,
     pub origin: DVec3,
     pub vertices: Vec<VertexPosNormalUv>,
+    /// Geomorph target per vertex (same length and order as `vertices`): the parent-level surface
+    /// at the vertex's direction (see [`crate::morph`]). Identity (position and uv copied) for
+    /// roots and for meshes decoded from a v3 payload.
+    pub morph: Vec<MorphVertex>,
     pub bound_radius: f32,
     pub skirt_depth: f64,
     /// Measured min/max of the sample heights (skirts excluded).

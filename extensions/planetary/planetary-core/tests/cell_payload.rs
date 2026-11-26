@@ -32,7 +32,16 @@ fn cell_payload_round_trip() {
     let bytes = encode_cell_payload(&m);
     assert_eq!(bytes.len(), CELL_HEADER_LEN + vertex_count(N) * 32);
     let back = decode_cell_payload(&bytes, raw, &count).expect("decode");
-    assert_eq!(back, m);
+    // The v3 payload carries no morph targets (plan 23 adds them): the decoder fills the identity,
+    // every other field round-trips exactly.
+    assert_eq!(
+        back.morph,
+        planetary_core::morph::identity_morph(&back.vertices)
+    );
+    assert_eq!(m.morph.len(), m.vertices.len());
+    let mut want = m.clone();
+    want.morph = back.morph.clone();
+    assert_eq!(back, want);
 }
 
 #[test]

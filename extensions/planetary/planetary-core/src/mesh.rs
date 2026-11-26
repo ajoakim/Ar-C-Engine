@@ -195,6 +195,24 @@ pub fn build_patch_cancellable(
     id: PatchId,
     cancelled: &dyn Fn() -> bool,
 ) -> Option<PatchMesh> {
+    build_patch_data(terrain, model, id, cancelled).map(|d| d.mesh)
+}
+
+/// A built patch plus the f64 grid data the morph targets are derived from (row-major
+/// `(n + 1)^2`, same order as the first grid vertices of `mesh.vertices`).
+pub(crate) struct PatchData {
+    pub mesh: PatchMesh,
+    pub dirs: Vec<DVec3>,
+    pub pos: Vec<DVec3>,
+    pub uvs: Vec<[f32; 2]>,
+}
+
+pub(crate) fn build_patch_data(
+    terrain: &PlanetTerrain,
+    model: &LodModel,
+    id: PatchId,
+    cancelled: &dyn Fn() -> bool,
+) -> Option<PatchData> {
     let n = terrain.cells_per_edge();
     let w = n + 1;
     let wu = w as usize;
@@ -284,14 +302,19 @@ pub fn build_patch_cancellable(
         }
     }
     let bound_radius = (max_len2.sqrt() * 1.0001) as f32;
-    Some(PatchMesh {
-        id,
-        origin,
-        vertices,
-        indices: grid_indices(n),
-        bound_radius,
-        skirt_depth: depth,
-        height_min,
-        height_max,
+    Some(PatchData {
+        mesh: PatchMesh {
+            id,
+            origin,
+            vertices,
+            indices: grid_indices(n),
+            bound_radius,
+            skirt_depth: depth,
+            height_min,
+            height_max,
+        },
+        dirs,
+        pos,
+        uvs,
     })
 }

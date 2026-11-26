@@ -20,6 +20,7 @@ pub mod cell_payload;
 pub mod hex;
 pub mod lod;
 pub mod mesh;
+pub mod morph;
 pub use cell_payload::{
     CELL_HEADER_LEN, CELL_PAYLOAD_MAGIC, CELL_PAYLOAD_VERSION, PayloadError, decode_cell_payload,
     encode_cell_payload,

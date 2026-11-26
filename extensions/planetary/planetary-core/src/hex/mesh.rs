@@ -18,16 +18,19 @@
 
 use engine_sdk::{DVec3, VertexPosNormalUv};
 
+use super::adjacency::parents;
 use super::cell_id::CellId;
 use super::mapping::{CellFrame, MAX_SECTOR_N, cell_sample_point, sample_dir};
+use super::morph::{HexOwn, hex_morph_targets};
 use super::pieces::{VARIANT_FULL_HEX, VARIANT_FULL_PENTAGON, half_variant, variant_sectors};
 use crate::lod::LodModel;
 use crate::mesh::{SKIRT_MARGIN, border_normal_f64, uv_of};
+use crate::morph::identity_morph;
 use crate::terrain::PlanetTerrain;
 use crate::topology::{CellMesh, IndexVariant};
 
 /// Vertices in one sector grid of side `n`.
-const fn sector_vertices(n: u32) -> u32 {
+pub(super) const fn sector_vertices(n: u32) -> u32 {
     (n + 1) * (n + 2) / 2
 }
 
@@ -122,12 +125,12 @@ fn vnormalize(v: DVec3) -> DVec3 {
 }
 
 /// Index of grid vertex `(k, s, t)`.
-const fn grid_index(n: u32, k: u32, s: u32, t: u32) -> u32 {
+pub(super) const fn grid_index(n: u32, k: u32, s: u32, t: u32) -> u32 {
     k * sector_vertices(n) + s * (n + 1) - s * s.saturating_sub(1) / 2 + t
 }
 
 /// Index of outer skirt vertex `j` of sector `k` (`j = 0` is `corner_k`).
-const fn outer_skirt_index(n: u32, sectors: u32, k: u32, j: u32) -> u32 {
+pub(super) const fn outer_skirt_index(n: u32, sectors: u32, k: u32, j: u32) -> u32 {
     sectors * sector_vertices(n) + k * (n + 1) + j
 }
 
@@ -137,7 +140,7 @@ const fn diag_skirt_index(n: u32, sectors: u32, d: u32, j: u32) -> u32 {
 }
 
 /// Grid `(sector, s, t)` carrying diagonal-`d` vertex `j` (`0..=2n`).
-const fn diag_grid(n: u32, d: u32, j: u32) -> (u32, u32, u32) {
+pub(super) const fn diag_grid(n: u32, d: u32, j: u32) -> (u32, u32, u32) {
     if j <= n {
         (d, n - j, 0)
     } else {
@@ -146,7 +149,7 @@ const fn diag_grid(n: u32, d: u32, j: u32) -> (u32, u32, u32) {
 }
 
 /// Builds the mesh of hex cell `c` (sector side `n = terrain.cells_per_edge()`, even, `2..=64`);
-/// `None` when cancelled or `n` is invalid.
+/// `None` when cancelled or `n` is invalid. Carries the geomorph targets (07.1-22).
 pub fn build_hex_cell(
     c: CellId,
     terrain: &PlanetTerrain,
@@ -154,6 +157,95 @@ pub fn build_hex_cell(
     debug_cells: bool,
     cancelled: &dyn Fn() -> bool,
 ) -> Option<CellMesh> {
+    let parts = build_hex_parts(c, terrain, model, debug_cells, cancelled)?;
+    let mut ps = Vec::with_capacity(2);
+    parents(c, &mut ps);
+    let own = HexOwn {
+        frame: &parts.frame,
+        dirs: &parts.dirs,
+        pos: &parts.pos,
+        uvs: &parts.uvs,
+        depth: parts.mesh.skirt_depth,
+    };
+    let targets = hex_morph_targets(terrain, c, &ps, &own, cancelled)?;
+    let mut mesh = parts.mesh;
+    mesh.morph = if c.level() == 0 {
+        identity_morph(&mesh.vertices)
+    } else {
+        targets.to_vertices(mesh.origin)
+    };
+    if debug_cells {
+        let uv1 = mesh.vertices.first().map_or(0.0, |v| v.uv[1]);
+        for mv in &mut mesh.morph {
+            mv.uv[1] = uv1;
+        }
+    }
+    Some(mesh)
+}
+
+/// Planet-space (f64) morph targets of hex cell `c`, parallel to the vertices of its mesh (grid,
+/// outer skirts, diagonal skirts). For seam and oracle tests.
+#[doc(hidden)]
+#[must_use]
+pub fn hex_morph_targets_f64(
+    c: CellId,
+    terrain: &PlanetTerrain,
+    model: &LodModel,
+) -> Option<crate::morph::MorphTargets> {
+    let mut ps = Vec::with_capacity(2);
+    parents(c, &mut ps);
+    hex_morph_targets_with_parents_f64(c, terrain, model, &ps)
+}
+
+/// Like [`hex_morph_targets_f64`] with an explicit parent search order (tests: the order, and a
+/// wrong parent as a negative control).
+#[doc(hidden)]
+#[must_use]
+pub fn hex_morph_targets_with_parents_f64(
+    c: CellId,
+    terrain: &PlanetTerrain,
+    model: &LodModel,
+    search: &[CellId],
+) -> Option<crate::morph::MorphTargets> {
+    let parts = build_hex_parts(c, terrain, model, false, &|| false)?;
+    let own = HexOwn {
+        frame: &parts.frame,
+        dirs: &parts.dirs,
+        pos: &parts.pos,
+        uvs: &parts.uvs,
+        depth: parts.mesh.skirt_depth,
+    };
+    hex_morph_targets(terrain, c, search, &own, &|| false)
+}
+
+/// The mesh without morph targets (identity morph): the pre-07.1-22 build, kept for timing and
+/// vertex-equality tests.
+#[doc(hidden)]
+pub fn build_hex_cell_identity_morph(
+    c: CellId,
+    terrain: &PlanetTerrain,
+    model: &LodModel,
+    debug_cells: bool,
+    cancelled: &dyn Fn() -> bool,
+) -> Option<CellMesh> {
+    build_hex_parts(c, terrain, model, debug_cells, cancelled).map(|p| p.mesh)
+}
+
+struct HexParts {
+    mesh: CellMesh,
+    frame: CellFrame,
+    dirs: Vec<DVec3>,
+    pos: Vec<DVec3>,
+    uvs: Vec<[f32; 2]>,
+}
+
+fn build_hex_parts(
+    c: CellId,
+    terrain: &PlanetTerrain,
+    model: &LodModel,
+    debug_cells: bool,
+    cancelled: &dyn Fn() -> bool,
+) -> Option<HexParts> {
     let n = terrain.cells_per_edge();
     if !valid_sector_n(n) {
         return None;
@@ -256,15 +348,23 @@ pub fn build_hex_cell(
             vert.uv[1] = v;
         }
     }
-    Some(CellMesh {
-        raw: c.raw(),
-        vertex_class: u8::from(pentagon),
-        origin,
-        vertices,
-        bound_radius,
-        skirt_depth: depth,
-        height_min,
-        height_max,
+    let morph = identity_morph(&vertices);
+    Some(HexParts {
+        mesh: CellMesh {
+            raw: c.raw(),
+            vertex_class: u8::from(pentagon),
+            origin,
+            vertices,
+            morph,
+            bound_radius,
+            skirt_depth: depth,
+            height_min,
+            height_max,
+        },
+        frame,
+        dirs,
+        pos,
+        uvs,
     })
 }
 

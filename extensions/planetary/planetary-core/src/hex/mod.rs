@@ -7,6 +7,7 @@ pub mod cell_id;
 pub mod icosa;
 pub mod mapping;
 pub mod mesh;
+pub mod morph;
 pub mod pieces;
 pub mod topology;
 
