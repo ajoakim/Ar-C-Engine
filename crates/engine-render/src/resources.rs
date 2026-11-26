@@ -202,6 +202,7 @@ impl ResourceTable {
 
     /// Validate a frame packet against live resources and engine invariants.
     pub fn validate_packet(&self, packet: &FramePacket) -> Result<(), RenderError> {
+        packet.light.validate()?;
         let mut total = 0usize;
         for pass in &packet.passes {
             if pass.color_target != TextureId::BACKBUFFER {
@@ -278,7 +279,20 @@ impl ResourceTable {
                         });
                     }
                 }
-                if !d.mvp.is_finite() {
+                if let Some(t) = d.texture {
+                    if t.is_surface_target() {
+                        return Err(RenderError::InvalidHandle {
+                            kind: "texture",
+                            id: t.raw(),
+                        });
+                    }
+                    self.texture(t)?;
+                }
+                if !d.mvp.is_finite()
+                    || !d.model.is_finite()
+                    || !d.normal.is_finite()
+                    || !d.base_color.iter().all(|c| c.is_finite())
+                {
                     return Err(RenderError::NonFiniteTransform);
                 }
             }

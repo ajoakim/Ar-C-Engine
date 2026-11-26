@@ -33,12 +33,17 @@ fn draw(pipeline: PipelineId, buf: BufferId, count: u32) -> DrawCommand {
         pipeline,
         mesh: MeshHandle::new(VertexLayout::PosColor, buf, count),
         mvp: Mat4::IDENTITY,
+        model: Mat4::IDENTITY,
+        normal: Mat3::IDENTITY,
+        base_color: [1.0; 4],
+        texture: None,
     }
 }
 
 fn packet(index: u64, draws: Vec<DrawCommand>) -> FramePacket {
     FramePacket {
         frame_index: index,
+        light: DirectionalLight::default(),
         passes: vec![PassPacket {
             name: "main".into(),
             color_target: TextureId::BACKBUFFER,
@@ -306,6 +311,10 @@ fn null_submit_rejects_layout_mismatch() {
         pipeline: pipe,
         mesh: MeshHandle::new(VertexLayout::PosNormalUv, vb, 3),
         mvp: Mat4::IDENTITY,
+        model: Mat4::IDENTITY,
+        normal: Mat3::IDENTITY,
+        base_color: [1.0; 4],
+        texture: None,
     };
     assert!(matches!(
         b.submit(&packet(0, vec![d])),
@@ -322,6 +331,10 @@ fn null_submit_rejects_bad_index_buffers() {
         pipeline: pipe,
         mesh: MeshHandle::new(VertexLayout::PosNormalUv, vb, 4).with_indices(ib, count),
         mvp: Mat4::IDENTITY,
+        model: Mat4::IDENTITY,
+        normal: Mat3::IDENTITY,
+        base_color: [1.0; 4],
+        texture: None,
     };
     // Index buffer created with Vertex usage.
     let wrong = b
@@ -358,6 +371,10 @@ fn null_submit_accepts_indexed_lit_mesh() {
         pipeline: pipe,
         mesh: MeshHandle::new(VertexLayout::PosNormalUv, vb, 4).with_indices(ib, 6),
         mvp: Mat4::IDENTITY,
+        model: Mat4::IDENTITY,
+        normal: Mat3::IDENTITY,
+        base_color: [1.0; 4],
+        texture: None,
     };
     assert_eq!(b.submit(&packet(0, vec![d])), Ok(()));
 }

@@ -2,8 +2,9 @@
 
 use engine_math::{FrameRegistry, Vec3, WorldPos};
 use engine_render::{
-    BufferDesc, BufferUsage, Camera, MeshHandle, NullBackend, PipelineDesc, RenderBackend,
-    RenderGraph, RenderItem, ShaderId, VertexLayout, VertexPosColor, encode_vertices, extract,
+    BufferDesc, BufferUsage, Camera, DirectionalLight, MaterialTable, MeshHandle, NullBackend,
+    PipelineDesc, PipelineSet, RenderBackend, RenderGraph, RenderItem, ShaderId, VertexLayout,
+    VertexPosColor, encode_vertices, extract,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -57,7 +58,15 @@ fn precision_camera_relative_within_sub_mm() -> TestResult {
             }
         }
     }
-    let scene = extract(&f, &cam, ASPECT, &items, 0)?;
+    let scene = extract(
+        &f,
+        &cam,
+        ASPECT,
+        &items,
+        0,
+        &MaterialTable::new(),
+        &DirectionalLight::default(),
+    )?;
     assert_eq!(scene.draws.len(), exact.len());
     for (d, e) in scene.draws.iter().zip(&exact) {
         let t = d.model.w_axis.truncate();
@@ -87,7 +96,15 @@ fn precision_no_frame_to_frame_jitter() -> TestResult {
     for k in 0..1000u32 {
         let step = f64::from(k) * 1e-4;
         let cam = Camera::new(pos(&f, step, R, 0.0)?);
-        let scene = extract(&f, &cam, ASPECT, &[item], u64::from(k))?;
+        let scene = extract(
+            &f,
+            &cam,
+            ASPECT,
+            &[item],
+            u64::from(k),
+            &MaterialTable::new(),
+            &DirectionalLight::default(),
+        )?;
         let rel_x = f64::from(scene.draws[0].model.w_axis.x);
         assert!((rel_x - (-step)).abs() < 1e-5);
         if let Some(p) = prev {
@@ -110,7 +127,15 @@ fn ndc_for(
         MeshHandle::new(VertexLayout::PosColor, dummy_buffer()?, 3),
         item_pos,
     );
-    let scene = extract(f, &Camera::new(cam_pos), ASPECT, &[item], 0)?;
+    let scene = extract(
+        f,
+        &Camera::new(cam_pos),
+        ASPECT,
+        &[item],
+        0,
+        &MaterialTable::new(),
+        &DirectionalLight::default(),
+    )?;
     Ok((scene.view_proj * scene.draws[0].model).project_point3(Vec3::new(0.1, 0.1, 0.0)))
 }
 
@@ -137,11 +162,21 @@ fn precision_full_frame_on_null_backend() -> TestResult {
     let f = FrameRegistry::new();
     let cam = Camera::new(pos(&f, 0.0, R, 0.0)?);
     let item = RenderItem::new(mesh, pos(&f, 1.0, R + 0.5, -10.0)?);
-    let scene = extract(&f, &cam, ASPECT, &[item], 1)?;
+    let mut set = PipelineSet::new();
+    set.insert(VertexLayout::PosColor, pipe);
+    let scene = extract(
+        &f,
+        &cam,
+        ASPECT,
+        &[item],
+        1,
+        &MaterialTable::new(),
+        &DirectionalLight::default(),
+    )?;
     let packet =
         RenderGraph::main_p0()
             .compile()?
-            .build_frame_packet(&scene, pipe, [0.0, 0.0, 0.0, 1.0])?;
+            .build_frame_packet(&scene, &set, [0.0, 0.0, 0.0, 1.0])?;
     be.submit(&packet)?;
     let last = be.last_frame().ok_or("no frame recorded")?;
     assert!(last.passes[0].draws[0].mvp.is_finite());
