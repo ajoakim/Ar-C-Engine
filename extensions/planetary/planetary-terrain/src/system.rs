@@ -144,8 +144,9 @@ impl TerrainSystem {
             },
         );
         let source = Arc::new(PatchSource::new(terrain.clone(), model));
-        let manager = StreamManager::new(cfg.stream, residency, source)
+        let mut manager = StreamManager::new(cfg.stream, residency, source)
             .map_err(|e| app_err("stream manager", e))?;
+        manager.set_deterministic(cfg.settle_each_frame);
         let jobs = JobSystem::builder().workers(cfg.workers).build()?;
         Ok(Self {
             cfg,

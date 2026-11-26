@@ -59,6 +59,7 @@ pub struct StreamManager<K: StreamKey, S: StreamSource<K>> {
     pins: Pins,
     shown: BTreeMap<AssetId, u64>,
     frame_evicted: u32,
+    deterministic: bool,
 }
 
 impl<K: StreamKey, S: StreamSource<K>> StreamManager<K, S> {
@@ -85,6 +86,7 @@ impl<K: StreamKey, S: StreamSource<K>> StreamManager<K, S> {
             pins: Pins::new(),
             shown: BTreeMap::new(),
             frame_evicted: 0,
+            deterministic: false,
         })
     }
 
@@ -247,7 +249,13 @@ impl<K: StreamKey, S: StreamSource<K>> StreamManager<K, S> {
         }
 
         // 4. Poll (non-blocking).
-        let events = self.loader.poll(&mut self.residency);
+        // In deterministic (test) mode this blocks on the jobs started this frame so that which
+        // frame a completion lands in never depends on worker timing.
+        let events = if self.deterministic {
+            self.loader.wait_all(&mut self.residency)
+        } else {
+            self.loader.poll(&mut self.residency)
+        };
         self.completed.extend(events);
 
         // 5. Apply a counted number of completions.
@@ -338,6 +346,12 @@ impl<K: StreamKey, S: StreamSource<K>> StreamManager<K, S> {
         report.awaiting_upload = self.ready.len();
         report.evicted = self.frame_evicted;
         Ok(report)
+    }
+
+    /// Deterministic (test) mode: `update` blocks on started jobs instead of polling, so
+    /// completions always land in the frame their job started. Never enable on a frame path.
+    pub fn set_deterministic(&mut self, on: bool) {
+        self.deterministic = on;
     }
 
     /// BLOCKING: waits for every started job and buffers its completion.
