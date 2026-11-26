@@ -119,6 +119,12 @@ pub struct FrameSample {
     pub overlap_pairs: u32,
     pub flipflops: u32,
     pub flipflops_unexplained: u32,
+    /// Geomorph counters (always computed by the terrain system).
+    pub morph_min: f64,
+    pub morph_mean: f64,
+    pub morph_first_frame_defects: u32,
+    pub handover_gap_max: f64,
+    pub multi_level_handovers: u32,
 }
 
 /// Aggregate frame-time statistics.
@@ -171,7 +177,7 @@ pub fn band_of(altitude_m: f64) -> usize {
         .unwrap_or(ALTITUDE_BANDS.len() - 1)
 }
 
-const COLUMNS: [&str; 41] = [
+const COLUMNS: [&str; 46] = [
     "frame",
     "sim_time_s",
     "frame_ms",
@@ -213,19 +219,24 @@ const COLUMNS: [&str; 41] = [
     "overlap_pairs",
     "flipflops",
     "flipflops_unexplained",
+    "morph_min",
+    "morph_mean",
+    "morph_first_frame_defects",
+    "handover_gap_max",
+    "multi_level_handovers",
 ];
 
 /// CSV header line (no newline).
 #[must_use]
 pub fn csv_header() -> &'static str {
-    "frame,sim_time_s,frame_ms,prepare_ms,gpu_frame_ms,altitude_m,nominal_altitude_m,center_distance_m,nodes_visited,leaves,wanted_leaves,drawn_leaves,held_meshes,pending,in_flight,awaiting_upload,started,completions,uploads,uploaded_bytes,evicted,cancelled,destroyed,upload_rejects,pending_requests,draw_items,culled_draws,tau_eff,forced_splits,trimmed_splits,culled_horizon,culled_frustum,node_budget_hit,leaf_budget_hit,level_changes,drawn_appeared,drawn_disappeared,cull_toggles,overlap_pairs,flipflops,flipflops_unexplained"
+    "frame,sim_time_s,frame_ms,prepare_ms,gpu_frame_ms,altitude_m,nominal_altitude_m,center_distance_m,nodes_visited,leaves,wanted_leaves,drawn_leaves,held_meshes,pending,in_flight,awaiting_upload,started,completions,uploads,uploaded_bytes,evicted,cancelled,destroyed,upload_rejects,pending_requests,draw_items,culled_draws,tau_eff,forced_splits,trimmed_splits,culled_horizon,culled_frustum,node_budget_hit,leaf_budget_hit,level_changes,drawn_appeared,drawn_disappeared,cull_toggles,overlap_pairs,flipflops,flipflops_unexplained,morph_min,morph_mean,morph_first_frame_defects,handover_gap_max,multi_level_handovers"
 }
 
 /// One CSV row (no newline).
 #[must_use]
 pub fn csv_row(s: &FrameSample) -> String {
     format!(
-        "{},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{:.3},{},{},{},{},{},{},{},{},{},{},{},{},{}",
+        "{},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{:.3},{},{},{},{},{},{},{},{},{},{},{},{},{},{:.4},{:.4},{},{:.4},{}",
         s.frame,
         s.sim_time_s,
         s.frame_ms,
@@ -267,6 +278,11 @@ pub fn csv_row(s: &FrameSample) -> String {
         s.overlap_pairs,
         s.flipflops,
         s.flipflops_unexplained,
+        s.morph_min,
+        s.morph_mean,
+        s.morph_first_frame_defects,
+        s.handover_gap_max,
+        s.multi_level_handovers,
     )
 }
 

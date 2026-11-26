@@ -55,7 +55,17 @@ fn csv_columns_match_header() {
         "flipflops_unexplained",
     ];
     let cols: Vec<&str> = csv_header().split(',').collect();
-    assert_eq!(&cols[cols.len() - 7..], &churn);
+    assert_eq!(&cols[cols.len() - 12..cols.len() - 5], &churn);
+    assert_eq!(
+        &cols[cols.len() - 5..],
+        &[
+            "morph_min",
+            "morph_mean",
+            "morph_first_frame_defects",
+            "handover_gap_max",
+            "multi_level_handovers"
+        ]
+    );
     let s = FrameSample {
         level_changes: 1,
         drawn_appeared: 2,
@@ -64,13 +74,20 @@ fn csv_columns_match_header() {
         overlap_pairs: 5,
         flipflops: 6,
         flipflops_unexplained: 7,
+        morph_min: 0.25,
+        morph_mean: 0.5,
+        morph_first_frame_defects: 8,
+        handover_gap_max: 0.75,
+        multi_level_handovers: 9,
         ..FrameSample::default()
     };
     let row = csv_row(&s);
     let cells: Vec<&str> = row.split(',').collect();
     assert_eq!(
-        &cells[cells.len() - 7..],
-        &["1", "2", "3", "4", "5", "6", "7"]
+        &cells[cells.len() - 12..],
+        &[
+            "1", "2", "3", "4", "5", "6", "7", "0.2500", "0.5000", "8", "0.7500", "9"
+        ]
     );
 }
 
@@ -117,4 +134,18 @@ fn headless_samples_are_deterministic() {
     let frames: Vec<u64> = a.iter().map(|s| s.frame).collect();
     assert_eq!(frames, (1..=20).collect::<Vec<u64>>());
     assert_eq!(a, b);
+}
+
+#[test]
+fn morph_columns_are_fed_from_the_terrain_report() {
+    for s in run() {
+        assert!((0.0..=1.0).contains(&s.morph_min), "{}", s.morph_min);
+        assert!(
+            (s.morph_min..=1.0).contains(&s.morph_mean),
+            "{}",
+            s.morph_mean
+        );
+        assert!((0.0..=1.0).contains(&s.handover_gap_max));
+        assert_eq!(s.morph_first_frame_defects, 0);
+    }
 }

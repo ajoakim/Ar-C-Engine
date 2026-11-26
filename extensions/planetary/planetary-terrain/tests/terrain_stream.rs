@@ -1,7 +1,7 @@
 //! Headless streaming integration through `Runtime` + `App::gpu_frame` on `NullBackend`.
 #![allow(clippy::result_large_err)]
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use engine_sdk::streaming::Uploader;
 use engine_sdk::{
@@ -22,8 +22,8 @@ use planetary_terrain::{
 
 const RADIUS: f64 = 6_371_000.0;
 
-struct Harness {
-    sys: TerrainSystem<CubeSphere>,
+struct Harness<T: Topology = CubeSphere> {
+    sys: TerrainSystem<T>,
     eyes: Vec<DVec3>,
     frame: usize,
     frustum: bool,
@@ -31,9 +31,12 @@ struct Harness {
     /// morph factor 0).
     items_seen: usize,
     items_bad: usize,
+    /// Items drawn with a morph factor other than 0, and the factors of the last frame.
+    morph_nonzero: usize,
+    frame_morphs: Vec<f32>,
 }
 
-impl App for Harness {
+impl<T: Topology> App for Harness<T> {
     fn setup(&mut self, r: &mut Resources<'_>, s: &mut SceneState) -> Result<(), SdkError> {
         self.sys.setup(r, s)
     }
@@ -56,12 +59,17 @@ impl App for Harness {
 
     fn gpu_frame(&mut self, r: &mut Resources<'_>, s: &mut SceneState) -> Result<(), SdkError> {
         self.sys.gpu_frame(r, s)?;
+        self.frame_morphs.clear();
         for item in &s.items {
             self.items_seen += 1;
             // `VertexLayout` is not re-exported by engine-sdk; compare by its variant name.
-            if format!("{:?}", item.mesh.layout) != "PosNormalUvMorph" || item.morph != 0.0 {
+            if format!("{:?}", item.mesh.layout) != "PosNormalUvMorph" {
                 self.items_bad += 1;
             }
+            if item.morph != 0.0 {
+                self.morph_nonzero += 1;
+            }
+            self.frame_morphs.push(item.morph);
         }
         Ok(())
     }
@@ -81,22 +89,32 @@ fn test_cfg() -> TerrainConfig {
 }
 
 fn start(cfg: TerrainConfig, eyes: Vec<DVec3>) -> (Runtime<NullBackend>, Harness) {
+    let topo = CubeSphere::new(cfg.cells_per_edge);
+    start_with(cfg, topo, eyes)
+}
+
+fn start_with<T: Topology>(
+    cfg: TerrainConfig,
+    topo: T,
+    eyes: Vec<DVec3>,
+) -> (Runtime<NullBackend>, Harness<T>) {
     let mut rt =
         Runtime::new(Engine::new(EngineConfig::default()), NullBackend::new()).expect("runtime");
     let mut app = Harness {
-        sys: TerrainSystem::new(cfg.clone(), CubeSphere::new(cfg.cells_per_edge))
-            .expect("terrain system"),
+        sys: TerrainSystem::new(cfg, topo).expect("terrain system"),
         eyes,
         frame: 0,
         frustum: false,
         items_seen: 0,
         items_bad: 0,
+        morph_nonzero: 0,
+        frame_morphs: Vec::new(),
     };
     rt.setup(&mut app).expect("setup");
     (rt, app)
 }
 
-fn step(rt: &mut Runtime<NullBackend>, app: &mut Harness) {
+fn step<T: Topology>(rt: &mut Runtime<NullBackend>, app: &mut Harness<T>) {
     rt.frame(app, 1.0 / 60.0).expect("frame");
 }
 
@@ -714,13 +732,37 @@ fn moving_view_with_diagnostics_reports_churn_and_no_overlap() {
 }
 
 #[test]
-fn terrain_items_use_morph_layout_at_factor_zero() {
-    let (mut rt, mut app) = start(test_cfg(), orbit(40, 2000.0));
+fn terrain_items_use_morph_layout_at_factor_zero_when_morph_is_disabled() {
+    let cfg = TerrainConfig {
+        morph_enabled: false,
+        ..test_cfg()
+    };
+    let (mut rt, mut app) = start(cfg, orbit(40, 2000.0));
     for _ in 0..80 {
+        step(&mut rt, &mut app);
+        assert!(
+            app.sys
+                .drawn()
+                .iter()
+                .all(|&c| app.sys.drawn_morph(c) == Some(0.0))
+        );
+    }
+    assert!(app.items_seen > 0, "nothing was drawn");
+    assert_eq!(app.items_bad, 0, "non-morph layout");
+    assert_eq!(app.morph_nonzero, 0, "morph != 0 with morph disabled");
+    assert_eq!(app.sys.report().morph_first_frame_defects, 0);
+    app.sys.shutdown();
+}
+
+#[test]
+fn terrain_items_use_morph_layout_with_morph_enabled() {
+    let (mut rt, mut app) = start(test_cfg(), descent_eyes(3.0e6, 3000.0, 0.025));
+    for _ in 0..200 {
         step(&mut rt, &mut app);
     }
     assert!(app.items_seen > 0, "nothing was drawn");
-    assert_eq!(app.items_bad, 0, "non-morph layout or morph != 0");
+    assert_eq!(app.items_bad, 0, "non-morph layout");
+    assert!(app.morph_nonzero > 0, "no item was ever morphing");
     app.sys.shutdown();
 }
 
@@ -830,4 +872,267 @@ fn valid_v4_payload_uploads_as_morph_layout_and_morph_flip_is_rejected() {
         assert!(bad.accepted, "corrupt payload must not be retried");
         assert_eq!((bad.rejected, bad.held), (1, 0), "slot {slot}");
     }
+}
+
+// ---- plan 24: morph factor driving -------------------------------------------------------
+
+use planetary_core::HexSphere;
+use planetary_core::lod::{HeightRange, cell_distance, morph_factor, refine_distance};
+
+const PROJ_SCALE: f64 = 720.0 / (2.0 * TAN_HALF_FOV_Y);
+
+/// Radial descent along +x from `from` to `to` meters of altitude, `rate` of the distance per
+/// frame, then held.
+fn descent_eyes(from: f64, to: f64, rate: f64) -> Vec<DVec3> {
+    let mut v = Vec::new();
+    let mut alt = from;
+    while alt > to {
+        v.push(DVec3::new(RADIUS + alt, 0.0, 0.0));
+        alt *= 1.0 - rate;
+    }
+    for _ in 0..20 {
+        v.push(DVec3::new(RADIUS + to, 0.0, 0.0));
+    }
+    v
+}
+
+fn parents_of<T: Topology>(topo: &T, c: T::Cell) -> Vec<T::Cell> {
+    let mut v = Vec::new();
+    topo.parents(c, &mut v);
+    v
+}
+
+fn children_of<T: Topology>(topo: &T, c: T::Cell) -> Vec<T::Cell> {
+    let mut v = Vec::new();
+    topo.children(c, &mut v);
+    v
+}
+
+/// (min, max) the distance-based factor of `c` can take for any measured height range inside the
+/// model range: a lower height range gives the larger distance and the larger factor.
+fn morph_bracket<T: Topology>(sys: &TerrainSystem<T>, c: T::Cell, eye: DVec3) -> (f64, f64) {
+    let topo = sys.topology();
+    let model = sys.model();
+    let tau = sys.config().lod.tau_px;
+    let level = topo.level(c);
+    let fp = topo.footprint(c);
+    let at = |range: HeightRange| {
+        let d = cell_distance(model.radius, eye, &fp, range).max(sys.config().lod.min_distance);
+        morph_factor(
+            d,
+            refine_distance(model, PROJ_SCALE, tau, level - 1),
+            sys.config().morph_end_scale * refine_distance(model, PROJ_SCALE, tau, level),
+        )
+    };
+    let wide = HeightRange {
+        min: model.height.min - 1.0,
+        max: model.height.max + 1.0,
+    };
+    let low = HeightRange {
+        min: model.height.min,
+        max: model.height.min,
+    };
+    (at(wide), at(low))
+}
+
+fn refine_first_frame_is_one<T: Topology>(cfg: TerrainConfig, topo: T) {
+    let eyes = descent_eyes(3.0e6, 3000.0, 0.025);
+    let n = eyes.len();
+    let (mut rt, mut app) = start_with(cfg, topo, eyes);
+    let mut prev: BTreeSet<T::Cell> = BTreeSet::new();
+    let mut refine_seen = 0usize;
+    for f in 0..n {
+        step(&mut rt, &mut app);
+        let topo = app.sys.topology().clone();
+        let now: BTreeSet<T::Cell> = app.sys.drawn().iter().copied().collect();
+        for &c in &now {
+            let m = app
+                .sys
+                .drawn_morph(c)
+                .expect("drawn cell has a shown morph");
+            assert!((0.0..=1.0).contains(&m), "frame {f}: {m}");
+            if topo.level(c) == 0 {
+                assert_eq!(m, 0.0, "frame {f}: level-0 cell morphing");
+            }
+            if !prev.contains(&c) && parents_of(&*topo, c).iter().any(|p| prev.contains(p)) {
+                refine_seen += 1;
+                assert_eq!(m, 1.0, "frame {f}: refined cell {c:?} shown at {m}");
+            }
+        }
+        assert_eq!(app.sys.report().morph_first_frame_defects, 0, "frame {f}");
+        prev = now;
+    }
+    assert!(
+        refine_seen > 20,
+        "descent produced only {refine_seen} refine events"
+    );
+    app.sys.shutdown();
+}
+
+#[test]
+fn refined_cells_first_frame_is_exactly_one_cube() {
+    let cfg = test_cfg();
+    refine_first_frame_is_one(cfg.clone(), CubeSphere::new(cfg.cells_per_edge));
+}
+
+#[test]
+fn refined_cells_first_frame_is_exactly_one_hex() {
+    let cfg = TerrainConfig {
+        cells_per_edge: 16,
+        ..test_cfg()
+    };
+    refine_first_frame_is_one(cfg, HexSphere::new(16).expect("hex"));
+}
+
+#[test]
+fn settled_morph_matches_the_distance_formula() {
+    let cfg = test_cfg();
+    let eye = DVec3::new(RADIUS + 20_000.0, 0.0, 0.0);
+    let (mut rt, mut app) = start(cfg, vec![eye]);
+    for _ in 0..150 {
+        step(&mut rt, &mut app);
+    }
+    let mut checked = 0;
+    let mut partial = 0;
+    for &c in app.sys.drawn() {
+        let m = app.sys.drawn_morph(c).unwrap();
+        if app.sys.topology().level(c) == 0 {
+            assert_eq!(m, 0.0);
+            continue;
+        }
+        let (lo, hi) = morph_bracket(&app.sys, c, eye);
+        assert!(
+            m >= lo - 1e-12 && m <= hi + 1e-12,
+            "cell {c:?}: shown {m} outside [{lo}, {hi}]"
+        );
+        checked += 1;
+        if m > 0.0 && m < 1.0 {
+            partial += 1;
+        }
+    }
+    assert!(checked > 10, "only {checked} cells checked");
+    println!("settled cells {checked}, partially morphed {partial}");
+    app.sys.shutdown();
+}
+
+#[test]
+fn slew_guard_limits_the_fall_per_frame() {
+    let cfg = test_cfg();
+    let frames = f64::from(cfg.morph_frames);
+    let mut eyes: Vec<DVec3> = (0..30)
+        .map(|_| DVec3::new(RADIUS + 3.0e6, 0.0, 0.0))
+        .collect();
+    eyes.extend((0..80).map(|_| DVec3::new(RADIUS + 2000.0, 0.0, 0.0)));
+    let n = eyes.len();
+    let (mut rt, mut app) = start(cfg, eyes);
+    let mut prev: BTreeMap<PatchId, f64> = BTreeMap::new();
+    let mut max_fall = 0.0f64;
+    for f in 0..n {
+        step(&mut rt, &mut app);
+        let mut now = BTreeMap::new();
+        for &c in app.sys.drawn() {
+            let m = app.sys.drawn_morph(c).unwrap();
+            if let Some(&p) = prev.get(&c) {
+                assert!(
+                    p - m <= 1.0 / frames + 1e-12,
+                    "frame {f}: {c:?} fell {p} -> {m}"
+                );
+                max_fall = max_fall.max(p - m);
+            }
+            now.insert(c, m);
+        }
+        prev = now;
+    }
+    assert!(
+        max_fall > 0.0,
+        "the scenario never exercised a falling factor"
+    );
+    app.sys.shutdown();
+}
+
+#[test]
+fn coarsened_cells_start_at_the_distance_value_not_one() {
+    let mut eyes = descent_eyes(3.0e6, 3000.0, 0.025);
+    let down = eyes.len();
+    let mut asc: Vec<DVec3> = eyes.iter().rev().copied().collect();
+    eyes.append(&mut asc);
+    let (mut rt, mut app) = start(test_cfg(), eyes.clone());
+    let mut prev: BTreeSet<PatchId> = BTreeSet::new();
+    let mut events = 0usize;
+    let mut below_one = 0usize;
+    for (f, eye) in eyes.iter().enumerate() {
+        step(&mut rt, &mut app);
+        let topo = app.sys.topology().clone();
+        let now: BTreeSet<PatchId> = app.sys.drawn().iter().copied().collect();
+        if f > down {
+            for &c in &now {
+                if prev.contains(&c) {
+                    continue;
+                }
+                let kids = children_of(&*topo, c);
+                if kids.iter().any(|k| prev.contains(k)) {
+                    let m = app.sys.drawn_morph(c).unwrap();
+                    let (lo, hi) = morph_bracket(&app.sys, c, *eye);
+                    assert!(
+                        m >= lo - 1e-12 && m <= hi + 1e-12,
+                        "frame {f}: coarsened {c:?} shown {m} outside [{lo}, {hi}]"
+                    );
+                    events += 1;
+                    if m < 1.0 {
+                        below_one += 1;
+                    }
+                }
+            }
+        }
+        prev = now;
+    }
+    assert!(events > 5, "ascent produced only {events} coarsen events");
+    assert!(below_one > 0, "no coarsened cell appeared below morph 1");
+    app.sys.shutdown();
+}
+
+fn replay_morphs(cfg: &TerrainConfig) -> Vec<(Vec<f64>, Vec<f32>)> {
+    let eyes = descent_eyes(3.0e6, 3000.0, 0.03);
+    let n = eyes.len();
+    let (mut rt, mut app) = start(cfg.clone(), eyes);
+    let mut out = Vec::new();
+    for _ in 0..n {
+        step(&mut rt, &mut app);
+        let shown = app
+            .sys
+            .drawn()
+            .iter()
+            .map(|&c| app.sys.drawn_morph(c).unwrap())
+            .collect();
+        out.push((shown, app.frame_morphs.clone()));
+    }
+    app.sys.shutdown();
+    out
+}
+
+#[test]
+fn morph_replay_is_deterministic() {
+    let cfg = test_cfg();
+    let a = replay_morphs(&cfg);
+    let b = replay_morphs(&cfg);
+    assert_eq!(a, b);
+    assert!(a.iter().any(|(s, _)| s.iter().any(|&m| m > 0.0 && m < 1.0)));
+}
+
+#[test]
+fn morph_config_is_validated() {
+    let bad = |f: fn(&mut TerrainConfig)| {
+        let mut cfg = test_cfg();
+        f(&mut cfg);
+        TerrainSystem::new(cfg.clone(), CubeSphere::new(cfg.cells_per_edge)).is_err()
+    };
+    assert!(bad(|c| c.morph_end_scale = 1.9));
+    assert!(bad(|c| c.morph_end_scale = 0.99));
+    assert!(bad(|c| c.morph_end_scale = f64::NAN));
+    assert!(bad(|c| c.morph_frames = 0));
+    assert!(!bad(|c| c.morph_end_scale = 1.0));
+    assert!(!bad(|c| {
+        c.morph_enabled = false;
+        c.morph_frames = 0;
+    }));
 }

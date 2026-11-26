@@ -13,8 +13,8 @@ use engine_sdk::{
     RenderItem, Resources, SceneState, SdkError, WorldPos,
 };
 use planetary_core::lod::{
-    DEFAULT_KAPPA, LodModel, LodParams, SelectStats, View, cell_bound, eye_in_cone,
-    frustum_visible, horizon_visible,
+    DEFAULT_KAPPA, LodModel, LodParams, SelectStats, View, cell_bound, cell_distance, eye_in_cone,
+    frustum_visible, horizon_visible, morph_factor, refine_distance,
 };
 use planetary_core::topology::select::{retain_culled, select_cells, unsplit_reasons};
 use planetary_core::{MAX_LEVEL, PlanetTerrain, TerrainParams, Topology};
@@ -66,6 +66,13 @@ pub struct TerrainConfig {
     /// Frames a split cell that was culled (outside the frustum or beyond the horizon) is kept
     /// split instead of dropping out of the selection (07.1-20); 0 disables the retention.
     pub retain_frames: u32,
+    /// Drive the per-piece geomorph factor (ADR-0014). Off: every item is drawn at morph 0.
+    pub morph_enabled: bool,
+    /// The morph ends at `morph_end_scale * refine_distance(level)`; valid `1.0 <= s < 1.9`.
+    pub morph_end_scale: f64,
+    /// Slew limit: a shown factor falls by at most `1 / morph_frames` per frame (>= 1 when
+    /// `morph_enabled`).
+    pub morph_frames: u32,
 }
 
 /// Hard maxima and target of the adaptive per-frame streaming budget.
@@ -220,6 +227,9 @@ impl Default for TerrainConfig {
             budget: BudgetLimits::default(),
             diagnostics: false,
             retain_frames: 8,
+            morph_enabled: true,
+            morph_end_scale: 1.25,
+            morph_frames: 8,
         }
     }
 }
@@ -268,6 +278,16 @@ pub struct TerrainReport {
     /// Cells the selection dropped as culled that the draw pass nevertheless drew visibly
     /// (selection and draw culling disagree; diagnostics).
     pub unsplit_culled_drawn_visible: u32,
+    /// Geomorph factor over the drawn cells of this frame (0 when nothing is drawn).
+    pub morph_min: f64,
+    pub morph_mean: f64,
+    /// Cells that appeared by refinement (a parent was drawn last frame) and were not shown at
+    /// morph 1 on their first frame. Expected 0.
+    pub morph_first_frame_defects: u32,
+    /// Largest morph a drawn cell showed in the frame before it was replaced by descendants.
+    pub handover_gap_max: f64,
+    /// Drawn cells replaced by descendants more than one level deeper this frame.
+    pub multi_level_handovers: u32,
 }
 
 /// Streams, uploads and draws the terrain of any [`Topology`].
@@ -313,6 +333,10 @@ pub struct TerrainSystem<T: Topology> {
     unsplit_culled: BTreeSet<T::Cell>,
     /// Consecutive frames each retained culled cell has been kept split.
     retained_age: BTreeMap<T::Cell, u32>,
+    /// Cells drawn (or culled in the partition) in the previous frame.
+    prev_drawn: BTreeSet<T::Cell>,
+    /// Shown morph factor per cell drawn in the last frame.
+    morph_shown: BTreeMap<T::Cell, f64>,
 }
 
 /// Maximum level difference across any shared edge of `cells` (cells may repeat).
@@ -359,6 +383,19 @@ impl<T: Topology> TerrainSystem<T> {
         }
         if cfg.workers < 1 {
             return Err(SdkError::App("workers must be >= 1".into()));
+        }
+        if cfg.morph_enabled {
+            if !(cfg.morph_end_scale.is_finite()
+                && cfg.morph_end_scale >= 1.0
+                && cfg.morph_end_scale < 1.9)
+            {
+                return Err(SdkError::App("morph_end_scale must be in 1.0..1.9".into()));
+            }
+            if cfg.morph_frames == 0 {
+                return Err(SdkError::App(
+                    "morph_frames must be >= 1 when morph is enabled".into(),
+                ));
+            }
         }
         let terrain = Arc::new(
             PlanetTerrain::new(cfg.world_seed, cfg.terrain, cfg.cells_per_edge)
@@ -447,6 +484,8 @@ impl<T: Topology> TerrainSystem<T> {
             churn: ChurnTracker::default(),
             unsplit_culled: BTreeSet::new(),
             retained_age: BTreeMap::new(),
+            prev_drawn: BTreeSet::new(),
+            morph_shown: BTreeMap::new(),
             cfg,
             terrain,
             topo,
@@ -839,10 +878,51 @@ impl<T: Topology> TerrainSystem<T> {
         let mut culled = 0u32;
         let mut culled_cells: BTreeSet<T::Cell> = BTreeSet::new();
         let occluder = self.model.radius + self.model.height.min;
+        let mut new_shown: BTreeMap<T::Cell, f64> = BTreeMap::new();
+        let mut refine_cells: Vec<T::Cell> = Vec::new();
+        let mut parent_buf: Vec<T::Cell> = Vec::new();
         for piece in &eff.pieces {
             let leaf = piece.cell;
             let Some(h) = self.held.get(&leaf) else {
                 continue;
+            };
+            let morph = if let Some(&m) = new_shown.get(&leaf) {
+                m
+            } else {
+                let level = self.topo.level(leaf);
+                let m_dist = match &self.last_view {
+                    Some(view) if self.cfg.morph_enabled && level >= 1 => {
+                        let fp = self.topo.footprint(leaf);
+                        let d = cell_distance(self.model.radius, view.eye, &fp, h.range);
+                        let d = if d > self.cfg.lod.min_distance {
+                            d
+                        } else {
+                            self.cfg.lod.min_distance
+                        };
+                        let tau = self.cfg.lod.tau_px;
+                        let d_start = refine_distance(&self.model, view.proj_scale, tau, level - 1);
+                        let d_end = self.cfg.morph_end_scale
+                            * refine_distance(&self.model, view.proj_scale, tau, level);
+                        morph_factor(d, d_start, d_end)
+                    }
+                    _ => 0.0,
+                };
+                let m = if !self.cfg.morph_enabled || level == 0 {
+                    0.0
+                } else if let Some(&prev) = self.morph_shown.get(&leaf) {
+                    m_dist.max(prev - 1.0 / f64::from(self.cfg.morph_frames))
+                } else {
+                    parent_buf.clear();
+                    self.topo.parents(leaf, &mut parent_buf);
+                    if parent_buf.iter().any(|q| self.prev_drawn.contains(q)) {
+                        refine_cells.push(leaf);
+                        1.0
+                    } else {
+                        m_dist
+                    }
+                };
+                new_shown.insert(leaf, m);
+                m
             };
             let record = |drawn: &mut Vec<T::Cell>, set: &mut BTreeSet<T::Cell>| {
                 if drawn.last() != Some(&leaf) {
@@ -887,11 +967,64 @@ impl<T: Topology> TerrainSystem<T> {
             let _ = self.manager.resolve(&h.key);
             let position =
                 WorldPos::from_xyz(scene.frames.root(), h.origin.x, h.origin.y, h.origin.z)?;
-            scene
-                .items
-                .push(RenderItem::new(mesh, position).with_material(self.material));
+            scene.items.push(
+                RenderItem::new(mesh, position)
+                    .with_material(self.material)
+                    .with_morph(morph as f32),
+            );
             record(&mut self.drawn, &mut self.drawn_set);
         }
+
+        // Morph bookkeeping: counters, then roll the per-frame state.
+        let defects = refine_cells
+            .iter()
+            .filter(|c| new_shown.get(c).is_none_or(|&m| m != 1.0))
+            .count();
+        self.report.morph_first_frame_defects = u32::try_from(defects).unwrap_or(u32::MAX);
+        if new_shown.is_empty() {
+            self.report.morph_min = 0.0;
+            self.report.morph_mean = 0.0;
+        } else {
+            let mut lo = 1.0f64;
+            let mut sum = 0.0f64;
+            for &m in new_shown.values() {
+                lo = lo.min(m);
+                sum += m;
+            }
+            self.report.morph_min = lo;
+            self.report.morph_mean = sum / new_shown.len() as f64;
+        }
+        let mut gap_max = 0.0f64;
+        let mut replaced_deep: BTreeSet<T::Cell> = BTreeSet::new();
+        let mut children: Vec<T::Cell> = Vec::new();
+        for c in self.prev_drawn.difference(&self.drawn_set) {
+            children.clear();
+            self.topo.children(*c, &mut children);
+            if children.iter().any(|k| self.drawn_set.contains(k)) {
+                gap_max = gap_max.max(self.morph_shown.get(c).copied().unwrap_or(0.0));
+            }
+        }
+        for d in self.drawn_set.difference(&self.prev_drawn) {
+            // Walk up to the first previously drawn ancestor that is gone now; two or more
+            // levels up is a multi-level handover (the single-parent target cannot be exact).
+            let mut cur = self.topo.primary_parent(*d);
+            let mut depth = 1u32;
+            while let Some(a) = cur {
+                if self.prev_drawn.contains(&a) && !self.drawn_set.contains(&a) {
+                    if depth >= 2 {
+                        replaced_deep.insert(a);
+                        gap_max = gap_max.max(self.morph_shown.get(&a).copied().unwrap_or(0.0));
+                    }
+                    break;
+                }
+                cur = self.topo.primary_parent(a);
+                depth += 1;
+            }
+        }
+        self.report.handover_gap_max = gap_max;
+        self.report.multi_level_handovers = u32::try_from(replaced_deep.len()).unwrap_or(u32::MAX);
+        self.prev_drawn.clone_from(&self.drawn_set);
+        self.morph_shown = new_shown;
 
         if self.cfg.diagnostics {
             let sel = &self.report.select;
@@ -963,6 +1096,12 @@ impl<T: Topology> TerrainSystem<T> {
     #[must_use]
     pub fn drawn_split(&self) -> &BTreeSet<T::Cell> {
         &self.drawn_split
+    }
+
+    /// Morph factor shown for `cell` in the last `gpu_frame`, `None` when it was not drawn.
+    #[must_use]
+    pub fn drawn_morph(&self, cell: T::Cell) -> Option<f64> {
+        self.morph_shown.get(&cell).copied()
     }
 
     /// Leaves wanted by the last `prepare`, ascending.

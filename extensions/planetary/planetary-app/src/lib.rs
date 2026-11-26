@@ -188,6 +188,9 @@ impl AnyTerrain {
     fn held(&self) -> usize {
         each!(self, t => t.held_mesh_count())
     }
+    fn drawn_morphs(&self) -> Vec<f64> {
+        each!(self, t => t.drawn().iter().map(|&c| t.drawn_morph(c).unwrap_or(0.0)).collect())
+    }
     fn set_frame_cost(&mut self, ms: f64) {
         each!(self, t => t.set_frame_cost(ms));
     }
@@ -326,6 +329,12 @@ impl PlanetaryApp {
     #[must_use]
     pub fn drawn_raw(&self) -> Vec<u64> {
         self.terrain.drawn_raw()
+    }
+
+    /// Shown geomorph factor of the drawn cells (same order as [`PlanetaryApp::drawn_raw`]).
+    #[must_use]
+    pub fn drawn_morphs(&self) -> Vec<f64> {
+        self.terrain.drawn_morphs()
     }
 
     /// Levels of the drawn cells (same order as [`PlanetaryApp::drawn_raw`]).
@@ -567,6 +576,11 @@ impl App for PlanetaryApp {
             overlap_pairs: r.overlap_pairs,
             flipflops: r.flipflops,
             flipflops_unexplained: r.flipflops_unexplained,
+            morph_min: r.morph_min,
+            morph_mean: r.morph_mean,
+            morph_first_frame_defects: r.morph_first_frame_defects,
+            handover_gap_max: r.handover_gap_max,
+            multi_level_handovers: r.multi_level_handovers,
             ..FrameSample::default()
         };
         self.telemetry.record(sample);
