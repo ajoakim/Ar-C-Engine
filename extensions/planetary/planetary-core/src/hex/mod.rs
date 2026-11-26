@@ -6,6 +6,7 @@ pub mod adjacency;
 pub mod cell_id;
 pub mod icosa;
 pub mod mapping;
+pub mod pieces;
 
 pub use cell_id::{CellId, CellIdError, HEX_MAX_LEVEL};
 pub use icosa::{DIAMONDS, Diamond, FACES};
