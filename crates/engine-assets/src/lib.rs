@@ -6,7 +6,12 @@
 mod error;
 mod handle;
 mod id;
+mod manager;
 mod registry;
+mod residency;
+
+pub use manager::{AssetClass, MemoryPool};
+pub use residency::ResidencyState;
 
 pub use error::AssetError;
 pub use handle::Handle;
