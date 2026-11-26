@@ -366,6 +366,7 @@ mod tests {
             normal: Mat3::from_cols(a, b, c),
             base_color: [0.1, 0.2, 0.3, 0.4],
             texture: None,
+            morph: 0.0,
         };
         let u = DrawUniform::from_draw(&d);
         assert_eq!(u.normal[0], [1.0, 2.0, 3.0, 0.0]);

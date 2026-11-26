@@ -6,7 +6,7 @@ use glam::{Mat3, Mat4, Quat};
 use crate::camera::Camera;
 use crate::error::RenderError;
 use crate::handles::MeshHandle;
-use crate::material::{DirectionalLight, Material, MaterialId, MaterialTable};
+use crate::material::{DirectionalLight, DistanceFog, Material, MaterialId, MaterialTable};
 
 /// One renderable item in f64 world space.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -21,6 +21,8 @@ pub struct RenderItem {
     pub scale: Vec3,
     /// Material (defaults to [`MaterialId::DEFAULT`]).
     pub material: MaterialId,
+    /// Blend factor toward the second position and uv of a morph layout, clamped to [0, 1].
+    pub morph: f32,
 }
 
 impl RenderItem {
@@ -32,6 +34,7 @@ impl RenderItem {
             rotation: Quat::IDENTITY,
             scale: Vec3::ONE,
             material: MaterialId::DEFAULT,
+            morph: 0.0,
         }
     }
 
@@ -39,6 +42,13 @@ impl RenderItem {
     #[must_use]
     pub fn with_material(mut self, material: MaterialId) -> Self {
         self.material = material;
+        self
+    }
+
+    /// Set the morph blend factor (clamped to [0, 1] at extraction).
+    #[must_use]
+    pub fn with_morph(mut self, morph: f32) -> Self {
+        self.morph = morph;
         self
     }
 }
@@ -54,6 +64,8 @@ pub struct DrawItem {
     pub normal: Mat3,
     /// Resolved material.
     pub material: Material,
+    /// Morph blend factor in [0, 1].
+    pub morph: f32,
 }
 
 /// Per-frame extracted scene (f32 only).
@@ -65,6 +77,8 @@ pub struct RenderScene {
     pub view_proj: Mat4,
     /// Directional light in world axes.
     pub light: DirectionalLight,
+    /// Distance fog; extraction leaves it off, the caller sets it.
+    pub fog: DistanceFog,
     /// Draws in input order.
     pub draws: Vec<DrawItem>,
 }
@@ -94,18 +108,23 @@ pub fn extract(
         if !normal.is_finite() {
             return Err(RenderError::NonFiniteTransform);
         }
+        if !item.morph.is_finite() {
+            return Err(RenderError::NonFiniteTransform);
+        }
         let material = *materials.get(item.material)?;
         draws.push(DrawItem {
             mesh: item.mesh,
             model,
             normal,
             material,
+            morph: item.morph.clamp(0.0, 1.0),
         });
     }
     Ok(RenderScene {
         frame_index,
         view_proj,
         light: *light,
+        fog: DistanceFog::default(),
         draws,
     })
 }
@@ -170,6 +189,40 @@ mod tests {
         let s = extract(&f, &cam, 2.0, &[], 9, &mt(), &lt()).unwrap();
         assert_eq!(s.view_proj, cam.projection(2.0).unwrap() * cam.view());
         assert_eq!(cam.view().w_axis.truncate(), Vec3::ZERO);
+    }
+
+    #[test]
+    fn extract_clamps_and_validates_morph() {
+        let f = FrameRegistry::new();
+        let cam = Camera::new(pos(&f, 0.0, 0.0, 0.0));
+        let p = pos(&f, 0.0, 0.0, -5.0);
+        let at = |m: f32| {
+            extract(
+                &f,
+                &cam,
+                1.0,
+                &[RenderItem::new(mesh(1), p).with_morph(m)],
+                0,
+                &mt(),
+                &lt(),
+            )
+        };
+        assert_eq!(at(0.25).unwrap().draws[0].morph, 0.25);
+        assert_eq!(at(7.0).unwrap().draws[0].morph, 1.0);
+        assert_eq!(at(-3.0).unwrap().draws[0].morph, 0.0);
+        assert!(matches!(at(f32::NAN), Err(RenderError::NonFiniteTransform)));
+        let d = extract(
+            &f,
+            &cam,
+            1.0,
+            &[RenderItem::new(mesh(1), p)],
+            0,
+            &mt(),
+            &lt(),
+        )
+        .unwrap();
+        assert_eq!(d.draws[0].morph, 0.0);
+        assert_eq!(d.fog, DistanceFog::default());
     }
 
     #[test]

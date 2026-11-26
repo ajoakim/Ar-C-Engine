@@ -243,6 +243,7 @@ impl CompiledGraph {
                         normal: d.normal,
                         base_color: d.material.base_color,
                         texture: d.material.base_color_texture,
+                        morph: d.morph,
                     })
                 })
                 .collect::<Result<Vec<_>, RenderError>>()?;
@@ -258,6 +259,7 @@ impl CompiledGraph {
         Ok(FramePacket {
             frame_index: scene.frame_index,
             light: scene.light,
+            fog: scene.fog,
             passes,
         })
     }
@@ -272,7 +274,7 @@ mod tests {
     };
     use crate::camera::Camera;
     use crate::handles::{BufferId, MeshHandle};
-    use crate::material::{DirectionalLight, Material, MaterialTable};
+    use crate::material::{DirectionalLight, DistanceFog, Material, MaterialTable};
     use crate::null::NullBackend;
     use crate::scene::{DrawItem, RenderItem, extract};
     use engine_math::{FrameRegistry, WorldPos};
@@ -371,18 +373,24 @@ mod tests {
             frame_index: 7,
             view_proj: v,
             light: DirectionalLight::default(),
+            fog: DistanceFog {
+                color: [0.25, 0.5, 0.75],
+                density: 0.5,
+            },
             draws: vec![
                 DrawItem {
                     mesh: handle(),
                     model: m1,
                     normal: Mat3::IDENTITY,
                     material: Material::default(),
+                    morph: 0.0,
                 },
                 DrawItem {
                     mesh: handle(),
                     model: m2,
                     normal: Mat3::IDENTITY,
                     material: Material::default(),
+                    morph: 0.5,
                 },
             ],
         };
@@ -404,6 +412,9 @@ mod tests {
         assert_eq!(p.draws[0].mvp, v * m1);
         assert_eq!(p.draws[1].mvp, v * m2);
         assert_eq!(p.draws[0].pipeline, pipe);
+        assert_eq!(p.draws[0].morph, 0.0);
+        assert_eq!(p.draws[1].morph, 0.5);
+        assert_eq!(pk.fog, scene.fog);
     }
 
     #[test]
@@ -508,18 +519,21 @@ mod tests {
             frame_index: 1,
             view_proj: Mat4::from_scale(glam::Vec3::splat(2.0)),
             light,
+            fog: DistanceFog::default(),
             draws: vec![
                 DrawItem {
                     mesh: handle(),
                     model: Mat4::IDENTITY,
                     normal: Mat3::IDENTITY,
                     material: Material::default(),
+                    morph: 0.0,
                 },
                 DrawItem {
                     mesh: MeshHandle::new(VertexLayout::PosNormalUv, BufferId::from_raw(2), 4),
                     model,
                     normal: Mat3::from_diagonal(glam::Vec3::splat(0.5)),
                     material: lit_mat,
+                    morph: 0.0,
                 },
             ],
         };

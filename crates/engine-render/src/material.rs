@@ -154,6 +154,36 @@ impl DirectionalLight {
     }
 }
 
+/// Distance fog toward a colour; density 0 disables.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct DistanceFog {
+    /// Linear RGB fog colour.
+    pub color: [f32; 3],
+    /// Density (>= 0); 0 disables the fog.
+    pub density: f32,
+}
+
+impl DistanceFog {
+    /// Check all values are finite and the density is not negative.
+    pub fn validate(&self) -> Result<(), RenderError> {
+        if !self.color.iter().all(|c| c.is_finite()) || !self.density.is_finite() {
+            return Err(RenderError::InvalidLight("non-finite fog value"));
+        }
+        if self.density < 0.0 {
+            return Err(RenderError::InvalidLight("negative fog density"));
+        }
+        Ok(())
+    }
+}
+
+/// Fog blend factor in [0, 1) for a squared distance: `d2*k / (1 + d2*k)`, `k = density^2`.
+///
+/// Uses only `+ - * /`, so it is exactly reproducible. 0 at distance 0 and for density 0.
+pub fn fog_factor(distance2: f32, density: f32) -> f32 {
+    let x = distance2 * (density * density);
+    x / (1.0 + x)
+}
+
 /// Sampled texture description; data is RGBA8 sRGB, `width*height*4` bytes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TextureDesc {
@@ -168,6 +198,59 @@ pub struct TextureDesc {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fog_factor_properties() {
+        for k in [0.0, 0.5, 1.0, 10.0] {
+            assert_eq!(fog_factor(0.0, k), 0.0);
+        }
+        for d2 in [0.0, 1.0, 1e6, 1e30] {
+            assert_eq!(fog_factor(d2, 0.0), 0.0);
+        }
+        let mut prev = 0.0;
+        for i in 0..50 {
+            let f = fog_factor(i as f32 * 3.0, 0.2);
+            assert!((prev..=1.0).contains(&f));
+            prev = f;
+        }
+        let mut prev = 0.0;
+        for i in 0..50 {
+            let f = fog_factor(7.0, i as f32 * 0.1);
+            assert!((prev..=1.0).contains(&f));
+            prev = f;
+        }
+        assert!(fog_factor(1e30, 1.0) > 0.999);
+    }
+
+    #[test]
+    fn fog_validate_rejects_bad_values() {
+        assert!(DistanceFog::default().validate().is_ok());
+        let ok = DistanceFog {
+            color: [0.5; 3],
+            density: 0.1,
+        };
+        assert!(ok.validate().is_ok());
+        for bad in [
+            DistanceFog {
+                density: -1.0,
+                ..ok
+            },
+            DistanceFog {
+                density: f32::NAN,
+                ..ok
+            },
+            DistanceFog {
+                density: f32::INFINITY,
+                ..ok
+            },
+            DistanceFog {
+                color: [f32::NAN, 0.0, 0.0],
+                ..ok
+            },
+        ] {
+            assert!(matches!(bad.validate(), Err(RenderError::InvalidLight(_))));
+        }
+    }
 
     #[test]
     fn material_table_default_is_white() {

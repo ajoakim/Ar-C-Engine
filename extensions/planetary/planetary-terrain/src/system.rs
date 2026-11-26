@@ -10,7 +10,7 @@ use engine_sdk::streaming::{
 };
 use engine_sdk::{
     CancelToken, DVec3, IndexBufferHandle, JobSystem, MAX_DRAWS_PER_FRAME, Material, MaterialId,
-    Quat, RenderItem, Resources, SceneState, SdkError, Vec3, WorldPos,
+    RenderItem, Resources, SceneState, SdkError, WorldPos,
 };
 use planetary_core::lod::{
     DEFAULT_KAPPA, LodModel, LodParams, SelectStats, View, cell_bound, eye_in_cone,
@@ -887,13 +887,9 @@ impl<T: Topology> TerrainSystem<T> {
             let _ = self.manager.resolve(&h.key);
             let position =
                 WorldPos::from_xyz(scene.frames.root(), h.origin.x, h.origin.y, h.origin.z)?;
-            scene.items.push(RenderItem {
-                mesh,
-                position,
-                rotation: Quat::IDENTITY,
-                scale: Vec3::ONE,
-                material: self.material,
-            });
+            scene
+                .items
+                .push(RenderItem::new(mesh, position).with_material(self.material));
             record(&mut self.drawn, &mut self.drawn_set);
         }
 

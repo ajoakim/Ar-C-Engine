@@ -1,9 +1,9 @@
 //! GPU readback tests for the lit/textured/indexed path. Ignored by default (CI has no adapter).
 
 use engine_render::{
-    BufferDesc, BufferId, BufferUsage, DirectionalLight, DrawCommand, FramePacket, Mat3, Mat4,
-    MeshHandle, PassPacket, PipelineDesc, PipelineId, RenderBackend, ShaderId, TextureDesc,
-    TextureId, VertexLayout, VertexPosColor, VertexPosNormalUv, encode_indices,
+    BufferDesc, BufferId, BufferUsage, DirectionalLight, DistanceFog, DrawCommand, FramePacket,
+    Mat3, Mat4, MeshHandle, PassPacket, PipelineDesc, PipelineId, RenderBackend, ShaderId,
+    TextureDesc, TextureId, VertexLayout, VertexPosColor, VertexPosNormalUv, encode_indices,
     encode_lit_vertices, encode_vertices,
 };
 use engine_render_wgpu::WgpuBackend;
@@ -95,6 +95,7 @@ fn draw(
         normal: Mat3::IDENTITY,
         base_color,
         texture,
+        morph: 0.0,
     }
 }
 
@@ -102,6 +103,7 @@ fn packet(draws: Vec<DrawCommand>) -> FramePacket {
     FramePacket {
         frame_index: 0,
         light: light(),
+        fog: DistanceFog::default(),
         passes: vec![PassPacket {
             name: "main".to_string(),
             color_target: TextureId::BACKBUFFER,

@@ -37,6 +37,7 @@ fn draw(pipeline: PipelineId, buf: BufferId, count: u32) -> DrawCommand {
         normal: Mat3::IDENTITY,
         base_color: [1.0; 4],
         texture: None,
+        morph: 0.0,
     }
 }
 
@@ -44,6 +45,7 @@ fn packet(index: u64, draws: Vec<DrawCommand>) -> FramePacket {
     FramePacket {
         frame_index: index,
         light: DirectionalLight::default(),
+        fog: DistanceFog::default(),
         passes: vec![PassPacket {
             name: "main".into(),
             color_target: TextureId::BACKBUFFER,
@@ -315,6 +317,7 @@ fn null_submit_rejects_layout_mismatch() {
         normal: Mat3::IDENTITY,
         base_color: [1.0; 4],
         texture: None,
+        morph: 0.0,
     };
     assert!(matches!(
         b.submit(&packet(0, vec![d])),
@@ -335,6 +338,7 @@ fn null_submit_rejects_bad_index_buffers() {
         normal: Mat3::IDENTITY,
         base_color: [1.0; 4],
         texture: None,
+        morph: 0.0,
     };
     // Index buffer created with Vertex usage.
     let wrong = b
@@ -375,6 +379,7 @@ fn null_submit_accepts_indexed_lit_mesh() {
         normal: Mat3::IDENTITY,
         base_color: [1.0; 4],
         texture: None,
+        morph: 0.0,
     };
     assert_eq!(b.submit(&packet(0, vec![d])), Ok(()));
 }
@@ -396,6 +401,7 @@ fn range_draw(pipe: PipelineId, mesh: MeshHandle) -> DrawCommand {
         normal: Mat3::IDENTITY,
         base_color: [1.0; 4],
         texture: None,
+        morph: 0.0,
     }
 }
 
@@ -457,4 +463,62 @@ fn max_index_beyond_vertex_count_rejected() {
         b.submit(&packet(0, vec![range_draw(pipe, forged)])),
         Err(RenderError::InvalidIndices("index exceeds vertex count"))
     );
+}
+
+fn morph_pipeline(b: &mut NullBackend) -> PipelineId {
+    b.create_pipeline(&PipelineDesc {
+        label: "morph",
+        shader: ShaderId::LitTextured,
+        vertex_layout: VertexLayout::PosNormalUvMorph,
+    })
+    .unwrap()
+}
+
+fn morph_buffer(b: &mut NullBackend, bytes: &[u8]) -> BufferId {
+    b.create_buffer(
+        &BufferDesc {
+            label: "mvb",
+            usage: BufferUsage::Vertex,
+        },
+        bytes,
+    )
+    .unwrap()
+}
+
+#[test]
+fn null_accepts_morph_layout_mesh() {
+    let mut b = NullBackend::new();
+    let bytes = encode_lit_morph_vertices(&[VertexPosNormalUvMorph::default(); 3]);
+    assert_eq!(bytes.len(), 3 * 52);
+    let vb = morph_buffer(&mut b, &bytes);
+    let pipe = morph_pipeline(&mut b);
+    let mut d = range_draw(pipe, MeshHandle::new(VertexLayout::PosNormalUvMorph, vb, 3));
+    d.morph = 0.5;
+    assert_eq!(b.submit(&packet(0, vec![d])), Ok(()));
+}
+
+#[test]
+fn null_rejects_morph_mesh_with_short_buffer() {
+    let mut b = NullBackend::new();
+    // 3 vertices of the 32-byte layout (96 bytes) are too small for 3 morph vertices (156).
+    let vb = morph_buffer(&mut b, &lit_vertices(3));
+    let pipe = morph_pipeline(&mut b);
+    let d = range_draw(pipe, MeshHandle::new(VertexLayout::PosNormalUvMorph, vb, 3));
+    assert!(matches!(
+        b.submit(&packet(0, vec![d])),
+        Err(RenderError::MeshOutOfBounds { .. })
+    ));
+}
+
+#[test]
+fn null_rejects_morph_pipeline_layout_mismatch() {
+    let mut b = NullBackend::new();
+    let bytes = encode_lit_morph_vertices(&[VertexPosNormalUvMorph::default(); 3]);
+    let vb = morph_buffer(&mut b, &bytes);
+    let pipe = lit_pipeline(&mut b);
+    let d = range_draw(pipe, MeshHandle::new(VertexLayout::PosNormalUvMorph, vb, 3));
+    assert!(matches!(
+        b.submit(&packet(0, vec![d])),
+        Err(RenderError::LayoutMismatch { .. })
+    ));
 }

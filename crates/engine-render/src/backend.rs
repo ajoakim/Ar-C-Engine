@@ -4,7 +4,7 @@ use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 
 use crate::error::RenderError;
 use crate::handles::{BufferId, MeshHandle, PipelineId, TextureId};
-use crate::material::{DirectionalLight, TextureDesc};
+use crate::material::{DirectionalLight, DistanceFog, TextureDesc};
 
 /// Anything that exposes raw-window-handle 0.6 window and display handles.
 pub trait RenderTarget: HasWindowHandle + HasDisplayHandle + Send + Sync + 'static {}
@@ -47,6 +47,9 @@ pub enum VertexLayout {
     PosColor,
     /// Position (3xf32), normal (3xf32), uv (2xf32).
     PosNormalUv,
+    /// Position, normal, uv (as `PosNormalUv`) followed by a second position (3xf32) and a
+    /// second uv (2xf32) that a per-draw blend factor interpolates toward.
+    PosNormalUvMorph,
 }
 
 impl VertexLayout {
@@ -55,6 +58,7 @@ impl VertexLayout {
         match self {
             VertexLayout::PosColor => 24,
             VertexLayout::PosNormalUv => 32,
+            VertexLayout::PosNormalUvMorph => 52,
         }
     }
 
@@ -63,6 +67,7 @@ impl VertexLayout {
         match self {
             VertexLayout::PosColor => &[0, 12],
             VertexLayout::PosNormalUv => &[0, 12, 24],
+            VertexLayout::PosNormalUvMorph => &[0, 12, 24, 32, 44],
         }
     }
 }
@@ -124,6 +129,41 @@ pub fn encode_lit_vertices(vertices: &[VertexPosNormalUv]) -> Vec<u8> {
     out
 }
 
+/// Vertex with a second position and uv to blend toward.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct VertexPosNormalUvMorph {
+    /// Position at blend 0.
+    pub position: [f32; 3],
+    /// Unit normal (used at every blend value).
+    pub normal: [f32; 3],
+    /// Texture coordinates at blend 0.
+    pub uv: [f32; 2],
+    /// Position at blend 1.
+    pub morph_position: [f32; 3],
+    /// Texture coordinates at blend 1.
+    pub morph_uv: [f32; 2],
+}
+
+/// Encode morph vertices as 52 bytes each (position, normal, uv, second position, second uv;
+/// little-endian f32).
+pub fn encode_lit_morph_vertices(vertices: &[VertexPosNormalUvMorph]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(vertices.len() * 52);
+    for v in vertices {
+        for f in v
+            .position
+            .iter()
+            .chain(v.normal.iter())
+            .chain(v.uv.iter())
+            .chain(v.morph_position.iter())
+            .chain(v.morph_uv.iter())
+        {
+            out.extend_from_slice(&f.to_le_bytes());
+        }
+    }
+    out
+}
+
 /// Encode u32 indices as 4 little-endian bytes each.
 pub fn encode_indices(indices: &[u32]) -> Vec<u8> {
     let mut out = Vec::with_capacity(indices.len() * 4);
@@ -176,6 +216,8 @@ pub struct DrawCommand {
     pub base_color: [f32; 4],
     /// Optional sampled base color texture (None = backend default white).
     pub texture: Option<TextureId>,
+    /// Blend factor in [0, 1] toward the second position and uv of a morph layout (0 = none).
+    pub morph: f32,
 }
 
 /// One render pass.
@@ -202,6 +244,8 @@ pub struct FramePacket {
     pub frame_index: u64,
     /// Directional light in world axes.
     pub light: DirectionalLight,
+    /// Distance fog (density 0 disables).
+    pub fog: DistanceFog,
     /// Passes in order.
     pub passes: Vec<PassPacket>,
 }
@@ -260,6 +304,37 @@ mod tests {
     fn vertex_layout_pos_normal_uv_stride_32() {
         assert_eq!(VertexLayout::PosNormalUv.stride(), 32);
         assert_eq!(VertexLayout::PosNormalUv.attribute_offsets(), &[0, 12, 24]);
+    }
+
+    #[test]
+    fn vertex_layout_morph_stride_52() {
+        assert_eq!(VertexLayout::PosNormalUvMorph.stride(), 52);
+        assert_eq!(
+            VertexLayout::PosNormalUvMorph.attribute_offsets(),
+            &[0, 12, 24, 32, 44]
+        );
+    }
+
+    #[test]
+    fn encode_lit_morph_vertices_52_bytes_in_order() {
+        let v = [
+            VertexPosNormalUvMorph {
+                position: [1.0, 2.0, 3.0],
+                normal: [0.0, 1.0, 0.0],
+                uv: [0.25, 0.75],
+                morph_position: [4.0, 5.0, 6.0],
+                morph_uv: [0.5, 0.125],
+            },
+            VertexPosNormalUvMorph::default(),
+        ];
+        let b = encode_lit_morph_vertices(&v);
+        assert_eq!(b.len(), 104);
+        assert_eq!(&b[0..4], &1.0f32.to_le_bytes());
+        assert_eq!(&b[24..28], &0.25f32.to_le_bytes());
+        assert_eq!(&b[32..36], &4.0f32.to_le_bytes());
+        assert_eq!(&b[40..44], &6.0f32.to_le_bytes());
+        assert_eq!(&b[44..48], &0.5f32.to_le_bytes());
+        assert_eq!(&b[48..52], &0.125f32.to_le_bytes());
     }
 
     #[test]

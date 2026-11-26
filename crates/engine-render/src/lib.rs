@@ -16,8 +16,8 @@ mod scene;
 pub use backend::{
     BufferDesc, BufferUsage, DrawCommand, FramePacket, MAX_BUFFER_BYTES, MAX_DRAWS_PER_FRAME,
     PassPacket, PipelineDesc, REVERSE_Z_CLEAR_DEPTH, RenderBackend, RenderTarget, ShaderId,
-    VertexLayout, VertexPosColor, VertexPosNormalUv, encode_indices, encode_lit_vertices,
-    encode_vertices, validate_indices,
+    VertexLayout, VertexPosColor, VertexPosNormalUv, VertexPosNormalUvMorph, encode_indices,
+    encode_lit_morph_vertices, encode_lit_vertices, encode_vertices, validate_indices,
 };
 pub use camera::Camera;
 pub use error::RenderError;
@@ -27,8 +27,8 @@ pub use graph::{
 };
 pub use handles::{BufferId, IndexBufferHandle, MeshHandle, MeshIndices, PipelineId, TextureId};
 pub use material::{
-    DirectionalLight, MAX_MATERIALS, MAX_TEXTURE_DIMENSION, Material, MaterialId, MaterialTable,
-    TextureDesc,
+    DirectionalLight, DistanceFog, MAX_MATERIALS, MAX_TEXTURE_DIMENSION, Material, MaterialId,
+    MaterialTable, TextureDesc, fog_factor,
 };
 pub use null::NullBackend;
 pub use resources::{BufferInfo, ResourceTable, TextureInfo, validate_texture_data};
