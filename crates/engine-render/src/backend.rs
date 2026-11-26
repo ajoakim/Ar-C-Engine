@@ -4,6 +4,7 @@ use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 
 use crate::error::RenderError;
 use crate::handles::{BufferId, MeshHandle, PipelineId, TextureId};
+use crate::material::TextureDesc;
 
 /// Anything that exposes raw-window-handle 0.6 window and display handles.
 pub trait RenderTarget: HasWindowHandle + HasDisplayHandle + Send + Sync + 'static {}
@@ -15,6 +16,8 @@ impl<T: HasWindowHandle + HasDisplayHandle + Send + Sync + 'static> RenderTarget
 pub enum BufferUsage {
     /// Vertex data.
     Vertex,
+    /// Index data (u32).
+    Index,
 }
 
 /// Buffer description.
@@ -32,6 +35,8 @@ pub struct BufferDesc {
 pub enum ShaderId {
     /// Unlit vertex-color shader.
     UnlitVertexColor,
+    /// Lit, textured shader (directional light, base color texture).
+    LitTextured,
 }
 
 /// Vertex layouts.
@@ -40,6 +45,8 @@ pub enum ShaderId {
 pub enum VertexLayout {
     /// Position (3xf32) followed by color (3xf32).
     PosColor,
+    /// Position (3xf32), normal (3xf32), uv (2xf32).
+    PosNormalUv,
 }
 
 impl VertexLayout {
@@ -47,6 +54,7 @@ impl VertexLayout {
     pub fn stride(self) -> u64 {
         match self {
             VertexLayout::PosColor => 24,
+            VertexLayout::PosNormalUv => 32,
         }
     }
 
@@ -54,6 +62,7 @@ impl VertexLayout {
     pub fn attribute_offsets(self) -> &'static [u64] {
         match self {
             VertexLayout::PosColor => &[0, 12],
+            VertexLayout::PosNormalUv => &[0, 12, 24],
         }
     }
 }
@@ -90,6 +99,57 @@ pub fn encode_vertices(vertices: &[VertexPosColor]) -> Vec<u8> {
         }
     }
     out
+}
+
+/// Vertex with position, normal and texture coordinates.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct VertexPosNormalUv {
+    /// Position.
+    pub position: [f32; 3],
+    /// Unit normal.
+    pub normal: [f32; 3],
+    /// Texture coordinates.
+    pub uv: [f32; 2],
+}
+
+/// Encode lit vertices as 32 bytes each (position, normal, uv; little-endian f32).
+pub fn encode_lit_vertices(vertices: &[VertexPosNormalUv]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(vertices.len() * 32);
+    for v in vertices {
+        for f in v.position.iter().chain(v.normal.iter()).chain(v.uv.iter()) {
+            out.extend_from_slice(&f.to_le_bytes());
+        }
+    }
+    out
+}
+
+/// Encode u32 indices as 4 little-endian bytes each.
+pub fn encode_indices(indices: &[u32]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(indices.len() * 4);
+    for i in indices {
+        out.extend_from_slice(&i.to_le_bytes());
+    }
+    out
+}
+
+/// Validate an index list against a vertex count.
+pub fn validate_indices(indices: &[u32], vertex_count: u32) -> Result<(), RenderError> {
+    if indices.is_empty() {
+        return Err(RenderError::InvalidIndices("index list is empty"));
+    }
+    if !indices.len().is_multiple_of(3) {
+        return Err(RenderError::InvalidIndices(
+            "index count is not a multiple of 3",
+        ));
+    }
+    if u32::try_from(indices.len()).is_err() {
+        return Err(RenderError::InvalidIndices("too many indices"));
+    }
+    if indices.iter().any(|&i| i >= vertex_count) {
+        return Err(RenderError::InvalidIndices("index out of range"));
+    }
+    Ok(())
 }
 
 /// Depth clear value under reverse-Z (ADR-0001).
@@ -142,6 +202,14 @@ pub trait RenderBackend {
     fn create_buffer(&mut self, desc: &BufferDesc, data: &[u8]) -> Result<BufferId, RenderError>;
     /// Destroy a buffer.
     fn destroy_buffer(&mut self, id: BufferId) -> Result<(), RenderError>;
+    /// Create a sampled RGBA8 (sRGB) texture; `rgba8.len()` must equal width*height*4.
+    fn create_texture(
+        &mut self,
+        desc: &TextureDesc,
+        rgba8: &[u8],
+    ) -> Result<TextureId, RenderError>;
+    /// Destroy a sampled texture (surface targets cannot be destroyed).
+    fn destroy_texture(&mut self, id: TextureId) -> Result<(), RenderError>;
     /// Create a pipeline.
     fn create_pipeline(&mut self, desc: &PipelineDesc) -> Result<PipelineId, RenderError>;
     /// Resize the surface (0 allowed for minimized windows).
@@ -176,5 +244,48 @@ mod tests {
     fn vertex_layout_pos_color_stride_24() {
         assert_eq!(VertexLayout::PosColor.stride(), 24);
         assert_eq!(VertexLayout::PosColor.attribute_offsets(), &[0, 12]);
+    }
+
+    #[test]
+    fn vertex_layout_pos_normal_uv_stride_32() {
+        assert_eq!(VertexLayout::PosNormalUv.stride(), 32);
+        assert_eq!(VertexLayout::PosNormalUv.attribute_offsets(), &[0, 12, 24]);
+    }
+
+    #[test]
+    fn encode_lit_vertices_32_bytes_each_and_encode_indices_le() {
+        let v = [
+            VertexPosNormalUv {
+                position: [1.0, 2.0, 3.0],
+                normal: [0.0, 1.0, 0.0],
+                uv: [0.25, 0.75],
+            },
+            VertexPosNormalUv::default(),
+        ];
+        let bytes = encode_lit_vertices(&v);
+        assert_eq!(bytes.len(), 64);
+        assert_eq!(&bytes[24..28], &0.25f32.to_le_bytes());
+        assert_eq!(&bytes[28..32], &0.75f32.to_le_bytes());
+        let ib = encode_indices(&[1, 2, 3]);
+        assert_eq!(ib.len(), 12);
+        assert_eq!(&ib[0..4], &1u32.to_le_bytes());
+        assert_eq!(&ib[8..12], &3u32.to_le_bytes());
+    }
+
+    #[test]
+    fn validate_indices_cases() {
+        assert!(matches!(
+            validate_indices(&[], 3),
+            Err(RenderError::InvalidIndices(_))
+        ));
+        assert!(matches!(
+            validate_indices(&[0, 1], 3),
+            Err(RenderError::InvalidIndices(_))
+        ));
+        assert!(matches!(
+            validate_indices(&[0, 1, 3], 3),
+            Err(RenderError::InvalidIndices(_))
+        ));
+        assert!(validate_indices(&[0, 1, 2], 3).is_ok());
     }
 }

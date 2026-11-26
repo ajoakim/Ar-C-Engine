@@ -31,10 +31,7 @@ fn pipeline(b: &mut NullBackend) -> PipelineId {
 fn draw(pipeline: PipelineId, buf: BufferId, count: u32) -> DrawCommand {
     DrawCommand {
         pipeline,
-        mesh: MeshHandle {
-            vertex_buffer: buf,
-            vertex_count: count,
-        },
+        mesh: MeshHandle::new(VertexLayout::PosColor, buf, count),
         mvp: Mat4::IDENTITY,
     }
 }
@@ -204,4 +201,163 @@ fn null_backend_resize_updates_size() {
     assert_eq!(b.size(), (0, 0));
     b.resize(800, 600);
     assert_eq!(b.size(), (800, 600));
+}
+
+// ---- textures, index buffers, layouts (05-03) ----
+
+fn lit_vertices(n: usize) -> Vec<u8> {
+    encode_lit_vertices(&vec![VertexPosNormalUv::default(); n])
+}
+
+fn index_buffer(b: &mut NullBackend, indices: &[u32]) -> BufferId {
+    b.create_buffer(
+        &BufferDesc {
+            label: "ib",
+            usage: BufferUsage::Index,
+        },
+        &encode_indices(indices),
+    )
+    .unwrap()
+}
+
+fn lit_pipeline(b: &mut NullBackend) -> PipelineId {
+    b.create_pipeline(&PipelineDesc {
+        label: "lit",
+        shader: ShaderId::LitTextured,
+        vertex_layout: VertexLayout::PosNormalUv,
+    })
+    .unwrap()
+}
+
+fn lit_buffer(b: &mut NullBackend, n: usize) -> BufferId {
+    b.create_buffer(
+        &BufferDesc {
+            label: "lvb",
+            usage: BufferUsage::Vertex,
+        },
+        &lit_vertices(n),
+    )
+    .unwrap()
+}
+
+fn tex_desc(w: u32, h: u32) -> TextureDesc {
+    TextureDesc {
+        label: "t",
+        width: w,
+        height: h,
+    }
+}
+
+#[test]
+fn null_texture_ids_start_at_3_and_are_never_reused() {
+    let mut b = NullBackend::new();
+    let a = b.create_texture(&tex_desc(1, 1), &[0; 4]).unwrap();
+    let c = b.create_texture(&tex_desc(1, 1), &[0; 4]).unwrap();
+    assert_eq!((a.raw(), c.raw()), (3, 4));
+    assert_eq!(b.texture_count(), 2);
+    b.destroy_texture(a).unwrap();
+    assert_eq!(b.texture_count(), 1);
+    let d = b.create_texture(&tex_desc(1, 1), &[0; 4]).unwrap();
+    assert_eq!(d.raw(), 5);
+}
+
+#[test]
+fn null_texture_rejects_bad_input() {
+    let mut b = NullBackend::new();
+    assert!(matches!(
+        b.create_texture(&tex_desc(0, 1), &[]),
+        Err(RenderError::InvalidTexture(_))
+    ));
+    assert!(matches!(
+        b.create_texture(&tex_desc(8193, 1), &[0; 4]),
+        Err(RenderError::InvalidTexture(_))
+    ));
+    assert!(matches!(
+        b.create_texture(&tex_desc(2, 2), &[0; 15]),
+        Err(RenderError::InvalidTexture(_))
+    ));
+    assert_eq!(b.texture_count(), 0);
+}
+
+#[test]
+fn null_destroy_texture_twice_errors() {
+    let mut b = NullBackend::new();
+    let t = b.create_texture(&tex_desc(1, 1), &[0; 4]).unwrap();
+    assert_eq!(b.destroy_texture(t), Ok(()));
+    assert!(matches!(
+        b.destroy_texture(t),
+        Err(RenderError::InvalidHandle {
+            kind: "texture",
+            ..
+        })
+    ));
+    assert!(matches!(
+        b.destroy_texture(TextureId::BACKBUFFER),
+        Err(RenderError::InvalidHandle { .. })
+    ));
+}
+
+#[test]
+fn null_submit_rejects_layout_mismatch() {
+    let mut b = NullBackend::new();
+    let vb = lit_buffer(&mut b, 3);
+    let pipe = pipeline(&mut b);
+    let d = DrawCommand {
+        pipeline: pipe,
+        mesh: MeshHandle::new(VertexLayout::PosNormalUv, vb, 3),
+        mvp: Mat4::IDENTITY,
+    };
+    assert!(matches!(
+        b.submit(&packet(0, vec![d])),
+        Err(RenderError::LayoutMismatch { .. })
+    ));
+}
+
+#[test]
+fn null_submit_rejects_bad_index_buffers() {
+    let mut b = NullBackend::new();
+    let vb = lit_buffer(&mut b, 4);
+    let pipe = lit_pipeline(&mut b);
+    let mk = |ib: BufferId, count: u32| DrawCommand {
+        pipeline: pipe,
+        mesh: MeshHandle::new(VertexLayout::PosNormalUv, vb, 4).with_indices(ib, count),
+        mvp: Mat4::IDENTITY,
+    };
+    // Index buffer created with Vertex usage.
+    let wrong = b
+        .create_buffer(
+            &BufferDesc {
+                label: "x",
+                usage: BufferUsage::Vertex,
+            },
+            &encode_indices(&[0, 1, 2]),
+        )
+        .unwrap();
+    assert!(matches!(
+        b.submit(&packet(0, vec![mk(wrong, 3)])),
+        Err(RenderError::WrongBufferUsage { .. })
+    ));
+    let ib = index_buffer(&mut b, &[0, 1, 2]);
+    assert!(matches!(
+        b.submit(&packet(0, vec![mk(ib, 4)])),
+        Err(RenderError::InvalidIndices(_))
+    ));
+    assert!(matches!(
+        b.submit(&packet(0, vec![mk(ib, 6)])),
+        Err(RenderError::MeshOutOfBounds { .. })
+    ));
+}
+
+#[test]
+fn null_submit_accepts_indexed_lit_mesh() {
+    let mut b = NullBackend::new();
+    let vb = lit_buffer(&mut b, 4);
+    let ib = index_buffer(&mut b, &[0, 1, 2, 2, 1, 3]);
+    let pipe = lit_pipeline(&mut b);
+    let d = DrawCommand {
+        pipeline: pipe,
+        mesh: MeshHandle::new(VertexLayout::PosNormalUv, vb, 4).with_indices(ib, 6),
+        mvp: Mat4::IDENTITY,
+    };
+    assert_eq!(b.submit(&packet(0, vec![d])), Ok(()));
 }

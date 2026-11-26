@@ -25,10 +25,7 @@ fn dummy_mesh(be: &mut NullBackend) -> Result<MeshHandle, engine_render::RenderE
         },
         &data,
     )?;
-    Ok(MeshHandle {
-        vertex_buffer: buf,
-        vertex_count: 3,
-    })
+    Ok(MeshHandle::new(VertexLayout::PosColor, buf, 3))
 }
 
 #[test]
@@ -53,10 +50,7 @@ fn precision_camera_relative_within_sub_mm() -> TestResult {
             for dy in [-3.7, 0.0, 2.25] {
                 let (dx, dz) = (f64::from(ix) * 12.5, f64::from(iz) * 12.5);
                 items.push(RenderItem::new(
-                    MeshHandle {
-                        vertex_buffer: dummy_buffer()?,
-                        vertex_count: 3,
-                    },
+                    MeshHandle::new(VertexLayout::PosColor, dummy_buffer()?, 3),
                     pos(&f, dx, R + dy, dz)?,
                 ));
                 exact.push([dx, dy, dz]);
@@ -85,10 +79,7 @@ fn dummy_buffer() -> Result<engine_render::BufferId, engine_render::RenderError>
 fn precision_no_frame_to_frame_jitter() -> TestResult {
     let f = FrameRegistry::new();
     let item = RenderItem::new(
-        MeshHandle {
-            vertex_buffer: dummy_buffer()?,
-            vertex_count: 3,
-        },
+        MeshHandle::new(VertexLayout::PosColor, dummy_buffer()?, 3),
         pos(&f, 0.0, R, -5.0)?,
     );
     let mut prev: Option<f64> = None;
@@ -116,10 +107,7 @@ fn ndc_for(
     f: &FrameRegistry,
 ) -> Result<Vec3, Box<dyn std::error::Error>> {
     let item = RenderItem::new(
-        MeshHandle {
-            vertex_buffer: dummy_buffer()?,
-            vertex_count: 3,
-        },
+        MeshHandle::new(VertexLayout::PosColor, dummy_buffer()?, 3),
         item_pos,
     );
     let scene = extract(f, &Camera::new(cam_pos), ASPECT, &[item], 0)?;

@@ -4,7 +4,8 @@ use std::collections::VecDeque;
 
 use crate::backend::{BufferDesc, FramePacket, PipelineDesc, RenderBackend};
 use crate::error::RenderError;
-use crate::handles::{BufferId, PipelineId};
+use crate::handles::{BufferId, PipelineId, TextureId};
+use crate::material::TextureDesc;
 use crate::resources::ResourceTable;
 
 /// Headless backend for tests; keeps a bounded history of submitted frames.
@@ -55,6 +56,11 @@ impl NullBackend {
         self.table.buffer_count()
     }
 
+    /// Live sampled textures.
+    pub fn texture_count(&self) -> usize {
+        self.table.texture_count()
+    }
+
     /// Live pipelines.
     pub fn pipeline_count(&self) -> usize {
         self.table.pipeline_count()
@@ -74,6 +80,18 @@ impl RenderBackend for NullBackend {
 
     fn destroy_buffer(&mut self, id: BufferId) -> Result<(), RenderError> {
         self.table.remove_buffer(id).map(|_| ())
+    }
+
+    fn create_texture(
+        &mut self,
+        desc: &TextureDesc,
+        rgba8: &[u8],
+    ) -> Result<TextureId, RenderError> {
+        self.table.alloc_texture(desc, rgba8)
+    }
+
+    fn destroy_texture(&mut self, id: TextureId) -> Result<(), RenderError> {
+        self.table.remove_texture(id).map(|_| ())
     }
 
     fn create_pipeline(&mut self, desc: &PipelineDesc) -> Result<PipelineId, RenderError> {

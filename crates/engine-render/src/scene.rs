@@ -83,14 +83,12 @@ pub fn extract(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::backend::VertexLayout;
     use crate::handles::BufferId;
     use engine_math::{DAffine3, MathError};
 
     fn mesh(n: u32) -> MeshHandle {
-        MeshHandle {
-            vertex_buffer: BufferId::from_raw(n),
-            vertex_count: 3,
-        }
+        MeshHandle::new(VertexLayout::PosColor, BufferId::from_raw(n), 3)
     }
 
     fn pos(frames: &FrameRegistry, x: f64, y: f64, z: f64) -> WorldPos {

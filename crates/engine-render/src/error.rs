@@ -77,6 +77,24 @@ pub enum RenderError {
         /// Pass name.
         pass: String,
     },
+    /// Invalid texture description or data.
+    #[error("invalid texture: {0}")]
+    InvalidTexture(&'static str),
+    /// Invalid index data.
+    #[error("invalid indices: {0}")]
+    InvalidIndices(&'static str),
+    /// Mesh vertex layout does not match the pipeline.
+    #[error("mesh vertex layout does not match pipeline {pipeline}")]
+    LayoutMismatch {
+        /// Raw pipeline id.
+        pipeline: u32,
+    },
+    /// Invalid light description.
+    #[error("invalid light: {0}")]
+    InvalidLight(&'static str),
+    /// A required pipeline was not registered.
+    #[error("missing pipeline: {0}")]
+    MissingPipeline(&'static str),
     /// Backend-specific failure.
     #[error("backend error: {0}")]
     Backend(String),

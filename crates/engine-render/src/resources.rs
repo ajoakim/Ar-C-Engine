@@ -8,6 +8,38 @@ use crate::backend::{
 };
 use crate::error::RenderError;
 use crate::handles::{BufferId, PipelineId, TextureId};
+use crate::material::{MAX_TEXTURE_DIMENSION, TextureDesc};
+
+/// Recorded information about a live sampled texture.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TextureInfo {
+    /// Width in texels.
+    pub width: u32,
+    /// Height in texels.
+    pub height: u32,
+}
+
+/// Validate a texture description against its RGBA8 data length.
+pub fn validate_texture_data(desc: &TextureDesc, len: usize) -> Result<(), RenderError> {
+    if desc.width == 0 || desc.height == 0 {
+        return Err(RenderError::InvalidTexture("texture has a zero dimension"));
+    }
+    if desc.width > MAX_TEXTURE_DIMENSION || desc.height > MAX_TEXTURE_DIMENSION {
+        return Err(RenderError::InvalidTexture(
+            "texture dimension exceeds 8192",
+        ));
+    }
+    let expected = (desc.width as usize)
+        .checked_mul(desc.height as usize)
+        .and_then(|p| p.checked_mul(4))
+        .ok_or(RenderError::InvalidTexture("texture size overflows"))?;
+    if len != expected {
+        return Err(RenderError::InvalidTexture(
+            "texture data length must be width*height*4",
+        ));
+    }
+    check_buffer_size(len)
+}
 
 /// Recorded information about a live buffer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -23,6 +55,8 @@ pub struct BufferInfo {
 pub struct ResourceTable {
     next_buffer: u32,
     next_pipeline: u32,
+    next_texture: u32,
+    textures: HashMap<TextureId, TextureInfo>,
     buffers: HashMap<BufferId, BufferInfo>,
     pipelines: HashMap<PipelineId, PipelineDesc>,
 }
@@ -87,6 +121,54 @@ impl ResourceTable {
         let id = PipelineId::from_raw(raw);
         self.pipelines.insert(id, desc.clone());
         Ok(id)
+    }
+
+    /// Register a sampled texture, returning a fresh id (>= 3, never reused).
+    pub fn alloc_texture(
+        &mut self,
+        desc: &TextureDesc,
+        data: &[u8],
+    ) -> Result<TextureId, RenderError> {
+        validate_texture_data(desc, data.len())?;
+        let raw = self
+            .next_texture
+            .max(TextureId::FIRST_SAMPLED_RAW - 1)
+            .checked_add(1)
+            .ok_or(RenderError::HandleExhausted)?;
+        self.next_texture = raw;
+        let id = TextureId::from_raw(raw);
+        self.textures.insert(
+            id,
+            TextureInfo {
+                width: desc.width,
+                height: desc.height,
+            },
+        );
+        Ok(id)
+    }
+
+    /// Remove a sampled texture.
+    pub fn remove_texture(&mut self, id: TextureId) -> Result<TextureInfo, RenderError> {
+        self.textures.remove(&id).ok_or(RenderError::InvalidHandle {
+            kind: "texture",
+            id: id.raw(),
+        })
+    }
+
+    /// Look up a sampled texture.
+    pub fn texture(&self, id: TextureId) -> Result<TextureInfo, RenderError> {
+        self.textures
+            .get(&id)
+            .copied()
+            .ok_or(RenderError::InvalidHandle {
+                kind: "texture",
+                id: id.raw(),
+            })
+    }
+
+    /// Live sampled texture count.
+    pub fn texture_count(&self) -> usize {
+        self.textures.len()
     }
 
     /// Look up a buffer.
@@ -162,13 +244,39 @@ impl ResourceTable {
                 if d.mesh.vertex_count == 0 {
                     return Err(RenderError::EmptyMesh);
                 }
-                let required = u64::from(d.mesh.vertex_count) * pipe.vertex_layout.stride();
+                if pipe.vertex_layout != d.mesh.layout {
+                    return Err(RenderError::LayoutMismatch {
+                        pipeline: d.pipeline.raw(),
+                    });
+                }
+                let required = u64::from(d.mesh.vertex_count) * d.mesh.layout.stride();
                 if required > buf.size {
                     return Err(RenderError::MeshOutOfBounds {
                         buffer: d.mesh.vertex_buffer.raw(),
                         required,
                         size: buf.size,
                     });
+                }
+                if let Some(ix) = d.mesh.index {
+                    let ib = self.buffer(ix.buffer)?;
+                    if ib.usage != BufferUsage::Index {
+                        return Err(RenderError::WrongBufferUsage {
+                            id: ix.buffer.raw(),
+                        });
+                    }
+                    if ix.count == 0 || !ix.count.is_multiple_of(3) {
+                        return Err(RenderError::InvalidIndices(
+                            "index count must be a positive multiple of 3",
+                        ));
+                    }
+                    let required = u64::from(ix.count) * 4;
+                    if required > ib.size {
+                        return Err(RenderError::MeshOutOfBounds {
+                            buffer: ix.buffer.raw(),
+                            required,
+                            size: ib.size,
+                        });
+                    }
                 }
                 if !d.mvp.is_finite() {
                     return Err(RenderError::NonFiniteTransform);

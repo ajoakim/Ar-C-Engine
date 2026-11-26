@@ -317,10 +317,7 @@ mod tests {
     }
 
     fn handle() -> MeshHandle {
-        MeshHandle {
-            vertex_buffer: BufferId::from_raw(1),
-            vertex_count: 3,
-        }
+        MeshHandle::new(VertexLayout::PosColor, BufferId::from_raw(1), 3)
     }
 
     #[test]
@@ -398,10 +395,7 @@ mod tests {
         let f = FrameRegistry::new();
         let cam = Camera::new(WorldPos::from_xyz(f.root(), 0.0, 0.0, 0.0).unwrap());
         let item = RenderItem::new(
-            MeshHandle {
-                vertex_buffer: buf,
-                vertex_count: 3,
-            },
+            MeshHandle::new(VertexLayout::PosColor, buf, 3),
             WorldPos::from_xyz(f.root(), 0.0, 0.0, -5.0).unwrap(),
         );
         let scene = extract(&f, &cam, 16.0 / 9.0, &[item], 0).unwrap();
