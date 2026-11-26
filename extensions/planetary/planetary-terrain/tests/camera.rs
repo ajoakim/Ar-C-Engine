@@ -338,3 +338,38 @@ fn irrelevant_events_are_ignored() {
     assert_eq!(c.position(), p);
     assert_eq!(c.orientation(), o);
 }
+
+fn plane_dist(p: &[f64; 4], x: DVec3) -> f64 {
+    p[0] * x.x + p[1] * x.y + p[2] * x.z + p[3]
+}
+
+#[test]
+fn frustum_planes_contain_view_axis() {
+    let pos = DVec3::new(6_372_000.0, 10.0, -20.0);
+    let cam = PlanetaryCamera::new(pos, CameraParams::default()).unwrap();
+    let planes = cam.frustum_planes(16.0 / 9.0, 1.0);
+    let f = cam.forward();
+    for (i, p) in planes.iter().enumerate() {
+        assert!(plane_dist(p, pos) >= -1e-9 || i == 0, "eye plane {i}");
+        if i < 5 {
+            let n = (p[0] * p[0] + p[1] * p[1] + p[2] * p[2]).sqrt();
+            assert!((n - 1.0).abs() < 1e-12, "plane {i} norm {n}");
+        }
+        assert!(plane_dist(p, pos + f * 10.0) > 0.0, "front {i}");
+    }
+    assert!(plane_dist(&planes[0], pos) < 0.0, "eye is in front of near");
+    let behind = pos - f * 10.0;
+    assert!(planes.iter().any(|p| plane_dist(p, behind) < 0.0));
+    // A point far to the side is outside the left/right planes.
+    let r = cam.orientation() * DVec3::X;
+    assert!(
+        planes
+            .iter()
+            .any(|p| plane_dist(p, pos + f * 10.0 + r * 1000.0) < 0.0)
+    );
+    assert!(
+        planes
+            .iter()
+            .any(|p| plane_dist(p, pos + f * 10.0 - r * 1000.0) < 0.0)
+    );
+}

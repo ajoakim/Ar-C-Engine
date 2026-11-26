@@ -8,10 +8,11 @@ use engine_sdk::{
     App, AppControl, DVec3, Engine, EngineConfig, MAX_DRAWS_PER_FRAME, NullBackend, Resources,
     Runtime, SceneState, SdkError,
 };
-use planetary_core::lod::{LodParams, View, is_partition};
+use planetary_core::lod::{LodParams, View, is_partition, select};
 use planetary_core::{Face, PatchId};
 use planetary_terrain::{
-    GpuUploader, PatchKey, TAN_HALF_FOV_Y, TerrainConfig, TerrainReport, TerrainSystem,
+    CameraParams, DRAW_MARGIN, GpuUploader, PatchKey, PlanetaryCamera, TAN_HALF_FOV_Y,
+    TerrainConfig, TerrainReport, TerrainSystem,
 };
 
 const RADIUS: f64 = 6_371_000.0;
@@ -20,6 +21,7 @@ struct Harness {
     sys: TerrainSystem,
     eyes: Vec<DVec3>,
     frame: usize,
+    frustum: bool,
 }
 
 impl App for Harness {
@@ -29,11 +31,16 @@ impl App for Harness {
 
     fn update(&mut self, _dt: f64, _s: &mut SceneState) -> AppControl {
         let eye = self.eyes[self.frame.min(self.eyes.len() - 1)];
-        self.sys.prepare(&View {
+        let mut view = View {
             eye,
             proj_scale: 720.0 / (2.0 * TAN_HALF_FOV_Y),
             frustum: None,
-        });
+        };
+        if self.frustum {
+            let cam = PlanetaryCamera::new(eye, CameraParams::default()).expect("camera");
+            view = view.with_frustum(cam.frustum_planes(16.0 / 9.0, 10.0));
+        }
+        self.sys.prepare(&view);
         self.frame += 1;
         AppControl::Continue
     }
@@ -63,6 +70,7 @@ fn start(cfg: TerrainConfig, eyes: Vec<DVec3>) -> (Runtime<NullBackend>, Harness
         sys: TerrainSystem::new(cfg).expect("terrain system"),
         eyes,
         frame: 0,
+        frustum: false,
     };
     rt.setup(&mut app).expect("setup");
     (rt, app)
@@ -127,7 +135,7 @@ fn per_frame_caps_hold() {
         assert!(r.stream.uploads <= cfg.uploads_per_frame);
         assert!(r.requests_issued <= cfg.max_requests_per_frame);
         assert!(r.drawn_leaves <= MAX_DRAWS_PER_FRAME);
-        assert_eq!(r.draw_overflow, 0);
+        assert!(r.draw_items <= MAX_DRAWS_PER_FRAME);
         assert_eq!(r.request_errors, 0);
     }
     app.sys.shutdown();
@@ -267,4 +275,72 @@ fn corrupt_payload_rejected() {
     assert_eq!(app.rejected, 1);
     assert_eq!(app.after, app.before);
     assert_eq!(rt.backend().buffer_count(), 0);
+}
+
+#[test]
+fn config_rejects_draw_budget_overflow() {
+    for max_leaves in [
+        5usize,
+        MAX_DRAWS_PER_FRAME - DRAW_MARGIN + 1,
+        MAX_DRAWS_PER_FRAME,
+    ] {
+        let mut cfg = test_cfg();
+        cfg.lod.max_leaves = max_leaves;
+        assert!(TerrainSystem::new(cfg).is_err(), "max_leaves {max_leaves}");
+    }
+    for max_leaves in [6usize, MAX_DRAWS_PER_FRAME - DRAW_MARGIN] {
+        let mut cfg = test_cfg();
+        cfg.lod.max_leaves = max_leaves;
+        TerrainSystem::new(cfg).expect("valid").shutdown();
+    }
+}
+
+#[test]
+fn resident_ranges_reduce_node_visits() {
+    let (mut rt, mut app) = start(test_cfg(), above_pos_x());
+    let mut done = false;
+    for _ in 0..400 {
+        step(&mut rt, &mut app);
+        if app.sys.drawn() == app.sys.wanted_leaves() && app.sys.report().requests_issued == 0 {
+            done = true;
+            break;
+        }
+    }
+    assert!(done, "did not converge");
+    assert_eq!(app.sys.drawn(), app.sys.wanted_leaves());
+    let view = View {
+        eye: above_pos_x()[0],
+        proj_scale: 720.0 / (2.0 * TAN_HALF_FOV_Y),
+        frustum: None,
+    };
+    let none = select(
+        app.sys.model(),
+        &app.sys.config().lod,
+        &view,
+        &Default::default(),
+        &|_| None,
+    );
+    let with = app.sys.report().select.nodes_visited;
+    assert!(
+        with < none.stats.nodes_visited,
+        "resident ranges {with} vs global {}",
+        none.stats.nodes_visited
+    );
+    app.sys.shutdown();
+}
+
+#[test]
+fn draw_items_plus_culled_equals_drawn() {
+    let (mut rt, mut app) = start(test_cfg(), orbit(200, 2000.0));
+    app.frustum = true;
+    let mut culled_any = false;
+    for _ in 0..200 {
+        step(&mut rt, &mut app);
+        let r = app.sys.report();
+        assert_eq!(r.draw_items + r.culled_draws as usize, r.drawn_leaves);
+        assert!(r.draw_items <= r.drawn_leaves);
+        culled_any |= r.culled_draws > 0;
+    }
+    assert!(culled_any, "no draw was ever culled");
+    app.sys.shutdown();
 }

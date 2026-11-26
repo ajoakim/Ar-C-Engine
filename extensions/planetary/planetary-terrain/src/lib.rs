@@ -22,7 +22,7 @@ pub use source::PatchSource;
 pub mod uploader;
 pub use uploader::{GpuUploader, HeldPatch};
 pub mod system;
-pub use system::{TerrainConfig, TerrainReport, TerrainSystem};
+pub use system::{DRAW_MARGIN, TerrainConfig, TerrainReport, TerrainSystem};
 
 use engine_sdk::streaming::AssetClass;
 

@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 
 use engine_sdk::streaming::Uploader;
 use engine_sdk::{DVec3, MeshHandle, Resources};
+use planetary_core::lod::HeightRange;
 use planetary_core::{PatchId, decode_payload};
 
 use crate::key::PatchKey;
@@ -14,6 +15,8 @@ pub struct HeldPatch {
     pub key: PatchKey,
     pub mesh: MeshHandle,
     pub origin: DVec3,
+    /// Measured height range of the patch samples.
+    pub range: HeightRange,
 }
 
 /// Uploader borrowing the frame's GPU resources and the held-mesh table.
@@ -41,6 +44,10 @@ impl Uploader<PatchKey> for GpuUploader<'_, '_> {
                     key: key.clone(),
                     mesh: h,
                     origin: mesh.origin,
+                    range: HeightRange {
+                        min: mesh.height_min,
+                        max: mesh.height_max,
+                    },
                 };
                 if let Some(old) = self.held.insert(key.id, held) {
                     let _ = self.resources.destroy_mesh(old.mesh);

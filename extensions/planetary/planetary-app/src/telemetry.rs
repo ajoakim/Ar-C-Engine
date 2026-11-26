@@ -91,7 +91,9 @@ pub struct FrameSample {
     pub cancelled: u32,
     pub destroyed: u32,
     pub upload_rejects: u32,
-    pub draw_overflow: u32,
+    pub pending_requests: usize,
+    pub draw_items: usize,
+    pub culled_draws: u32,
     pub tau_eff: f64,
     pub forced_splits: u32,
     pub trimmed_splits: u32,
@@ -151,7 +153,7 @@ pub fn band_of(altitude_m: f64) -> usize {
         .unwrap_or(ALTITUDE_BANDS.len() - 1)
 }
 
-const COLUMNS: [&str; 32] = [
+const COLUMNS: [&str; 34] = [
     "frame",
     "sim_time_s",
     "frame_ms",
@@ -176,7 +178,9 @@ const COLUMNS: [&str; 32] = [
     "cancelled",
     "destroyed",
     "upload_rejects",
-    "draw_overflow",
+    "pending_requests",
+    "draw_items",
+    "culled_draws",
     "tau_eff",
     "forced_splits",
     "trimmed_splits",
@@ -189,14 +193,14 @@ const COLUMNS: [&str; 32] = [
 /// CSV header line (no newline).
 #[must_use]
 pub fn csv_header() -> &'static str {
-    "frame,sim_time_s,frame_ms,prepare_ms,gpu_frame_ms,altitude_m,nominal_altitude_m,center_distance_m,nodes_visited,leaves,wanted_leaves,drawn_leaves,held_meshes,pending,in_flight,awaiting_upload,started,completions,uploads,uploaded_bytes,evicted,cancelled,destroyed,upload_rejects,draw_overflow,tau_eff,forced_splits,trimmed_splits,culled_horizon,culled_frustum,node_budget_hit,leaf_budget_hit"
+    "frame,sim_time_s,frame_ms,prepare_ms,gpu_frame_ms,altitude_m,nominal_altitude_m,center_distance_m,nodes_visited,leaves,wanted_leaves,drawn_leaves,held_meshes,pending,in_flight,awaiting_upload,started,completions,uploads,uploaded_bytes,evicted,cancelled,destroyed,upload_rejects,pending_requests,draw_items,culled_draws,tau_eff,forced_splits,trimmed_splits,culled_horizon,culled_frustum,node_budget_hit,leaf_budget_hit"
 }
 
 /// One CSV row (no newline).
 #[must_use]
 pub fn csv_row(s: &FrameSample) -> String {
     format!(
-        "{},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{:.3},{},{},{},{},{},{}",
+        "{},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{:.3},{},{},{},{},{},{}",
         s.frame,
         s.sim_time_s,
         s.frame_ms,
@@ -221,7 +225,9 @@ pub fn csv_row(s: &FrameSample) -> String {
         s.cancelled,
         s.destroyed,
         s.upload_rejects,
-        s.draw_overflow,
+        s.pending_requests,
+        s.draw_items,
+        s.culled_draws,
         s.tau_eff,
         s.forced_splits,
         s.trimmed_splits,

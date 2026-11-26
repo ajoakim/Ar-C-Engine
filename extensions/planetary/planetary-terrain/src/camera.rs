@@ -202,6 +202,41 @@ impl PlanetaryCamera {
         (a * 0.01).clamp(0.05, 1.0e4) as f32
     }
 
+    /// World-space frustum planes `[a, b, c, d]` (unit inward normals, `n . p + d >= 0` inside):
+    /// near, left, right, bottom, top and a disabled far plane (the projection is infinite).
+    ///
+    /// `aspect` is clamped to `[0.1, 10]`; `near` is the near distance in meters.
+    pub fn frustum_planes(&self, aspect: f64, near: f64) -> [[f64; 4]; 6] {
+        let aspect = if aspect.is_finite() {
+            aspect.clamp(0.1, 10.0)
+        } else {
+            1.0
+        };
+        let near = if near.is_finite() && near > 0.0 {
+            near
+        } else {
+            0.0
+        };
+        let f = self.orient * DVec3::NEG_Z;
+        let r = self.orient * DVec3::X;
+        let u = self.orient * DVec3::Y;
+        let ty = TAN_HALF_FOV_Y;
+        let tx = ty * aspect;
+        let plane = |n: DVec3| -> [f64; 4] { [n.x, n.y, n.z, -n.dot(self.pos)] };
+        let nx = 1.0 / (1.0 + tx * tx).sqrt();
+        let ny = 1.0 / (1.0 + ty * ty).sqrt();
+        let mut near_p = plane(f);
+        near_p[3] = -f.dot(self.pos + f * near);
+        [
+            near_p,
+            plane((r + f * tx) * nx),
+            plane((f * tx - r) * nx),
+            plane((u + f * ty) * ny),
+            plane((f * ty - u) * ny),
+            [0.0, 0.0, 0.0, 1.0],
+        ]
+    }
+
     /// Pixels per unit tangent for a viewport height.
     pub fn proj_scale(viewport_height_px: u32) -> f64 {
         f64::from(viewport_height_px) / (2.0 * TAN_HALF_FOV_Y)

@@ -13,7 +13,8 @@ use engine_sdk::{
     Resources, SceneState, SdkError, Vec3, WorldPos,
 };
 use planetary_core::lod::{
-    DEFAULT_KAPPA, LodModel, LodParams, SelectStats, View, max_level_jump, select,
+    DEFAULT_KAPPA, LodModel, LodParams, SelectStats, View, cell_bound, eye_in_cone,
+    frustum_visible, horizon_visible, max_level_jump, patch_footprint, select,
 };
 use planetary_core::{MAX_LEVEL, PatchId, PlanetTerrain, TerrainParams, locate, payload_len};
 
@@ -24,6 +25,9 @@ use crate::requests::{plan_requests, priority_for_level, stale_requests, wanted_
 use crate::source::PatchSource;
 use crate::uploader::{GpuUploader, HeldPatch};
 use crate::{BASE_CLASS, DEMO_SEED, DETAIL_CLASS};
+
+/// Draw slots kept free below `MAX_DRAWS_PER_FRAME` (other scene items).
+pub const DRAW_MARGIN: usize = 24;
 
 /// Terrain system configuration.
 #[derive(Clone, Debug, PartialEq)]
@@ -83,7 +87,12 @@ pub struct TerrainReport {
     pub upload_rejects: u32,
     pub destroyed: u32,
     pub held_meshes: usize,
-    pub draw_overflow: u32,
+    /// Patch requests issued and not yet resident.
+    pub pending_requests: usize,
+    /// Render items pushed this frame.
+    pub draw_items: usize,
+    /// Effective-cut leaves skipped by draw culling.
+    pub culled_draws: u32,
 }
 
 /// Streams, uploads and draws the planet terrain.
@@ -96,6 +105,7 @@ pub struct TerrainSystem {
     held: BTreeMap<PatchId, HeldPatch>,
     requested: BTreeMap<PatchId, (PatchKey, CancelToken)>,
     prev_split: BTreeSet<PatchId>,
+    last_view: Option<View>,
     wanted_split: BTreeSet<PatchId>,
     wanted: Vec<PatchId>,
     drawn: Vec<PatchId>,
@@ -117,6 +127,12 @@ impl TerrainSystem {
     pub fn new(cfg: TerrainConfig) -> Result<Self, SdkError> {
         if cfg.lod.max_level > MAX_LEVEL {
             return Err(SdkError::App("lod.max_level exceeds MAX_LEVEL".into()));
+        }
+        if cfg.lod.max_leaves < 6 || cfg.lod.max_leaves + DRAW_MARGIN > MAX_DRAWS_PER_FRAME {
+            return Err(SdkError::App(format!(
+                "lod.max_leaves must be in 6..={}",
+                MAX_DRAWS_PER_FRAME - DRAW_MARGIN
+            )));
         }
         if cfg.workers < 1 {
             return Err(SdkError::App("workers must be >= 1".into()));
@@ -157,6 +173,7 @@ impl TerrainSystem {
             held: BTreeMap::new(),
             requested: BTreeMap::new(),
             prev_split: BTreeSet::new(),
+            last_view: None,
             wanted_split: BTreeSet::new(),
             wanted: Vec::new(),
             drawn: Vec::new(),
@@ -206,9 +223,13 @@ impl TerrainSystem {
             frame: self.frame,
             ..TerrainReport::default()
         };
-        let sel = select(&self.model, &self.cfg.lod, view, &self.prev_split, &|_| {
-            None
-        });
+        self.last_view = Some(*view);
+        let sel = {
+            let held = &self.held;
+            select(&self.model, &self.cfg.lod, view, &self.prev_split, &|id| {
+                held.get(&id).map(|h| h.range)
+            })
+        };
         self.prev_split.clone_from(&sel.split);
         self.wanted_split = sel.split;
         self.wanted = sel.leaves;
@@ -265,6 +286,7 @@ impl TerrainSystem {
                 Err(_) => rep.request_errors += 1,
             }
         }
+        rep.pending_requests = self.requested.len();
         self.report = rep;
     }
 
@@ -321,14 +343,30 @@ impl TerrainSystem {
         scene.items.clear();
         self.drawn.clear();
         self.drawn_set.clear();
-        let mut overflow = 0u32;
+        let mut culled = 0u32;
+        let occluder = self.model.radius + self.model.height.min;
         for &leaf in &eff.leaves {
             let Some(h) = self.held.get(&leaf) else {
                 continue;
             };
+            if let Some(view) = &self.last_view {
+                let fp = patch_footprint(leaf);
+                let visible = horizon_visible(self.model.radius, view.eye, &fp, h.range, occluder)
+                    && (eye_in_cone(view.eye, &fp)
+                        || frustum_visible(view, &cell_bound(self.model.radius, &fp, h.range)));
+                if !visible {
+                    culled += 1;
+                    // Culled leaves still belong to the drawn partition.
+                    self.drawn.push(leaf);
+                    self.drawn_set.insert(leaf);
+                    continue;
+                }
+            }
             if scene.items.len() >= MAX_DRAWS_PER_FRAME {
-                overflow += 1;
-                continue;
+                return Err(SdkError::App(format!(
+                    "draw budget exceeded: {} items",
+                    scene.items.len() + 1
+                )));
             }
             let _ = self.manager.resolve(&h.key);
             let position =
@@ -351,7 +389,8 @@ impl TerrainSystem {
         self.report.held_meshes = self.held.len();
         self.report.upload_rejects = upload_rejects;
         self.report.destroyed = destroyed;
-        self.report.draw_overflow = overflow;
+        self.report.draw_items = scene.items.len();
+        self.report.culled_draws = culled;
         Ok(())
     }
 

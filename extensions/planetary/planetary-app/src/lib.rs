@@ -54,6 +54,7 @@ pub struct PlanetaryApp {
     terrain: TerrainSystem,
     camera: PlanetaryCamera,
     viewport_h: u32,
+    viewport_w: u32,
     time: f64,
     last_view: Option<View>,
     quit: bool,
@@ -106,6 +107,7 @@ impl PlanetaryApp {
             terrain,
             camera,
             viewport_h,
+            viewport_w: viewport_h.saturating_mul(16) / 9,
             time: 0.0,
             last_view: View::new(pos, viewport_h, TAN_HALF_FOV_Y),
             quit: false,
@@ -174,7 +176,10 @@ impl App for PlanetaryApp {
 
     fn input(&mut self, event: &InputEvent, _scene: &mut SceneState) {
         match *event {
-            InputEvent::Resized { height, .. } if height > 0 => self.viewport_h = height,
+            InputEvent::Resized { width, height } if height > 0 => {
+                self.viewport_h = height;
+                self.viewport_w = width.max(1);
+            }
             InputEvent::CloseRequested => self.quit = true,
             _ => {}
         }
@@ -212,7 +217,11 @@ impl App for PlanetaryApp {
         }
         self.apply_camera(scene);
         if let Some(view) = View::new(self.camera.position(), self.viewport_h, TAN_HALF_FOV_Y) {
-            self.last_view = Some(view);
+            // Conservative aspect: never narrower than 16:9 so culling cannot clip visible edges.
+            let aspect = (f64::from(self.viewport_w) / f64::from(self.viewport_h)).max(16.0 / 9.0);
+            let alt = self.camera.altitude(&|d| self.terrain.surface_radius_at(d));
+            let near = f64::from(PlanetaryCamera::near_plane(alt));
+            self.last_view = Some(view.with_frustum(self.camera.frustum_planes(aspect, near)));
         }
         if let Some(view) = self.last_view {
             self.telemetry.begin_phase();
@@ -264,7 +273,9 @@ impl App for PlanetaryApp {
             cancelled: r.stream.cancelled,
             destroyed: r.destroyed,
             upload_rejects: r.upload_rejects,
-            draw_overflow: r.draw_overflow,
+            pending_requests: r.pending_requests,
+            draw_items: r.draw_items,
+            culled_draws: r.culled_draws,
             tau_eff: r.select.tau_eff,
             forced_splits: r.select.forced_splits,
             trimmed_splits: r.select.trimmed_splits,
