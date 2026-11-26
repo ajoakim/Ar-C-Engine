@@ -32,7 +32,7 @@ Enforced by `cargo xtask check-deps`; the IDs below are the exact rule IDs it re
 
 ## Third-party isolation
 
-`wgpu` is allowed only in `engine-render-wgpu`, and `winit` only in `engine-platform`. This is enforced directly by `cargo xtask check-deps` (declared dependencies) and transitively by cargo-deny `[bans]` `wrappers` (`deny.toml`).
+`wgpu` is allowed only in `engine-render-wgpu`, and `winit` only in `engine-platform`. `gltf` is allowed only in `conventional-3d`, and `image` only in `conventional-3d` and `gltf` (ADR-0007). This is enforced directly by `cargo xtask check-deps` (declared dependencies) and transitively by cargo-deny `[bans]` `wrappers` (`deny.toml`).
 
 ## How to add a crate
 

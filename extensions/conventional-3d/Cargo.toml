@@ -9,6 +9,9 @@ description = "Conventional 3D scene extension (meshes, lights, materials, camer
 
 [dependencies]
 engine-sdk.workspace = true
+gltf.workspace = true
+image.workspace = true
+thiserror.workspace = true
 
 [lints]
 workspace = true
