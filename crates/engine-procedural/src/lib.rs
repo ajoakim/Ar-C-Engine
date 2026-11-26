@@ -5,6 +5,15 @@
 //! `docs/architecture/dependency-direction.md`. Pure and GPU-free: no threads,
 //! clocks, I/O or global state; no planetary concepts.
 
+mod hash;
+mod seed;
+
+pub use hash::{
+    FNV_OFFSET_BASIS, FNV_PRIME, Fnv1a64, canonical_bits, fnv1a64, hash2, hash3, splitmix64,
+    unit_f64,
+};
+pub use seed::{StableId, layer_seed};
+
 /// Version of the hashing and noise specification (ADR-0008). Changing any
 /// hashed or noise output is a deliberate break: bump this and re-pin goldens.
 pub const HASH_VERSION: u32 = 1;
