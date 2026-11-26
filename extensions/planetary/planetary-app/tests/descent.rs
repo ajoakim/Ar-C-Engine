@@ -272,6 +272,22 @@ fn descent_streams_detail(kind: TopologyKind) {
     }
 }
 
+fn morph_first_frame_defects_are_zero(kind: TopologyKind) {
+    for path in [Path::Descent, Path::Ascent] {
+        let recs = shared(kind, path);
+        assert!(
+            recs.iter().all(|r| r.report.morph_first_frame_defects == 0),
+            "{} refine-appearing piece not shown at morph 1",
+            kind.name()
+        );
+        assert!(
+            recs.iter()
+                .all(|r| (0.0..=1.0).contains(&r.report.morph_min)
+                    && (0.0..=1.0).contains(&r.report.handover_gap_max))
+        );
+    }
+}
+
 fn within_counted_caps(kind: TopologyKind) {
     let recs = shared(kind, Path::Descent);
     let cfg = real_terrain(kind);
@@ -482,6 +498,16 @@ fn production_path_never_blocks() {
 }
 
 // Hex (default topology).
+#[test]
+fn morph_first_frame_defects_are_zero_cube() {
+    morph_first_frame_defects_are_zero(Cube);
+}
+
+#[test]
+fn morph_first_frame_defects_are_zero_hex() {
+    morph_first_frame_defects_are_zero(Hex);
+}
+
 #[test]
 fn hex_real_defaults_are_used() {
     real_defaults_are_used_for(Hex);

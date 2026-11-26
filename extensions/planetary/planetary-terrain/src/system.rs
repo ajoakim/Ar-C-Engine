@@ -1005,6 +1005,15 @@ impl<T: Topology> TerrainSystem<T> {
             }
         }
         for d in self.drawn_set.difference(&self.prev_drawn) {
+            parent_buf.clear();
+            self.topo.parents(*d, &mut parent_buf);
+            if parent_buf
+                .iter()
+                .any(|q| self.prev_drawn.contains(q) && !self.drawn_set.contains(q))
+            {
+                // A direct parent was replaced: an ordinary one-level handover.
+                continue;
+            }
             // Walk up to the first previously drawn ancestor that is gone now; two or more
             // levels up is a multi-level handover (the single-parent target cannot be exact).
             let mut cur = self.topo.primary_parent(*d);
