@@ -149,9 +149,10 @@ fn bench_stream(
     settings.perf.csv_path = None;
     let n = frames.unwrap_or_else(|| (script.descent_seconds / DT).ceil() as u64 + 300);
     let pace_ms = o.frame_ms;
-    let run = run_stream(settings, Box::new(WallClock::new()), n, DT, &mut || {
+    let mut run = run_stream(settings, Box::new(WallClock::new()), n, DT, &mut |_| {
         spin_for_ms(pace_ms)
     })?;
+    run.descent_frames = (script.descent_seconds / DT).ceil() as usize;
     let m = analyze(&run);
     println!(
         "build: {}",
@@ -253,9 +254,12 @@ fn main() -> Result<(), SdkError> {
     settings.perf.exit_after_frames = frames;
     settings.perf.csv_path = perf_log;
     if descent {
-        settings.script = Some(DescentScript::orbit_to_surface(
-            settings.terrain.terrain.radius,
-        ));
+        let r = settings.terrain.terrain.radius;
+        settings.script = Some(if so.fast {
+            DescentScript::fast_free_flight(r)
+        } else {
+            DescentScript::orbit_to_surface(r)
+        });
     }
     if ascent {
         settings.script = Some(DescentScript::surface_to_orbit(

@@ -73,3 +73,12 @@ Machine: Windows 11, Intel Arc B580 (Vulkan). Commands: `cargo test -p planetary
 | <100 m | 35.61 | 62.59 | 79.55 | 554 | 636 | 519 | 1573 | 48 |
 
 Baseline (Phase 7 code): release 312-722 ms average in the three lowest bands, 356 of 600 frames over 100 ms; debug 4-10 s per frame, did not finish in 900 s. Now zero frames over 100 ms in both builds.
+
+## Amendment (07.1-19): streaming throughput
+
+Measured at 30 fps with free-running workers (`planetary_flight --bench-stream`): the fixed caps (4 uploads, 8 starts, 16 requests per frame) supplied about 80 patches/s, detail took 198-224 frames to appear at the camera and 60% of frames were more than one level coarse. Decisions:
+
+- **Adaptive per-frame caps.** `StreamBudget` scales the base caps between a quarter and the hard maxima `BudgetLimits` (32 uploads, 64 starts, 128 requests) from the measured prepare plus gpu_frame cost of the previous frame against `target_ms` (8). The terrain reads no clock: the app feeds the number (`TerrainSystem::set_frame_cost`); an absent, negative or non-finite value gives the base caps. Off unless `TerrainConfig::adaptive` (the app turns it on with `AppSettings::adaptive_streaming`).
+- **Mechanism.** The stream manager config and the upload byte cap are fixed at construction, so adaptive mode builds them at the hard maxima and throttles per frame: the number of requests issued (queue at most two frames of starts, in flight at most three frames of uploads) and an uploader wrapper that refuses uploads beyond the cap (refused uploads stay CPU-ready and retry).
+- **Order.** Requests are issued roots first (coverage), then by screen-space error over distance; an ancestor inherits the best score of the leaves it serves. Ancestors-first is unchanged.
+- **Fallback chain pinned by use.** The wanted closure (pieces and ancestors) is touched in the residency LRU every frame, otherwise the ancestors of a drawn leaf are the first eviction victims and the camera falls back to the base levels.

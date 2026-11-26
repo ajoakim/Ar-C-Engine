@@ -166,6 +166,11 @@ impl PlanetaryApp {
         self.frames
     }
 
+    /// BLOCKING: waits for the terrain jobs started so far (bench and test pacing only).
+    pub fn wait_for_workers(&mut self) {
+        self.terrain.wait_for_workers();
+    }
+
     /// Stops the terrain worker pool.
     pub fn shutdown(mut self) {
         self.telemetry.flush();

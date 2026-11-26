@@ -29,6 +29,14 @@ WASD/arrows move, E/Space up, Q/Ctrl down, Shift boost, hold right mouse button 
 | `--bench-descent` | Headless scripted descent at production defaults; prints a per-altitude-band table |
 | `--budget-ms <ms>` | Per-band p95 budget for the bench (default 16.7) |
 | `--strict` | Make a bench budget miss exit non-zero |
+| `--bench-stream` | Windowed-realistic streaming harness (headless, free-running workers, simulated 1/30 s frames); prints lag at the camera, frames-to-detail and upload throughput |
+| `--fast` | Fast free-flight descent (orbit to 10 m in 8/3 s); selects the script for `--bench-stream` and for `--descent` |
+| `--settle` | `--bench-stream` control: workers awaited every frame (what the descent tests do) |
+| `--no-adaptive` | Fixed per-frame streaming caps instead of the cost-adaptive ones (default adaptive for wall-clock runs) |
+| `--frame-ms <ms>` | Real time spun per frame in `--bench-stream` so workers get a window-like slice (default 33) |
+| `--out <file.csv>` | `--bench-stream` per-frame CSV (wanted/drawn level at the camera, caps, cost, uploads) |
+
+Fly with `--release`. Example: `cargo run --release -p planetary-app --example planetary_flight -- --bench-stream --fast --out stream.csv`. Tests use the same harness through `planetary_app::stream_bench` (`tests/streaming_lag.rs`), paced with `PlanetaryApp::wait_for_workers` instead of a clock.
 
 ## Telemetry CSV columns
 

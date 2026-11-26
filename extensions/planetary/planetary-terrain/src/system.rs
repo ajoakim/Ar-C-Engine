@@ -83,9 +83,9 @@ impl Default for BudgetLimits {
     fn default() -> Self {
         Self {
             target_ms: 8.0,
-            max_uploads: 16,
-            max_starts: 32,
-            max_requests: 64,
+            max_uploads: 32,
+            max_starts: 64,
+            max_requests: 128,
         }
     }
 }
@@ -451,6 +451,13 @@ impl<T: Topology> TerrainSystem<T> {
     /// terrain never reads a clock. Non-finite and negative values count as absent.
     pub fn set_frame_cost(&mut self, ms: f64) {
         self.frame_cost_ms = (ms.is_finite() && ms >= 0.0).then_some(ms);
+    }
+
+    /// BLOCKING: waits until every job started so far has finished (its completion is applied by
+    /// the next `gpu_frame`). For benches and tests that model workers finishing within a frame
+    /// without sleeping; never call it on a production frame path.
+    pub fn wait_for_workers(&mut self) {
+        self.manager.settle();
     }
 
     /// The per-frame caps currently in force.

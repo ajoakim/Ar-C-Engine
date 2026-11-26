@@ -62,6 +62,8 @@ pub struct StreamRun {
     /// Distinct wanted leaves seen over the run (demand).
     pub distinct_wanted: usize,
     pub dt: f64,
+    /// Frames of the scripted descent (the hover starts here); set by the caller.
+    pub descent_frames: usize,
 }
 
 fn level_at(set: &[PatchId], d: DVec3) -> i32 {
@@ -77,7 +79,7 @@ fn sorted_raw(v: &[PatchId]) -> Vec<u64> {
 }
 
 /// Runs `frames` frames with a simulated step `dt` seconds each; `pace` is called after every
-/// frame (it may spin or yield so workers progress; it must not change app state).
+/// frame (it may spin so workers progress, or call [`PlanetaryApp::wait_for_workers`]).
 ///
 /// # Errors
 /// Propagates app and runtime errors.
@@ -87,7 +89,7 @@ pub fn run_stream(
     clock: Box<dyn Clock>,
     frames: u64,
     dt: f64,
-    pace: &mut dyn FnMut(),
+    pace: &mut dyn FnMut(&mut PlanetaryApp),
 ) -> Result<StreamRun, SdkError> {
     let mut app = PlanetaryApp::with_clock(settings, clock)?;
     let mut rt = Runtime::new(Engine::new(EngineConfig::default()), NullBackend::new())?;
@@ -148,7 +150,7 @@ pub fn run_stream(
             },
             converged,
         });
-        pace();
+        pace(&mut app);
     }
     let distinct_wanted = seen.len();
     app.shutdown();
@@ -157,6 +159,7 @@ pub fn run_stream(
         frames: out,
         distinct_wanted,
         dt,
+        descent_frames: 0,
     })
 }
 
@@ -198,6 +201,10 @@ pub struct StreamMetrics {
     pub bootstrap_frames: usize,
     pub max_draws: usize,
     pub max_wanted_leaves: usize,
+    /// Frames after the descent ends until drawn equals wanted (`None`: never within the run).
+    pub frames_to_converge: Option<usize>,
+    /// Level of the drawn leaf at the look-at point on the last frame (-1 if none).
+    pub final_look_drawn_level: i32,
 }
 
 fn percentile95(v: &mut [i32]) -> i32 {
@@ -281,6 +288,13 @@ pub fn analyze(run: &StreamRun) -> StreamMetrics {
             m.worst_detail_level = l;
         }
     }
+    m.frames_to_converge = f
+        .iter()
+        .enumerate()
+        .skip(run.descent_frames)
+        .find(|(_, r)| r.converged)
+        .map(|(i, _)| i - run.descent_frames);
+    m.final_look_drawn_level = f.last().map_or(-1, |r| r.look_drawn_level);
     m.sim_seconds = f.len() as f64 * run.dt;
     if m.sim_seconds > 0.0 {
         m.uploads_per_s = m.total_uploads as f64 / m.sim_seconds;
@@ -368,6 +382,13 @@ pub fn report_text(label: &str, m: &StreamMetrics) -> String {
         m.partition_every_frame,
         m.max_draws,
         m.max_wanted_leaves
+    ));
+    s.push_str(&format!(
+        "frames from descent end to drawn == wanted: {}; final look-at drawn level {}
+",
+        m.frames_to_converge
+            .map_or_else(|| "never".to_string(), |v| v.to_string()),
+        m.final_look_drawn_level
     ));
     for (i, (label, _, _)) in ALTITUDE_BANDS.iter().enumerate() {
         let (mx, p95, n) = m.band_lag[i];
