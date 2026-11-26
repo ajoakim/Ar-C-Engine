@@ -2,6 +2,7 @@
 //!
 //! Integer math only; nothing here is platform dependent (ADR-0008, ADR-0011).
 
+pub mod adjacency;
 pub mod cell_id;
 pub mod icosa;
 
