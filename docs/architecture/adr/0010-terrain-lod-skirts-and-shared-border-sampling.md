@@ -33,4 +33,14 @@ Cube-sphere terrain is drawn as a quadtree of fixed-size patches at mixed levels
 | Measurement | Value | Source test |
 | --- | --- | --- |
 
-Pending: filled by plans 07-05 (seam proofs, measured eps) and 07-10 (scripted descent).
+| Same-level border vertex pairs (levels 0..=4, n = 8) | 73656 checked, all bit-identical in f64 | `same_level_borders_bit_identical` in `extensions/planetary/planetary-core/tests/seam.rs` |
+| Cube edges / corners (level 2) | 12/12 edges and 8/8 corners bit-identical | `cube_edges_and_corners_explicit` in `extensions/planetary/planetary-core/tests/seam.rs` |
+| Mixed-level L/L+1 junctions (30 reference views, max level 14, n = 8) | 4272 junctions, 34176 odd fine vertices; even vertices equal coarse bit-exactly; max gap / min skirt depth = 0.035 (<= 1) | `mixed_level_gap_bounded_by_skirts` in `extensions/planetary/planetary-core/tests/seam.rs` |
+| Negative control (skirt depth forced to 0) | 34176 of 34176 odd vertices reported as violations | `negative_control_without_skirts_fails` in `extensions/planetary/planetary-core/tests/seam.rs` |
+| f32 origin + offset reconstruction (levels 0, 5, 10, 15, 19) | max error = 0.31 of the bound 2 * extent * 2^-23, bound < skirt depth | `f32_reconstruction_within_tolerance` in `extensions/planetary/planetary-core/tests/seam.rs` |
+| Measured max deviation / cell size (n = 32) | level 2: 0.00253, 6: 0.00115, 10: 0.00140, 14: 0.00058, 18: 0.000027, 19: 0.000017; all <= eps(L) | `measured_error_below_eps` in `extensions/planetary/planetary-core/tests/seam.rs` |
+| Final kappa | 0.25, kept (measured ratio would allow 1/32; not tuned so downstream plans keep one default) | `measured_error_below_eps` in `extensions/planetary/planetary-core/tests/seam.rs` |
+
+Golden hashes (mesh, generator) are Windows-computed; cross-platform CI confirmation is pending.
+
+Pending: scripted descent evidence from 07-10.
