@@ -162,7 +162,7 @@ pub fn border_normal_f64(terrain: &PlanetTerrain, level: u8, d: DVec3) -> DVec3 
 }
 // BORDER-CRITICAL END
 
-fn uv_of(terrain: &PlanetTerrain, s: TerrainSample) -> [f32; 2] {
+pub(crate) fn uv_of(terrain: &PlanetTerrain, s: TerrainSample) -> [f32; 2] {
     let p = terrain.params();
     let span = p.max_relief() - p.sea_level;
     let h = if span > 0.0 {

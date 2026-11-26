@@ -125,6 +125,12 @@ fn no_usize_in_border_critical_code() {
         failures.extend(bad);
     }
 
+    let hex_mesh = fs::read_to_string(src_dir().join("hex").join("mesh.rs")).expect("hex/mesh.rs");
+    let (b, e, bad) = width_scan("hex/mesh.rs", &hex_mesh, false);
+    assert!(b >= 1, "hex/mesh.rs has no BORDER-CRITICAL marker pair");
+    assert_eq!(b, e, "hex/mesh.rs unbalanced BORDER-CRITICAL markers");
+    failures.extend(bad);
+
     assert!(
         failures.is_empty(),
         "platform-width ints found: {failures:#?}"
