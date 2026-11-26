@@ -59,6 +59,14 @@ fn docs_cover_all_crates() {
 }
 
 #[test]
+fn canary_documented() {
+    let file = "docs/architecture/dependency-direction.md";
+    let doc = read(file);
+    require(file, &doc, "canary-planetary-reachable");
+    require(file, &doc, "check-canary");
+}
+
+#[test]
 fn adr_conventions_present() {
     let f0 = "docs/architecture/adr/0000-template.md";
     let t = read(f0);

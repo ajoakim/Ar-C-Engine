@@ -34,6 +34,10 @@ Enforced by `cargo xtask check-deps`; the IDs below are the exact rule IDs it re
 
 `wgpu` is allowed only in `engine-render-wgpu`, and `winit` only in `engine-platform`. `gltf` is allowed only in `conventional-3d`, and `image` only in `conventional-3d` and `gltf` (ADR-0007). This is enforced directly by `cargo xtask check-deps` (declared dependencies) and transitively by cargo-deny `[bans]` `wrappers` (`deny.toml`).
 
+## Canary (PLAN-01)
+
+`cargo xtask check-canary` resolves the full (transitive) dependency graph of `conventional-3d` (normal, dev and build edges) and reports rule `canary-planetary-reachable` if any package named `planetary-*` or located under `extensions/planetary/` is reachable. The negative fixture `xtask/fixtures/canary-leak` (a transitive-only leak via `engine-sdk`) must fail. CI additionally deletes `extensions/planetary` and builds, tests and runs the app headless (ADR-0007).
+
 ## How to add a crate
 
 1. Add the member to the root `Cargo.toml`.
