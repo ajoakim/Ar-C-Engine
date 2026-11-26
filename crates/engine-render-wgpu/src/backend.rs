@@ -4,14 +4,15 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use engine_render::{
-    BufferDesc, BufferId, FramePacket, PipelineDesc, PipelineId, RenderBackend, RenderError,
-    RenderTarget, ResourceTable,
+    BufferDesc, BufferId, BufferUsage, FramePacket, PipelineDesc, PipelineId, RenderBackend,
+    RenderError, RenderTarget, ResourceTable, TextureDesc, TextureId,
 };
 use wgpu::util::DeviceExt;
 
 use crate::pipeline::{
-    DEPTH_FORMAT, DRAW_UNIFORM_STRIDE, MVP_BYTES, create_bind_group_layout, create_render_pipeline,
-    draw_uniform_offset, uniform_buffer_size,
+    BindGroupLayouts, DEPTH_FORMAT, DRAW_UNIFORM_BYTES, DRAW_UNIFORM_STRIDE, DrawUniform,
+    FRAME_UNIFORM_BYTES, FrameUniform, create_bind_group_layouts, create_render_pipeline,
+    draw_uniform_offset, uniform_buffer_size, uses_texture,
 };
 use crate::target::Target;
 
@@ -20,6 +21,68 @@ fn backend_err(e: impl std::fmt::Display) -> RenderError {
 }
 
 type TexView = (wgpu::Texture, wgpu::TextureView);
+
+struct GpuTexture {
+    texture: wgpu::Texture,
+    bind_group: wgpu::BindGroup,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn upload_texture(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    layout: &wgpu::BindGroupLayout,
+    sampler: &wgpu::Sampler,
+    label: &str,
+    width: u32,
+    height: u32,
+    data: &[u8],
+) -> GpuTexture {
+    let extent = wgpu::Extent3d {
+        width,
+        height,
+        depth_or_array_layers: 1,
+    };
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some(label),
+        size: extent,
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8UnormSrgb,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    queue.write_texture(
+        texture.as_image_copy(),
+        data,
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(4 * width),
+            rows_per_image: Some(height),
+        },
+        extent,
+    );
+    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some(label),
+        layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(&view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::Sampler(sampler),
+            },
+        ],
+    });
+    GpuTexture {
+        texture,
+        bind_group,
+    }
+}
 
 /// wgpu-backed renderer. Its public API exposes no wgpu types.
 pub struct WgpuBackend {
@@ -36,10 +99,15 @@ pub struct WgpuBackend {
     size: (u32, u32),
     table: ResourceTable,
     buffers: HashMap<BufferId, wgpu::Buffer>,
-    pipelines: HashMap<PipelineId, wgpu::RenderPipeline>,
-    bind_group_layout: wgpu::BindGroupLayout,
+    pipelines: HashMap<PipelineId, (wgpu::RenderPipeline, bool)>,
+    layouts: BindGroupLayouts,
     uniform_buffer: wgpu::Buffer,
-    bind_group: wgpu::BindGroup,
+    frame_buffer: wgpu::Buffer,
+    frame_bind_group: wgpu::BindGroup,
+    draw_bind_group: wgpu::BindGroup,
+    sampler: wgpu::Sampler,
+    textures: HashMap<TextureId, GpuTexture>,
+    default_texture: GpuTexture,
 }
 
 impl WgpuBackend {
@@ -142,25 +210,58 @@ impl WgpuBackend {
                 "device uniform offset alignment exceeds draw uniform stride".into(),
             ));
         }
-        let bind_group_layout = create_bind_group_layout(&device);
+        let layouts = create_bind_group_layouts(&device);
         let uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("draw-uniforms"),
             size: uniform_buffer_size(),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let draw_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("draw-uniform-group"),
-            layout: &bind_group_layout,
+            layout: &layouts.draw,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
                 resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
                     buffer: &uniform_buffer,
                     offset: 0,
-                    size: wgpu::BufferSize::new(MVP_BYTES),
+                    size: wgpu::BufferSize::new(DRAW_UNIFORM_BYTES),
                 }),
             }],
         });
+        let frame_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("frame-uniform"),
+            size: FRAME_UNIFORM_BYTES,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let frame_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("frame-uniform-group"),
+            layout: &layouts.frame,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: frame_buffer.as_entire_binding(),
+            }],
+        });
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("base-sampler"),
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::MipmapFilterMode::Nearest,
+            address_mode_u: wgpu::AddressMode::Repeat,
+            address_mode_v: wgpu::AddressMode::Repeat,
+            ..Default::default()
+        });
+        let default_texture = upload_texture(
+            &device,
+            &queue,
+            &layouts.texture,
+            &sampler,
+            "default-white",
+            1,
+            1,
+            &[255, 255, 255, 255],
+        );
         Ok(Self {
             instance,
             target,
@@ -176,9 +277,14 @@ impl WgpuBackend {
             table: ResourceTable::new(),
             buffers: HashMap::new(),
             pipelines: HashMap::new(),
-            bind_group_layout,
+            layouts,
             uniform_buffer,
-            bind_group,
+            frame_buffer,
+            frame_bind_group,
+            draw_bind_group,
+            sampler,
+            textures: HashMap::new(),
+            default_texture,
         })
     }
 
@@ -186,6 +292,70 @@ impl WgpuBackend {
     pub fn adapter_summary(&self) -> String {
         let info = self.adapter.get_info();
         format!("{} ({:?})", info.name, info.backend)
+    }
+
+    /// Read the offscreen color target back as tightly packed RGBA8 (sRGB-encoded), row 0 = top.
+    pub fn read_offscreen_rgba8(&self) -> Result<Vec<u8>, RenderError> {
+        let (w, h) = self.size;
+        let (texture, _) = match &self.offscreen {
+            Some(t) if w > 0 && h > 0 => t,
+            _ => {
+                return Err(RenderError::Backend(
+                    "readback requires an offscreen backend".into(),
+                ));
+            }
+        };
+        let unpadded = 4 * w;
+        let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+        let padded = unpadded.div_ceil(align) * align;
+        let staging = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("readback"),
+            size: u64::from(padded) * u64::from(h),
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("readback"),
+            });
+        encoder.copy_texture_to_buffer(
+            texture.as_image_copy(),
+            wgpu::TexelCopyBufferInfo {
+                buffer: &staging,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(padded),
+                    rows_per_image: Some(h),
+                },
+            },
+            wgpu::Extent3d {
+                width: w,
+                height: h,
+                depth_or_array_layers: 1,
+            },
+        );
+        self.queue.submit(Some(encoder.finish()));
+        let (tx, rx) = std::sync::mpsc::channel();
+        staging.slice(..).map_async(wgpu::MapMode::Read, move |r| {
+            let _ = tx.send(r);
+        });
+        self.device
+            .poll(wgpu::PollType::Wait {
+                submission_index: None,
+                timeout: Some(std::time::Duration::from_secs(10)),
+            })
+            .map_err(backend_err)?;
+        rx.recv().map_err(backend_err)?.map_err(backend_err)?;
+        let mut out = Vec::with_capacity(unpadded as usize * h as usize);
+        {
+            let view = staging.slice(..).get_mapped_range().map_err(backend_err)?;
+            for row in view.chunks(padded as usize).take(h as usize) {
+                out.extend_from_slice(&row[..unpadded as usize]);
+            }
+        }
+        staging.unmap();
+        Ok(out)
     }
 
     fn make_texture(
@@ -255,14 +425,18 @@ impl WgpuBackend {
         color_view: &wgpu::TextureView,
     ) -> Result<(), RenderError> {
         let mut draw_index = 0usize;
+        self.queue.write_buffer(
+            &self.frame_buffer,
+            0,
+            bytemuck::bytes_of(&FrameUniform::from_light(&packet.light)),
+        );
         // Upload all per-draw uniforms first (bounded by validate_packet).
         for pass in &packet.passes {
             for d in &pass.draws {
-                let cols = d.mvp.to_cols_array();
                 self.queue.write_buffer(
                     &self.uniform_buffer,
                     draw_uniform_offset(draw_index),
-                    bytemuck::cast_slice(&cols),
+                    bytemuck::bytes_of(&DrawUniform::from_draw(d)),
                 );
                 draw_index += 1;
             }
@@ -316,8 +490,9 @@ impl WgpuBackend {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
+            rp.set_bind_group(0, &self.frame_bind_group, &[]);
             for d in &pass.draws {
-                let pipeline = self
+                let (pipeline, textured) = self
                     .pipelines
                     .get(&d.pipeline)
                     .ok_or_else(|| RenderError::Backend("pipeline missing".into()))?;
@@ -328,9 +503,32 @@ impl WgpuBackend {
                 let offset = u32::try_from(draw_uniform_offset(index))
                     .map_err(|_| RenderError::Backend("uniform offset overflow".into()))?;
                 rp.set_pipeline(pipeline);
-                rp.set_bind_group(0, &self.bind_group, &[offset]);
+                rp.set_bind_group(1, &self.draw_bind_group, &[offset]);
+                if *textured {
+                    let bg = match d.texture {
+                        Some(t) => {
+                            &self
+                                .textures
+                                .get(&t)
+                                .ok_or_else(|| RenderError::Backend("texture missing".into()))?
+                                .bind_group
+                        }
+                        None => &self.default_texture.bind_group,
+                    };
+                    rp.set_bind_group(2, bg, &[]);
+                }
                 rp.set_vertex_buffer(0, buffer.slice(..));
-                rp.draw(0..d.mesh.vertex_count, 0..1);
+                match d.mesh.index {
+                    Some(ix) => {
+                        let ib = self
+                            .buffers
+                            .get(&ix.buffer)
+                            .ok_or_else(|| RenderError::Backend("index buffer missing".into()))?;
+                        rp.set_index_buffer(ib.slice(..), wgpu::IndexFormat::Uint32);
+                        rp.draw_indexed(0..ix.count, 0, 0..1);
+                    }
+                    None => rp.draw(0..d.mesh.vertex_count, 0..1),
+                }
                 index += 1;
             }
         }
@@ -341,13 +539,19 @@ impl WgpuBackend {
 
 impl RenderBackend for WgpuBackend {
     fn create_buffer(&mut self, desc: &BufferDesc, data: &[u8]) -> Result<BufferId, RenderError> {
+        let usage = match desc.usage {
+            BufferUsage::Vertex => wgpu::BufferUsages::VERTEX,
+            BufferUsage::Index => wgpu::BufferUsages::INDEX,
+            #[allow(unreachable_patterns)]
+            _ => return Err(RenderError::Backend("unsupported buffer usage".into())),
+        };
         let id = self.table.alloc_buffer(desc, data)?;
         let buffer = self
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some(desc.label),
                 contents: data,
-                usage: wgpu::BufferUsages::VERTEX,
+                usage,
             });
         self.buffers.insert(id, buffer);
         Ok(id)
@@ -363,15 +567,44 @@ impl RenderBackend for WgpuBackend {
 
     fn create_pipeline(&mut self, desc: &PipelineDesc) -> Result<PipelineId, RenderError> {
         // Build the GPU pipeline first so a failure leaves no table entry.
-        let pipeline = create_render_pipeline(
-            &self.device,
-            desc,
-            self.color_format,
-            &self.bind_group_layout,
-        )?;
+        let pipeline =
+            create_render_pipeline(&self.device, desc, self.color_format, &self.layouts)?;
         let id = self.table.alloc_pipeline(desc)?;
-        self.pipelines.insert(id, pipeline);
+        self.pipelines
+            .insert(id, (pipeline, uses_texture(desc.shader)));
         Ok(id)
+    }
+
+    fn create_texture(
+        &mut self,
+        desc: &TextureDesc,
+        rgba8: &[u8],
+    ) -> Result<TextureId, RenderError> {
+        let max = self.device.limits().max_texture_dimension_2d;
+        if desc.width > max || desc.height > max {
+            return Err(RenderError::InvalidTexture("texture exceeds device limit"));
+        }
+        let id = self.table.alloc_texture(desc, rgba8)?;
+        let tex = upload_texture(
+            &self.device,
+            &self.queue,
+            &self.layouts.texture,
+            &self.sampler,
+            desc.label,
+            desc.width,
+            desc.height,
+            rgba8,
+        );
+        self.textures.insert(id, tex);
+        Ok(id)
+    }
+
+    fn destroy_texture(&mut self, id: TextureId) -> Result<(), RenderError> {
+        self.table.remove_texture(id)?;
+        if let Some(t) = self.textures.remove(&id) {
+            t.texture.destroy();
+        }
+        Ok(())
     }
 
     fn resize(&mut self, width: u32, height: u32) {

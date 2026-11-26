@@ -551,6 +551,7 @@ dependencies = [
  "bytemuck",
  "engine-core",
  "engine-render",
+ "glam",
  "pollster",
  "raw-window-handle",
  "tracing",
