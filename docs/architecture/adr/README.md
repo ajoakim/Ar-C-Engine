@@ -14,6 +14,6 @@ To add an ADR, copy `0000-template.md` to the next free number (4-digit zero-pad
 | [0008](0008-deterministic-streaming-and-procedural-generation.md) | Generic Streaming and Deterministic Procedural Generation | accepted |
 | [0009](0009-sdk-per-frame-gpu-hook.md) | SDK Per-Frame GPU Hook and Mesh Destruction | accepted |
 | [0010](0010-terrain-lod-skirts-and-shared-border-sampling.md) | Terrain LOD - Skirts, Shared-Border Sampling and 2:1 Balance | accepted (selection superseded by 0012) |
-| [0011](0011-hex-grid-planet-topology.md) | Hex-Grid Planet Topology (Aperture-4 Half-Cell Hierarchy) | proposed |
+| [0011](0011-hex-grid-planet-topology.md) | Hex-Grid Planet Topology (Aperture-4 Half-Cell Hierarchy) | accepted |
 | [0012](0012-terrain-lod-selection-tight-bounds-culling-budgets.md) | Terrain LOD Selection - Tight Bounds, Culling and Budgets | accepted |
 | [0013](0013-shared-index-buffers-and-index-range-draws.md) | Shared Index Buffers and Index-Range Draws | accepted |

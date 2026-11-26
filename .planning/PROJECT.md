@@ -68,6 +68,7 @@ This project starts from a single source document: `HLD.md` (v2.0, ~2,257 lines)
 | Model profile: Balanced (Sonnet) | Good quality/cost ratio for most agents | — Pending |
 | Planet topology: H3-inspired hex grid (half-cell, 4-children nested scheme) instead of cube-sphere; real H3 rejected (non-nesting children leave ~7% gaps; needs trig) | User's original inspiration was Uber H3 (hex gives way to its parts on descent, aggregates on ascent). Research (HEX-TOPOLOGY.md) found a nested half-cell scheme that fits ADR-0008 exact arithmetic; cube-sphere kept behind a `Topology` trait as oracle/fallback; sphere spikes with a go/no-go gate before the full build; Nanite ideas borrowed (tight bounds, error rule, culling) but no cluster DAG yet. Decided 2026-11-25 after the Phase 7 flight found detail not streaming in | — Pending (Phase 7.1) |
 | Rendering API, ECS, spatial backends, planet LOD/transition technique | Deferred — must be decided via early P0 prototyping/benchmarking per HLD §23 | — Pending |
+| Hex planet topology: aperture-4 half-cell hierarchy on an icosahedron, gnomonic exact-op projection, `Topology` trait with cube-sphere as oracle (ADR-0011) | Hex cells give the visible LOD unit without H3 gaps or trigonometry in the deterministic path; proven by coverage and seam proofs and the full scripted descent at real defaults | Accepted (Phase 7.1) |
 
 ## Evolution
 

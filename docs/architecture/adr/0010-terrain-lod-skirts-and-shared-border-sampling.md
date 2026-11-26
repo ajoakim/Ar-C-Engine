@@ -64,3 +64,7 @@ Final tunables: tau = 2 px (escalates up to 4 steps of x1.5 during the descent),
 ## Amendment (Phase 7.1)
 
 The following parts of this ADR are superseded by [ADR-0012](0012-terrain-lod-selection-tight-bounds-culling-budgets.md): the leaf cap 700 with `tau *= 1.5` escalation (escalation is removed; budgets are enforced by trimming), the demo max level 19 (default is now 16), the "no frustum or horizon culling" limitation, and the relief-inflated bounds consequence (bounds are now tight and measured). The crack-free technique (skirts, shared-border sampling, 2:1 balance, effective cut) is unchanged. The evidence below was gathered with the Phase 7 parameters; current descent evidence is in ADR-0012.
+
+## Amendment (Phase 7.1, hex)
+
+The technique is unchanged and generalised to the hex topology of [ADR-0011](0011-hex-grid-planet-topology.md): skirts and shared-border sampling apply to the six (five for pentagons) triangular sectors of a hex cell, half cells get diagonal skirts along the cut, and a coarse hex edge equals the fine edge-child diagonal (N+1 versus 2N+1 samples, even fine samples identical). The 2:1 balance becomes a level-difference-1 balance on the hex hierarchy (parents-only closure). Hex adds a coverage proof (every atom of the cut covered exactly once on 2,519,040 atoms, max jump 1) and a seam proof (6,617 to 10,445 junctions, 0 skirt violations, max gap/skirt 0.0369, negative control detected on all 83,560 odd vertices; plan 07.1-15). The cube-sphere numbers above are unchanged.

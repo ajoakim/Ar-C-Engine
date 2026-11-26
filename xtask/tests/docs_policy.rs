@@ -173,6 +173,22 @@ fn adr_0010_lod_technique_present() {
 }
 
 #[test]
+fn adr_0011_hex_topology_present() {
+    let f = "docs/architecture/adr/0011-hex-grid-planet-topology.md";
+    let t = read(f);
+    for lit in [
+        "Status: accepted",
+        "half-cell",
+        "pentagon",
+        "gnomonic",
+        "Topology",
+        "## Evidence",
+    ] {
+        require(f, &t, lit);
+    }
+}
+
+#[test]
 fn adr_0012_lod_selection_present() {
     let f = "docs/architecture/adr/0012-terrain-lod-selection-tight-bounds-culling-budgets.md";
     let t = read(f);

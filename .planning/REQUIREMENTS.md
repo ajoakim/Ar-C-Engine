@@ -53,9 +53,9 @@
 ### Planetary Extension
 
 - [x] **PLAN-01**: Planetary code lives only in extension crates; the conventional app builds and runs with those crates absent
-- [ ] **PLAN-02**: Planet surface is represented as a cube-sphere with stable packed patch IDs and a tested face-adjacency table (cube-sphere implementation built in Phase 7; generalized behind the `Topology` trait in Phase 7.1)
-- [ ] **PLAN-03**: Planet patches form a quadtree with 2:1 balance and screen-space-error LOD selection with hysteresis (quadtree implementation built in Phase 7; Phase 7.1 adds tight bounds, culling and a node budget)
-- [ ] **PLAN-04**: Terrain LOD transitions are crack-free, including across cube-face edges and corners
+- [ ] **PLAN-02**: Planet surface is represented as an icosahedral hexagonal cell hierarchy (aperture 4, 12 pentagons) with stable packed cell IDs and a tested neighbour table; the cube-sphere is retained as the reference topology behind a `Topology` trait (Phase 7.1, ADR-0011)
+- [ ] **PLAN-03**: Planet cells form a hierarchy with level-difference-1 balance and screen-space-error LOD selection with hysteresis, tight bounds and horizon/frustum culling (cube quadtree built in Phase 7; hex hierarchy in Phase 7.1)
+- [ ] **PLAN-04**: Terrain LOD transitions are crack-free, including across icosahedron edges, vertices and pentagons, and across half-cell borders (cube-face edges and corners for the reference topology)
 - [ ] **PLAN-05**: Terrain is generated from layered planet-space generators so patch borders agree
 - [ ] **PLAN-06**: User can navigate with a planetary camera from orbit to surface
 - [ ] **PLAN-07**: A scripted orbit-to-surface descent holds the target frame-time budget without stalls
