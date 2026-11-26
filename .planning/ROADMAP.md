@@ -15,7 +15,7 @@ Build a small, stable Rust engine core and validate it with two reference apps. 
  (completed 2026-11-26)
 - [x] **Phase 5: Conventional Reference App (Canary)** - Lit meshes, glTF, basic-scene app on SDK only, building without planetary crates
  (completed 2026-11-26)
-- [ ] **Phase 6: Streaming & Procedural Framework** - Generic streaming with fallback, deterministic seeded generator layers
+- [x] **Phase 6: Streaming & Procedural Framework** - Generic streaming with fallback, deterministic seeded generator layers (completed 2026-11-26)
 - [ ] **Phase 7: Planetary Extension & Terrain LOD** - Cube-sphere, quadtree SSE LOD, crack-free transitions, planetary camera, planetary app
 - [ ] **Phase 8: Hardening & Decisions** - Atmosphere, debug overlays, regression/perf tests, docs, decision ADRs
 
@@ -133,12 +133,12 @@ Plans:
 **Plans**: 6 plans
 
 Plans:
-- [ ] 06-01-PLAN.md — Scaffold engine-streaming (tier 3) and engine-procedural (tier 1): workspace, Cargo.lock, xtask layers, dependency doc, SDK re-exports, ADR-0008
-- [ ] 06-02-PLAN.md — Procedural primitives: splitmix64/fnv1a64 KATs, layer seeds, exact-arithmetic value noise/fBm, banned-ops scan
-- [ ] 06-03-PLAN.md — Streaming pipeline: StreamKey/StreamRequest/StreamSource, reject-on-full priority queue, budget-freeing cancel, capped non-blocking update
-- [ ] 06-04-PLAN.md — Generator trait, LayerStack, canonical output hashing, golden hashes across 1/2/4/8 threads and layer compositions
-- [ ] 06-05-PLAN.md — Pinned coarse-ancestor fallback, resolve(), pin-aware LRU eviction, gate-driven slow-load and pin terminal-path tests
-- [ ] 06-06-PLAN.md — Streamed procedural determinism at 1 vs 4 JobSystem workers, goldens recorded in ADR-0008, full phase gate
+- [x] 06-01-PLAN.md — Scaffold engine-streaming (tier 3) and engine-procedural (tier 1): workspace, Cargo.lock, xtask layers, dependency doc, SDK re-exports, ADR-0008
+- [x] 06-02-PLAN.md — Procedural primitives: splitmix64/fnv1a64 KATs, layer seeds, exact-arithmetic value noise/fBm, banned-ops scan
+- [x] 06-03-PLAN.md — Streaming pipeline: StreamKey/StreamRequest/StreamSource, reject-on-full priority queue, budget-freeing cancel, capped non-blocking update
+- [x] 06-04-PLAN.md — Generator trait, LayerStack, canonical output hashing, golden hashes across 1/2/4/8 threads and layer compositions
+- [x] 06-05-PLAN.md — Pinned coarse-ancestor fallback, resolve(), pin-aware LRU eviction, gate-driven slow-load and pin terminal-path tests
+- [x] 06-06-PLAN.md — Streamed procedural determinism at 1 vs 4 JobSystem workers, goldens recorded in ADR-0008, full phase gate
 
 ### Phase 7: Planetary Extension & Terrain LOD
 **Goal**: A user can fly from orbit to the surface of a procedurally generated planet with crack-free, streamed terrain
@@ -178,6 +178,6 @@ Plans:
 | 3. Platform, Render Backend & Vertical Slice | 6/7 | Complete    | 2026-11-26 |
 | 4. World, Spatial & Assets | 8/8 | Complete    | 2026-11-26 |
 | 5. Conventional Reference App | 10/10 | Complete    | 2026-11-26 |
-| 6. Streaming & Procedural Framework | 0/TBD | Not started | - |
+| 6. Streaming & Procedural Framework | 6/6 | Complete    | 2026-11-26 |
 | 7. Planetary Extension & Terrain LOD | 0/TBD | Not started | - |
 | 8. Hardening & Decisions | 0/TBD | Not started | - |

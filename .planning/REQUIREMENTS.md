@@ -45,10 +45,10 @@
 
 ### Streaming & Procedural Generation
 
-- [ ] **STRM-01**: Generic streaming requests carry key, priority, budget class, and cancellation token
-- [ ] **STRM-02**: Rendering never blocks on streaming; coarse parent data is used as fallback until refinement is resident
-- [ ] **PROC-01**: Developer can define deterministic, independently seeded generator layers as pure functions of stable ID and seed
-- [ ] **PROC-02**: Golden-hash tests confirm generation output is identical across thread counts and platforms
+- [x] **STRM-01**: Generic streaming requests carry key, priority, budget class, and cancellation token
+- [x] **STRM-02**: Rendering never blocks on streaming; coarse parent data is used as fallback until refinement is resident
+- [x] **PROC-01**: Developer can define deterministic, independently seeded generator layers as pure functions of stable ID and seed
+- [x] **PROC-02**: Golden-hash tests confirm generation output is identical across thread counts and platforms
 
 ### Planetary Extension
 
@@ -132,10 +132,10 @@
 | ASSET-01 | Phase 4 | Complete |
 | ASSET-02 | Phase 4 | Complete |
 | ASSET-03 | Phase 4 | Complete |
-| STRM-01 | Phase 6 | Pending |
-| STRM-02 | Phase 6 | Pending |
-| PROC-01 | Phase 6 | Pending |
-| PROC-02 | Phase 6 | Pending |
+| STRM-01 | Phase 6 | Complete |
+| STRM-02 | Phase 6 | Complete |
+| PROC-01 | Phase 6 | Complete |
+| PROC-02 | Phase 6 | Complete |
 | PLAN-01 | Phase 5 | Complete |
 | PLAN-02 | Phase 7 | Pending |
 | PLAN-03 | Phase 7 | Pending |
