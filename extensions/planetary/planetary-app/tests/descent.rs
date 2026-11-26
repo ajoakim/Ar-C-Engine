@@ -1,16 +1,16 @@
-//! PLAN-07: scripted orbit-to-surface descent and surface-to-orbit ascent at the REAL default
-//! terrain parameters (`TerrainConfig::default()`, max_level 16, 32 cells per edge), on a
-//! simulated clock (no wall-clock time).
+//! PLAN-07 / HEX-03: scripted orbit-to-surface descent and surface-to-orbit ascent at the REAL
+//! default parameters, for BOTH topologies, on a simulated clock (no wall-clock time).
 //!
-//! Every frame is driven with a constant `dt = 1/60`; all assertions are counted work, never
-//! durations.
+//! Hex (`AppSettings::default()`: N = 16, max_level 16, 8192 node visits, 900 pieces) is the
+//! subject; the cube-sphere (`AppSettings::cube_default()`, N = 32) is the oracle and keeps the
+//! original test names. Every frame is driven with a constant `dt = 1/60`; all assertions are
+//! counted work, never durations.
 
 use std::sync::OnceLock;
 
 use engine_sdk::{DVec3, Engine, EngineConfig, MAX_DRAWS_PER_FRAME, NullBackend, Runtime};
-use planetary_app::{AppSettings, DescentScript, PlanetaryApp};
-use planetary_core::lod::{is_partition, max_level_jump};
-use planetary_core::{Face, PatchId, locate};
+use planetary_app::{AppSettings, DescentScript, PlanetaryApp, TopologyKind};
+use planetary_core::hex::mesh::{vertex_count_hex, vertex_count_pentagon};
 use planetary_terrain::{DRAW_MARGIN, TerrainConfig, TerrainReport, cell_payload_estimate};
 
 /// Frames of a standard run: 8 s scripted path + 4 s hover at 60 Hz.
@@ -22,21 +22,44 @@ const WARM_UP: usize = 10;
 /// Frames after the descent ends within which drawn must equal wanted.
 const CONVERGE_WITHIN: u32 = 240;
 
+use TopologyKind::{Cube, Hex};
+
 /// Vertices of a cube patch: the (n+1)^2 grid plus four skirt rows of n+1.
 fn cube_vertex_count(n: u32) -> u32 {
     (n + 1) * (n + 1) + 4 * (n + 1)
 }
 
+/// Largest vertex count of one cell of the topology.
+fn max_vertex_count(kind: TopologyKind, n: u32) -> u32 {
+    match kind {
+        Cube => cube_vertex_count(n),
+        Hex => vertex_count_hex(n).max(vertex_count_pentagon(n)),
+    }
+}
+
+/// Vertex classes (shared index buffers) of the topology.
+fn vertex_classes(kind: TopologyKind) -> usize {
+    match kind {
+        Cube => 1,
+        Hex => 2,
+    }
+}
+
 struct FrameRecord {
     report: TerrainReport,
-    drawn: Vec<PatchId>,
-    wanted: Vec<PatchId>,
+    drawn: Vec<u64>,
+    wanted: Vec<u64>,
+    drawn_levels: Vec<u8>,
+    wanted_levels: Vec<u8>,
+    partition: bool,
+    cut_closed: bool,
     draws: usize,
     buffer_count: usize,
     held: usize,
     altitude: f64,
-    /// Direction of the point 10 m ahead of the eye.
-    look_dir: DVec3,
+    /// Level of the wanted / drawn cell at the point 10 m ahead of the eye.
+    look_wanted: Option<u8>,
+    look_drawn: Option<u8>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -45,17 +68,24 @@ enum Path {
     Ascent,
 }
 
-fn real_terrain() -> TerrainConfig {
-    TerrainConfig {
-        settle_each_frame: true,
-        ..TerrainConfig::default()
+fn settings_for(kind: TopologyKind) -> AppSettings {
+    match kind {
+        Hex => AppSettings::default(),
+        Cube => AppSettings::cube_default(),
     }
 }
 
-fn base_settings(path: Path) -> AppSettings {
+fn real_terrain(kind: TopologyKind) -> TerrainConfig {
+    TerrainConfig {
+        settle_each_frame: true,
+        ..settings_for(kind).terrain
+    }
+}
+
+fn base_settings(kind: TopologyKind, path: Path) -> AppSettings {
     let mut s = AppSettings {
-        terrain: real_terrain(),
-        ..Default::default()
+        terrain: real_terrain(kind),
+        ..settings_for(kind)
     };
     let r = s.terrain.terrain.radius;
     s.script = Some(match path {
@@ -65,10 +95,21 @@ fn base_settings(path: Path) -> AppSettings {
     s
 }
 
-fn run_path(path: Path, cfg_mut: impl Fn(&mut AppSettings), frames: u32) -> Vec<FrameRecord> {
-    let mut settings = base_settings(path);
+fn sorted(mut v: Vec<u64>) -> Vec<u64> {
+    v.sort_unstable();
+    v
+}
+
+fn run_path(
+    kind: TopologyKind,
+    path: Path,
+    cfg_mut: impl Fn(&mut AppSettings),
+    frames: u32,
+) -> Vec<FrameRecord> {
+    let mut settings = base_settings(kind, path);
     cfg_mut(&mut settings);
     let mut app = PlanetaryApp::new(settings).expect("app");
+    assert_eq!(app.topology_kind(), kind);
     let mut rt =
         Runtime::new(Engine::new(EngineConfig::default()), NullBackend::new()).expect("runtime");
     rt.setup(&mut app).expect("setup");
@@ -79,54 +120,49 @@ fn run_path(path: Path, cfg_mut: impl Fn(&mut AppSettings), frames: u32) -> Vec<
             .backend()
             .last_frame()
             .map_or(0, |f| f.passes.iter().map(|p| p.draws.len()).sum());
-        let altitude = app
-            .camera()
-            .altitude(&|d| app.terrain().surface_radius_at(d));
-        let ahead = app.camera().position() + app.camera().forward() * 10.0;
+        let altitude = app.camera().altitude(&|d| app.surface_radius_at(d));
+        let ahead: DVec3 = (app.camera().position() + app.camera().forward() * 10.0).normalize();
         out.push(FrameRecord {
             report: app.report().clone(),
-            drawn: app.terrain().drawn().to_vec(),
-            wanted: app.terrain().wanted_leaves().to_vec(),
+            drawn: sorted(app.drawn_raw()),
+            wanted: sorted(app.wanted_raw()),
+            drawn_levels: app.drawn_levels(),
+            wanted_levels: app.wanted_levels(),
+            partition: app.drawn_is_partition(),
+            cut_closed: app.cut_closed(),
             draws,
             buffer_count: rt.backend().buffer_count(),
-            held: app.terrain().held_mesh_count(),
+            held: app.held_mesh_count(),
             altitude,
-            look_dir: ahead.normalize(),
+            look_wanted: app.wanted_level_at(ahead),
+            look_drawn: app.piece_level_at(ahead),
         });
     }
     app.shutdown();
     out
 }
 
-fn run(cfg_mut: impl Fn(&mut AppSettings), frames: u32) -> Vec<FrameRecord> {
-    run_path(Path::Descent, cfg_mut, frames)
+fn run(kind: TopologyKind, cfg_mut: impl Fn(&mut AppSettings), frames: u32) -> Vec<FrameRecord> {
+    run_path(kind, Path::Descent, cfg_mut, frames)
 }
 
-/// The default descent run is deterministic in settle mode, so tests share one run.
-fn shared_descent() -> &'static [FrameRecord] {
-    static RUN: OnceLock<Vec<FrameRecord>> = OnceLock::new();
-    RUN.get_or_init(|| run(|_| {}, FRAMES))
+/// The default descent / ascent runs are deterministic in settle mode, so tests share one run
+/// per topology and path.
+fn shared(kind: TopologyKind, path: Path) -> &'static [FrameRecord] {
+    static HEX_DESCENT: OnceLock<Vec<FrameRecord>> = OnceLock::new();
+    static HEX_ASCENT: OnceLock<Vec<FrameRecord>> = OnceLock::new();
+    static CUBE_DESCENT: OnceLock<Vec<FrameRecord>> = OnceLock::new();
+    static CUBE_ASCENT: OnceLock<Vec<FrameRecord>> = OnceLock::new();
+    let cell = match (kind, path) {
+        (Hex, Path::Descent) => &HEX_DESCENT,
+        (Hex, Path::Ascent) => &HEX_ASCENT,
+        (Cube, Path::Descent) => &CUBE_DESCENT,
+        (Cube, Path::Ascent) => &CUBE_ASCENT,
+    };
+    cell.get_or_init(|| run_path(kind, path, |_| {}, FRAMES))
 }
 
-fn shared_ascent() -> &'static [FrameRecord] {
-    static RUN: OnceLock<Vec<FrameRecord>> = OnceLock::new();
-    RUN.get_or_init(|| run_path(Path::Ascent, |_| {}, FRAMES))
-}
-
-/// Level of the leaf in `set` that contains direction `d`, if any.
-fn leaf_level_at(set: &[PatchId], d: DVec3) -> Option<u8> {
-    set.iter()
-        .find(|p| locate(d, p.level()) == **p)
-        .map(|p| p.level())
-}
-
-fn sorted_raw(v: &[PatchId]) -> Vec<u64> {
-    let mut r: Vec<u64> = v.iter().map(|p| p.raw()).collect();
-    r.sort_unstable();
-    r
-}
-
-fn assert_caps(r: &FrameRecord, cfg: &TerrainConfig, i: usize) {
+fn assert_caps(kind: TopologyKind, r: &FrameRecord, cfg: &TerrainConfig, i: usize) {
     let rep = &r.report;
     assert!(
         rep.stream.started <= cfg.stream.max_starts_per_frame,
@@ -136,11 +172,16 @@ fn assert_caps(r: &FrameRecord, cfg: &TerrainConfig, i: usize) {
         rep.stream.completions_applied <= cfg.stream.max_completions_per_frame,
         "f{i} completions"
     );
-    assert!(rep.stream.uploads <= cfg.uploads_per_frame, "f{i} uploads");
+    assert!(
+        rep.stream.uploads <= cfg.uploads_per_frame,
+        "f{i} uploads {} bytes {}",
+        rep.stream.uploads,
+        rep.stream.uploaded_bytes
+    );
     assert!(
         rep.stream.uploaded_bytes
             <= u64::from(cfg.uploads_per_frame)
-                * cell_payload_estimate(cube_vertex_count(cfg.cells_per_edge)),
+                * cell_payload_estimate(max_vertex_count(kind, cfg.cells_per_edge)),
         "f{i} uploaded_bytes"
     );
     assert!(
@@ -164,40 +205,52 @@ fn assert_caps(r: &FrameRecord, cfg: &TerrainConfig, i: usize) {
     assert_eq!(rep.upload_rejects, 0, "f{i} upload rejects");
 }
 
-#[test]
-fn real_defaults_are_used() {
-    let cfg = base_settings(Path::Descent).terrain;
+fn real_defaults_are_used_for(kind: TopologyKind) {
+    let s = base_settings(kind, Path::Descent);
+    assert_eq!(s.topology, kind);
+    let cfg = s.terrain;
+    let defaults = TerrainConfig::default();
+    let expected_n = match kind {
+        Hex => 16,
+        Cube => 32,
+    };
     assert_eq!(
         cfg,
         TerrainConfig {
             settle_each_frame: true,
-            ..TerrainConfig::default()
+            cells_per_edge: expected_n,
+            ..defaults.clone()
         }
     );
     assert_eq!(cfg.lod.max_level, 16);
-    assert_eq!(cfg.cells_per_edge, 32);
+    assert_eq!(cfg.lod.max_nodes_visited, 8192);
+    assert_eq!(cfg.lod.max_leaves, 900);
+    assert_eq!(cfg.cells_per_edge, expected_n);
+    if kind == Hex {
+        assert_eq!(AppSettings::default().topology, Hex);
+    }
 }
 
-#[test]
-fn descent_streams_detail_at_real_defaults() {
-    let recs = shared_descent();
+fn descent_streams_detail(kind: TopologyKind) {
+    let recs = shared(kind, Path::Descent);
     let found = recs
         .iter()
         .enumerate()
         .skip(DESCENT_END_FRAME as usize)
-        .find(|(_, r)| sorted_raw(&r.drawn) == sorted_raw(&r.wanted))
+        .find(|(_, r)| r.drawn == r.wanted)
         .map(|(i, _)| i);
     let f = found.expect("drawn never equalled wanted after the descent");
     println!(
-        "converged at frame {f} ({} frames after descent end, bound {CONVERGE_WITHIN})",
+        "{} converged at frame {f} ({} frames after descent end, bound {CONVERGE_WITHIN})",
+        kind.name(),
         f - DESCENT_END_FRAME as usize
     );
     assert!(f < (DESCENT_END_FRAME + CONVERGE_WITHIN) as usize);
 
     let last = &recs[f];
-    let lvl = leaf_level_at(&last.drawn, last.look_dir).expect("drawn leaf at look-at point");
-    println!("drawn leaf level at look-at point: {lvl}");
-    assert_eq!(lvl, 16, "look-at leaf did not reach max_level");
+    let lvl = last.look_drawn.expect("drawn piece at look-at point");
+    println!("{} drawn level at look-at point: {lvl}", kind.name());
+    assert_eq!(lvl, 16, "look-at piece did not reach max_level");
 
     let at_end = &recs[DESCENT_END_FRAME as usize - 1];
     assert!(
@@ -210,7 +263,7 @@ fn descent_streams_detail_at_real_defaults() {
     let mut prev = 0u8;
     for i in (0..DESCENT_END_FRAME as usize).step_by(60) {
         let r = &recs[i];
-        let l = leaf_level_at(&r.wanted, r.look_dir).expect("wanted leaf at look-at point");
+        let l = r.look_wanted.expect("wanted leaf at look-at point");
         assert!(
             l >= prev,
             "wanted level at look-at decreased {prev} -> {l} at f{i}"
@@ -219,15 +272,14 @@ fn descent_streams_detail_at_real_defaults() {
     }
 }
 
-#[test]
-fn descent_within_counted_caps() {
-    let recs = shared_descent();
-    let cfg = real_terrain();
+fn within_counted_caps(kind: TopologyKind) {
+    let recs = shared(kind, Path::Descent);
+    let cfg = real_terrain(kind);
     let (mut nodes, mut leaves, mut drawn, mut held, mut pending, mut culled) =
         (0u32, 0usize, 0usize, 0usize, 0usize, 0u32);
     let (mut started, mut uploads, mut items) = (0u32, 0u32, 0usize);
     for (i, r) in recs.iter().enumerate() {
-        assert_caps(r, &cfg, i);
+        assert_caps(kind, r, &cfg, i);
         let s = &r.report;
         nodes = nodes.max(s.select.nodes_visited);
         leaves = leaves.max(s.select.leaves);
@@ -240,52 +292,51 @@ fn descent_within_counted_caps() {
         items = items.max(s.draw_items);
     }
     println!(
-        "descent maxima over {} frames: nodes_visited={nodes} leaves={leaves} drawn={drawn} held={held} pending={pending} culled_draws={culled} draw_items={items} started={started} uploads={uploads}",
+        "{} descent maxima over {} frames: nodes_visited={nodes} leaves={leaves} drawn={drawn} held={held} pending={pending} culled_draws={culled} draw_items={items} started={started} uploads={uploads}",
+        kind.name(),
         recs.len()
     );
 }
 
-#[test]
-fn descent_crack_free_every_frame() {
-    let recs = shared_descent();
+fn cut_closed_every_frame(kind: TopologyKind) {
+    let recs = shared(kind, Path::Descent);
     for (i, r) in recs.iter().enumerate().skip(WARM_UP) {
         assert!(!r.drawn.is_empty(), "f{i} empty drawn set");
-        assert!(is_partition(&r.drawn), "f{i} not a partition");
+        assert!(r.partition, "f{i} not a partition");
+        assert!(r.cut_closed, "f{i} cut not closed");
         assert!(
             r.report.drawn_max_jump <= 1,
             "f{i} jump {}",
             r.report.drawn_max_jump
         );
-        assert!(max_level_jump(&r.drawn) <= 1, "f{i} balance");
     }
 }
 
-#[test]
-fn ascent_aggregates() {
-    let recs = shared_ascent();
-    let cfg = real_terrain();
+fn ascent_aggregates_for(kind: TopologyKind) {
+    let recs = shared(kind, Path::Ascent);
+    let cfg = real_terrain(kind);
     for (i, r) in recs.iter().enumerate() {
-        assert_caps(r, &cfg, i);
+        assert_caps(kind, r, &cfg, i);
         if i >= WARM_UP {
-            assert!(is_partition(&r.drawn), "f{i} not a partition");
-            assert!(max_level_jump(&r.drawn) <= 1, "f{i} balance");
+            assert!(r.partition, "f{i} not a partition");
+            assert!(r.report.drawn_max_jump <= 1, "f{i} balance");
         }
     }
     let last = recs.last().expect("frames");
-    let max_wanted = last.wanted.iter().map(|p| p.level()).max().unwrap_or(0);
-    let max_drawn = last.drawn.iter().map(|p| p.level()).max().unwrap_or(0);
+    let max_wanted = last.wanted_levels.iter().copied().max().unwrap_or(0);
+    let max_drawn = last.drawn_levels.iter().copied().max().unwrap_or(0);
     println!(
-        "ascent end: altitude={:.0} max wanted level={max_wanted} max drawn level={max_drawn} wanted={} drawn={}",
+        "{} ascent end: altitude={:.0} max wanted level={max_wanted} max drawn level={max_drawn} wanted={} drawn={}",
+        kind.name(),
         last.altitude,
         last.wanted.len(),
         last.drawn.len()
     );
     assert!(max_wanted <= 6, "max wanted level {max_wanted} at orbit");
-    assert_eq!(sorted_raw(&last.drawn), sorted_raw(&last.wanted));
+    assert_eq!(last.drawn, last.wanted);
 }
 
-#[test]
-fn descent_is_deterministic() {
+fn is_deterministic(kind: TopologyKind) {
     let key = |recs: &[FrameRecord]| -> Vec<(u32, u32, u32, Vec<u64>)> {
         recs.iter()
             .map(|r| {
@@ -293,75 +344,177 @@ fn descent_is_deterministic() {
                     r.report.stream.started,
                     r.report.stream.completions_applied,
                     r.report.stream.uploads,
-                    r.drawn.iter().map(|p| p.raw()).collect(),
+                    r.drawn.clone(),
                 )
             })
             .collect()
     };
-    let a = key(shared_descent());
-    let b = key(&run(|_| {}, FRAMES));
+    let a = key(shared(kind, Path::Descent));
+    let b = key(&run(kind, |_| {}, FRAMES));
     assert_eq!(a, b);
 }
 
-#[test]
-fn descent_degrades_with_one_start_per_frame() {
+fn degrades_with_one_start_per_frame_for(kind: TopologyKind) {
     let recs = run(
+        kind,
         |s| {
             s.terrain.stream.max_starts_per_frame = 1;
             s.terrain.stream.max_completions_per_frame = 1;
         },
         FRAMES,
     );
+    // With one start per frame every root (cube faces, hex roots) needs its own frame
+    // before the first complete cover can exist; roots are requested first, so the cover must
+    // exist within a few frames of the root count (measured: cube 5, hex 11), and from then on the cut never has a hole.
+    let cover_bound = match kind {
+        Cube => WARM_UP,
+        Hex => 16,
+    };
+    let mut covered_at: Option<usize> = None;
     for (i, r) in recs.iter().enumerate() {
         assert!(r.report.stream.started <= 1, "f{i} started");
-        if i >= WARM_UP {
+        if covered_at.is_none() && !r.drawn.is_empty() && r.partition {
+            covered_at = Some(i);
+        }
+        if covered_at.is_some() {
             assert!(!r.drawn.is_empty(), "f{i} empty drawn set");
-            assert!(is_partition(&r.drawn), "f{i} not a partition");
-            assert!(max_level_jump(&r.drawn) <= 1, "f{i} balance");
+            assert!(r.partition, "f{i} not a partition");
+            assert!(r.report.drawn_max_jump <= 1, "f{i} balance");
         }
     }
+    let at = covered_at.expect("a complete cover was never drawn");
+    println!("{} first complete cover at frame {at}", kind.name());
+    assert!(
+        at <= cover_bound,
+        "first cover at f{at}, bound {cover_bound}"
+    );
 }
 
-#[test]
-fn descent_no_gpu_leak() {
-    let base_patches = 6 * ((1usize << (2 * (3 + 1))) - 1) / 3 + 16;
-    let cfg = real_terrain();
-    for (i, r) in shared_descent().iter().enumerate() {
-        // One vertex buffer per held cell plus one shared index buffer (one cube vertex class).
-        assert_eq!(r.buffer_count, r.held + 1, "f{i} buffers");
+fn no_gpu_leak(kind: TopologyKind) {
+    let classes = vertex_classes(kind);
+    let base_patches = match kind {
+        Cube => 6 * ((1usize << (2 * (3 + 1))) - 1) / 3 + 16,
+        // Hex base levels hold fewer cells than the cube's; the cube bound is a safe upper bound.
+        Hex => 6 * ((1usize << (2 * (3 + 1))) - 1) / 3 + 16,
+    };
+    let cfg = real_terrain(kind);
+    for (i, r) in shared(kind, Path::Descent).iter().enumerate() {
+        // One vertex buffer per held cell plus one shared index buffer per vertex class.
+        assert_eq!(r.buffer_count, r.held + classes, "f{i} buffers");
         assert!(
             r.held <= base_patches + cfg.detail_budget_patches as usize,
             "f{i} held {}",
             r.held
         );
     }
-    let recs = run(|s| s.terrain.detail_budget_patches = 60, FRAMES);
+    let recs = run(kind, |s| s.terrain.detail_budget_patches = 60, FRAMES);
     let mut evicted = 0u64;
     for (i, r) in recs.iter().enumerate() {
-        assert_eq!(r.buffer_count, r.held + 1, "f{i} buffers (small budget)");
+        assert_eq!(
+            r.buffer_count,
+            r.held + classes,
+            "f{i} buffers (small budget)"
+        );
         assert!(r.held <= base_patches + 60, "f{i} held {}", r.held);
         evicted += r.report.stream.evicted as u64;
     }
-    println!("small-budget run: total evicted = {evicted}");
+    println!(
+        "{} small-budget run: total evicted = {evicted}",
+        kind.name()
+    );
     assert!(evicted > 0, "forced eviction never happened");
 }
 
-#[test]
-fn production_path_never_blocks() {
-    let recs = run(|s| s.terrain.settle_each_frame = false, FRAMES);
+fn production_path_never_blocks_for(kind: TopologyKind) {
+    let recs = run(kind, |s| s.terrain.settle_each_frame = false, FRAMES);
     assert_eq!(recs.len(), FRAMES as usize);
-    let cfg = TerrainConfig::default();
+    let cfg = settings_for(kind).terrain;
+    let mut covered = false;
     for (i, r) in recs.iter().enumerate() {
-        assert_caps(r, &cfg, i);
+        assert_caps(kind, r, &cfg, i);
         assert!(r.report.drawn_max_jump <= 1, "f{i} jump");
-        let mut faces: Vec<u8> = r.drawn.iter().map(|p| p.face().index()).collect();
-        faces.sort_unstable();
-        faces.dedup();
-        if faces.len() == Face::ALL.len() {
-            assert!(is_partition(&r.drawn), "f{i} not a partition");
-            assert!(max_level_jump(&r.drawn) <= 1, "f{i} balance");
+        // Once the whole planet is covered the cut stays an exact closed partition.
+        covered |= r.cut_closed && r.partition;
+        if covered {
+            assert!(r.cut_closed && r.partition, "f{i} cover lost");
         }
     }
     let last = recs.last().expect("frames");
     assert!(last.report.drawn_leaves > 0 || last.report.stream.pending > 0);
+}
+
+// Cube oracle: original names.
+#[test]
+fn real_defaults_are_used() {
+    real_defaults_are_used_for(Cube);
+}
+#[test]
+fn descent_streams_detail_at_real_defaults() {
+    descent_streams_detail(Cube);
+}
+#[test]
+fn descent_within_counted_caps() {
+    within_counted_caps(Cube);
+}
+#[test]
+fn descent_crack_free_every_frame() {
+    cut_closed_every_frame(Cube);
+}
+#[test]
+fn ascent_aggregates() {
+    ascent_aggregates_for(Cube);
+}
+#[test]
+fn descent_is_deterministic() {
+    is_deterministic(Cube);
+}
+#[test]
+fn descent_degrades_with_one_start_per_frame() {
+    degrades_with_one_start_per_frame_for(Cube);
+}
+#[test]
+fn descent_no_gpu_leak() {
+    no_gpu_leak(Cube);
+}
+#[test]
+fn production_path_never_blocks() {
+    production_path_never_blocks_for(Cube);
+}
+
+// Hex (default topology).
+#[test]
+fn hex_real_defaults_are_used() {
+    real_defaults_are_used_for(Hex);
+}
+#[test]
+fn hex_descent_streams_detail_at_real_defaults() {
+    descent_streams_detail(Hex);
+}
+#[test]
+fn hex_within_counted_caps() {
+    within_counted_caps(Hex);
+}
+#[test]
+fn hex_cut_closed_every_frame() {
+    cut_closed_every_frame(Hex);
+}
+#[test]
+fn hex_ascent_aggregates() {
+    ascent_aggregates_for(Hex);
+}
+#[test]
+fn hex_is_deterministic() {
+    is_deterministic(Hex);
+}
+#[test]
+fn hex_descent_degrades_with_one_start_per_frame() {
+    degrades_with_one_start_per_frame_for(Hex);
+}
+#[test]
+fn hex_no_gpu_leak() {
+    no_gpu_leak(Hex);
+}
+#[test]
+fn hex_production_path_never_blocks() {
+    production_path_never_blocks_for(Hex);
 }
