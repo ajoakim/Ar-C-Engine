@@ -22,7 +22,9 @@ pub use backend::{
 pub use camera::Camera;
 pub use error::RenderError;
 pub use glam::{Mat3, Mat4, Quat};
-pub use graph::{BACKBUFFER, CompiledGraph, DEPTH, GraphError, MAIN_PASS, PassDesc, RenderGraph};
+pub use graph::{
+    BACKBUFFER, CompiledGraph, DEPTH, GraphError, MAIN_PASS, PassDesc, PipelineSet, RenderGraph,
+};
 pub use handles::{BufferId, MeshHandle, MeshIndices, PipelineId, TextureId};
 pub use material::{
     DirectionalLight, MAX_MATERIALS, MAX_TEXTURE_DIMENSION, Material, MaterialId, MaterialTable,

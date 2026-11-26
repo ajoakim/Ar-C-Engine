@@ -1,6 +1,6 @@
 //! Minimal render graph: named passes with declared reads/writes, topologically sorted.
 
-use crate::backend::{DrawCommand, FramePacket, PassPacket, REVERSE_Z_CLEAR_DEPTH};
+use crate::backend::{DrawCommand, FramePacket, PassPacket, REVERSE_Z_CLEAR_DEPTH, VertexLayout};
 use crate::error::RenderError;
 use crate::handles::{PipelineId, TextureId};
 use crate::scene::RenderScene;
@@ -167,6 +167,39 @@ impl RenderGraph {
     }
 }
 
+/// Maps a vertex layout to the pipeline that draws it.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PipelineSet {
+    entries: Vec<(VertexLayout, PipelineId)>,
+}
+
+impl PipelineSet {
+    /// Empty set.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Register a pipeline for a layout, replacing any existing entry.
+    pub fn insert(&mut self, layout: VertexLayout, pipeline: PipelineId) {
+        if let Some(e) = self.entries.iter_mut().find(|e| e.0 == layout) {
+            e.1 = pipeline;
+        } else {
+            self.entries.push((layout, pipeline));
+        }
+    }
+
+    /// Pipeline for a layout.
+    pub fn get(&self, layout: VertexLayout) -> Result<PipelineId, RenderError> {
+        self.entries
+            .iter()
+            .find(|e| e.0 == layout)
+            .map(|e| e.1)
+            .ok_or(RenderError::MissingPipeline(
+                "no pipeline registered for vertex layout",
+            ))
+    }
+}
+
 /// A sorted, validated graph.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CompiledGraph {
@@ -183,7 +216,7 @@ impl CompiledGraph {
     pub fn build_frame_packet(
         &self,
         scene: &RenderScene,
-        pipeline: PipelineId,
+        pipelines: &PipelineSet,
         clear_color: [f32; 4],
     ) -> Result<FramePacket, RenderError> {
         let mut passes = Vec::with_capacity(self.ordered.len());
@@ -198,25 +231,33 @@ impl CompiledGraph {
                 .iter()
                 .any(|w| w == DEPTH)
                 .then_some(TextureId::DEPTH);
+            let draws = scene
+                .draws
+                .iter()
+                .map(|d| {
+                    Ok(DrawCommand {
+                        pipeline: pipelines.get(d.mesh.layout)?,
+                        mesh: d.mesh,
+                        mvp: scene.view_proj * d.model,
+                        model: d.model,
+                        normal: d.normal,
+                        base_color: d.material.base_color,
+                        texture: d.material.base_color_texture,
+                    })
+                })
+                .collect::<Result<Vec<_>, RenderError>>()?;
             passes.push(PassPacket {
                 name: p.name.clone(),
                 color_target: TextureId::BACKBUFFER,
                 depth_target,
                 clear_color,
                 clear_depth: REVERSE_Z_CLEAR_DEPTH,
-                draws: scene
-                    .draws
-                    .iter()
-                    .map(|d| DrawCommand {
-                        pipeline,
-                        mesh: d.mesh,
-                        mvp: scene.view_proj * d.model,
-                    })
-                    .collect(),
+                draws,
             });
         }
         Ok(FramePacket {
             frame_index: scene.frame_index,
+            light: scene.light,
             passes,
         })
     }
@@ -231,10 +272,11 @@ mod tests {
     };
     use crate::camera::Camera;
     use crate::handles::{BufferId, MeshHandle};
+    use crate::material::{DirectionalLight, Material, MaterialTable};
     use crate::null::NullBackend;
     use crate::scene::{DrawItem, RenderItem, extract};
     use engine_math::{FrameRegistry, WorldPos};
-    use glam::Mat4;
+    use glam::{Mat3, Mat4};
 
     fn names(g: &RenderGraph) -> Vec<String> {
         g.compile()
@@ -328,22 +370,29 @@ mod tests {
         let scene = RenderScene {
             frame_index: 7,
             view_proj: v,
+            light: DirectionalLight::default(),
             draws: vec![
                 DrawItem {
                     mesh: handle(),
                     model: m1,
+                    normal: Mat3::IDENTITY,
+                    material: Material::default(),
                 },
                 DrawItem {
                     mesh: handle(),
                     model: m2,
+                    normal: Mat3::IDENTITY,
+                    material: Material::default(),
                 },
             ],
         };
         let pipe = PipelineId::from_raw(3);
+        let mut set = PipelineSet::new();
+        set.insert(VertexLayout::PosColor, pipe);
         let pk = RenderGraph::main_p0()
             .compile()
             .unwrap()
-            .build_frame_packet(&scene, pipe, [0.1, 0.2, 0.3, 1.0])
+            .build_frame_packet(&scene, &set, [0.1, 0.2, 0.3, 1.0])
             .unwrap();
         assert_eq!(pk.frame_index, 7);
         assert_eq!(pk.passes.len(), 1);
@@ -363,7 +412,7 @@ mod tests {
         g.add_pass("t", &[], &["tmp"]).unwrap();
         let r = g.compile().unwrap().build_frame_packet(
             &RenderScene::default(),
-            PipelineId::from_raw(1),
+            &PipelineSet::new(),
             [0.0; 4],
         );
         assert_eq!(
@@ -392,19 +441,110 @@ mod tests {
                 vertex_layout: VertexLayout::PosColor,
             })
             .unwrap();
+        let mut set = PipelineSet::new();
+        set.insert(VertexLayout::PosColor, pipe);
         let f = FrameRegistry::new();
         let cam = Camera::new(WorldPos::from_xyz(f.root(), 0.0, 0.0, 0.0).unwrap());
         let item = RenderItem::new(
             MeshHandle::new(VertexLayout::PosColor, buf, 3),
             WorldPos::from_xyz(f.root(), 0.0, 0.0, -5.0).unwrap(),
         );
-        let scene = extract(&f, &cam, 16.0 / 9.0, &[item], 0).unwrap();
+        let scene = extract(
+            &f,
+            &cam,
+            16.0 / 9.0,
+            &[item],
+            0,
+            &MaterialTable::new(),
+            &DirectionalLight::default(),
+        )
+        .unwrap();
         let pk = RenderGraph::main_p0()
             .compile()
             .unwrap()
-            .build_frame_packet(&scene, pipe, [0.0, 0.0, 0.0, 1.0])
+            .build_frame_packet(&scene, &set, [0.0, 0.0, 0.0, 1.0])
             .unwrap();
         be.submit(&pk).unwrap();
         assert_eq!(be.frames().len(), 1);
+    }
+
+    #[test]
+    fn pipeline_set_lookup() {
+        let mut s = PipelineSet::new();
+        assert!(matches!(
+            s.get(VertexLayout::PosColor),
+            Err(RenderError::MissingPipeline(_))
+        ));
+        s.insert(VertexLayout::PosColor, PipelineId::from_raw(1));
+        s.insert(VertexLayout::PosNormalUv, PipelineId::from_raw(2));
+        assert_eq!(
+            s.get(VertexLayout::PosNormalUv).unwrap(),
+            PipelineId::from_raw(2)
+        );
+        s.insert(VertexLayout::PosNormalUv, PipelineId::from_raw(5));
+        assert_eq!(
+            s.get(VertexLayout::PosNormalUv).unwrap(),
+            PipelineId::from_raw(5)
+        );
+    }
+
+    #[test]
+    fn packet_per_layout_pipeline() {
+        let (p1, p2) = (PipelineId::from_raw(1), PipelineId::from_raw(2));
+        let mut set = PipelineSet::new();
+        set.insert(VertexLayout::PosColor, p1);
+        set.insert(VertexLayout::PosNormalUv, p2);
+        let tex = TextureId::from_raw(3);
+        let lit_mat = Material {
+            base_color: [0.5, 0.6, 0.7, 1.0],
+            base_color_texture: Some(tex),
+        };
+        let model = Mat4::from_translation(glam::Vec3::new(1.0, 0.0, 0.0));
+        let light = DirectionalLight {
+            intensity: 4.0,
+            ..DirectionalLight::default()
+        };
+        let scene = RenderScene {
+            frame_index: 1,
+            view_proj: Mat4::from_scale(glam::Vec3::splat(2.0)),
+            light,
+            draws: vec![
+                DrawItem {
+                    mesh: handle(),
+                    model: Mat4::IDENTITY,
+                    normal: Mat3::IDENTITY,
+                    material: Material::default(),
+                },
+                DrawItem {
+                    mesh: MeshHandle::new(VertexLayout::PosNormalUv, BufferId::from_raw(2), 4),
+                    model,
+                    normal: Mat3::from_diagonal(glam::Vec3::splat(0.5)),
+                    material: lit_mat,
+                },
+            ],
+        };
+        let pk = RenderGraph::main_p0()
+            .compile()
+            .unwrap()
+            .build_frame_packet(&scene, &set, [0.0; 4])
+            .unwrap();
+        assert_eq!(pk.light, light);
+        let d = &pk.passes[0].draws;
+        assert_eq!(d[0].pipeline, p1);
+        assert_eq!(d[1].pipeline, p2);
+        assert_eq!(d[1].texture, Some(tex));
+        assert_eq!(d[1].base_color, [0.5, 0.6, 0.7, 1.0]);
+        assert_eq!(d[1].model, model);
+        assert_eq!(d[1].normal, scene.draws[1].normal);
+        assert_eq!(d[1].mvp, scene.view_proj * model);
+        assert_eq!(d[0].texture, None);
+
+        let mut only = PipelineSet::new();
+        only.insert(VertexLayout::PosColor, p1);
+        let r = RenderGraph::main_p0()
+            .compile()
+            .unwrap()
+            .build_frame_packet(&scene, &only, [0.0; 4]);
+        assert!(matches!(r, Err(RenderError::MissingPipeline(_))));
     }
 }

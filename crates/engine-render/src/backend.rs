@@ -4,7 +4,7 @@ use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 
 use crate::error::RenderError;
 use crate::handles::{BufferId, MeshHandle, PipelineId, TextureId};
-use crate::material::TextureDesc;
+use crate::material::{DirectionalLight, TextureDesc};
 
 /// Anything that exposes raw-window-handle 0.6 window and display handles.
 pub trait RenderTarget: HasWindowHandle + HasDisplayHandle + Send + Sync + 'static {}
@@ -168,6 +168,14 @@ pub struct DrawCommand {
     pub mesh: MeshHandle,
     /// Model-view-projection matrix.
     pub mvp: glam::Mat4,
+    /// Camera-relative model matrix.
+    pub model: glam::Mat4,
+    /// Normal matrix (inverse-transpose of the model's 3x3).
+    pub normal: glam::Mat3,
+    /// Linear RGBA base color factor.
+    pub base_color: [f32; 4],
+    /// Optional sampled base color texture (None = backend default white).
+    pub texture: Option<TextureId>,
 }
 
 /// One render pass.
@@ -192,6 +200,8 @@ pub struct PassPacket {
 pub struct FramePacket {
     /// Frame index.
     pub frame_index: u64,
+    /// Directional light in world axes.
+    pub light: DirectionalLight,
     /// Passes in order.
     pub passes: Vec<PassPacket>,
 }
