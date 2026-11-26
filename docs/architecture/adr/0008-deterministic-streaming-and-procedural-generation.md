@@ -40,4 +40,21 @@ Phase 6 delivers a generic streaming framework (keyed requests, budgets, cancell
 
 ## Evidence
 
-Tests in `crates/engine-procedural/tests/golden.rs`, `crates/engine-procedural/tests/banned_ops.rs`, `crates/engine-streaming/tests/{request,cancel,slow_load,pins_lru,procedural_stream}.rs`; pinned golden constants are listed here by plan 06-06 once recorded.
+Tests in `crates/engine-procedural/tests/golden.rs`, `crates/engine-procedural/tests/banned_ops.rs`, `crates/engine-streaming/tests/{request,cancel,slow_load,pins_lru,procedural_stream}.rs`.
+
+| Constant | Value | Asserted by |
+|----------|-------|-------------|
+| `GOLDEN_ALL` | `0x9c64_23c0_be89_8ef7` | `crates/engine-procedural/tests/golden.rs` (`golden_all_threads_and_orders`) |
+| `GOLDEN_BASE` | `0xaba8_2342_011c_3f1c` | `crates/engine-procedural/tests/golden.rs` (`golden_per_layer`) |
+| `GOLDEN_DETAIL` | `0xc388_4739_1ba9_cd5d` | `crates/engine-procedural/tests/golden.rs` (`golden_per_layer`) |
+| `GOLDEN_MASK` | `0xf500_77dd_f6ed_f6ff` | `crates/engine-procedural/tests/golden.rs` (`golden_per_layer`) |
+| `GOLDEN_STREAMED` | `0x43c8_6516_7d16_b0fe` | `crates/engine-streaming/tests/procedural_stream.rs` (`procedural_stream_golden`, 1 and 4 workers) |
+
+Known-answer tests: `splitmix64(0) = 0xe220a8397b1dcdaf`, `fnv1a64("a") = 0xaf63dc4c8601ec8c`, `layer_seed(0, "base", 1) = 0xf17409123f303493`.
+
+Computed on Windows x86_64 (rustc 1.99.0). Linux/macOS confirmation is pending the first hosted CI run (billing-blocked); on drift, fix the offending operation and keep the test strict. Linux and macOS compilation has been checked locally with `cargo check` cross-target only, which does not execute the goldens.
+
+### Limitations
+
+- `StreamManager::update` start path: if `make_room` returned `Err` while starting a request, the pin taken on the best resident ancestor was not released. Fixed in plan 06-06 by unpinning before returning the error. The request itself is still dropped from the queue on that path; `make_room` can only fail on a residency invariant violation, so this is not reachable in normal operation.
+
