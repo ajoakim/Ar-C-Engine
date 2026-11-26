@@ -460,7 +460,7 @@ impl WgpuBackend {
         self.queue.write_buffer(
             &self.frame_buffer,
             0,
-            bytemuck::bytes_of(&FrameUniform::from_light(&packet.light)),
+            bytemuck::bytes_of(&FrameUniform::from_frame(&packet.light, &packet.fog)),
         );
         // Upload all per-draw uniforms first (bounded by validate_packet).
         for pass in &packet.passes {

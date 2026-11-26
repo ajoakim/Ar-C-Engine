@@ -522,3 +522,22 @@ fn null_rejects_morph_pipeline_layout_mismatch() {
         Err(RenderError::LayoutMismatch { .. })
     ));
 }
+
+#[test]
+fn null_rejects_bad_fog_and_morph() {
+    let (mut b, vb, pipe) = setup();
+    let mut p = packet(0, vec![draw(pipe, vb, 3)]);
+    p.fog = DistanceFog {
+        color: [0.0; 3],
+        density: -1.0,
+    };
+    assert!(matches!(b.submit(&p), Err(RenderError::InvalidLight(_))));
+    for bad in [f32::NAN, 2.0, -0.5] {
+        let mut d = draw(pipe, vb, 3);
+        d.morph = bad;
+        assert_eq!(
+            b.submit(&packet(0, vec![d])),
+            Err(RenderError::NonFiniteTransform)
+        );
+    }
+}

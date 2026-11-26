@@ -217,6 +217,7 @@ impl ResourceTable {
     /// Validate a frame packet against live resources and engine invariants.
     pub fn validate_packet(&self, packet: &FramePacket) -> Result<(), RenderError> {
         packet.light.validate()?;
+        packet.fog.validate()?;
         let mut total = 0usize;
         for pass in &packet.passes {
             if pass.color_target != TextureId::BACKBUFFER {
@@ -249,6 +250,9 @@ impl ResourceTable {
                 });
             }
             for d in &pass.draws {
+                if !(0.0..=1.0).contains(&d.morph) {
+                    return Err(RenderError::NonFiniteTransform);
+                }
                 let pipe = self.pipeline(d.pipeline)?;
                 let buf = self.buffer(d.mesh.vertex_buffer)?;
                 if buf.usage != BufferUsage::Vertex {

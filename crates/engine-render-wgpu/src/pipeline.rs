@@ -1,8 +1,8 @@
 //! Pipeline construction helpers and fixed layout constants.
 
 use engine_render::{
-    DirectionalLight, DrawCommand, MAX_DRAWS_PER_FRAME, PipelineDesc, RenderError, ShaderId,
-    VertexLayout,
+    DirectionalLight, DistanceFog, DrawCommand, MAX_DRAWS_PER_FRAME, PipelineDesc, RenderError,
+    ShaderId, VertexLayout,
 };
 
 pub(crate) const SHADER_LIT_TEXTURED: &str = include_str!("shaders/lit_textured.wgsl");
@@ -14,10 +14,10 @@ pub const DRAW_UNIFORM_STRIDE: u64 = 256;
 /// Depth format used for all depth targets.
 pub(crate) const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
-/// Size of the per-frame light uniform.
-pub(crate) const FRAME_UNIFORM_BYTES: u64 = 48;
-/// Size of the per-draw uniform (mvp, model, normal columns, base color).
-pub(crate) const DRAW_UNIFORM_BYTES: u64 = 192;
+/// Size of the per-frame uniform (light, ambient, fog).
+pub(crate) const FRAME_UNIFORM_BYTES: u64 = 64;
+/// Size of the per-draw uniform (mvp, model, normal columns, base color, params).
+pub(crate) const DRAW_UNIFORM_BYTES: u64 = 208;
 
 /// Per-frame light uniform (group 0).
 #[repr(C)]
@@ -26,10 +26,12 @@ pub(crate) struct FrameUniform {
     pub light_dir: [f32; 4],
     pub light_color: [f32; 4],
     pub ambient: [f32; 4],
+    /// Fog colour in rgb, density in w (0 disables).
+    pub fog: [f32; 4],
 }
 
 impl FrameUniform {
-    pub(crate) fn from_light(l: &DirectionalLight) -> Self {
+    pub(crate) fn from_frame(l: &DirectionalLight, fog: &DistanceFog) -> Self {
         let d = l.direction.normalize_or_zero();
         Self {
             light_dir: [d.x, d.y, d.z, 0.0],
@@ -40,6 +42,7 @@ impl FrameUniform {
                 0.0,
             ],
             ambient: [l.ambient[0], l.ambient[1], l.ambient[2], 0.0],
+            fog: [fog.color[0], fog.color[1], fog.color[2], fog.density],
         }
     }
 }
@@ -52,6 +55,8 @@ pub(crate) struct DrawUniform {
     pub model: [[f32; 4]; 4],
     pub normal: [[f32; 4]; 3],
     pub base_color: [f32; 4],
+    /// x = morph blend factor; the rest is reserved.
+    pub params: [f32; 4],
 }
 
 impl DrawUniform {
@@ -66,6 +71,7 @@ impl DrawUniform {
                 [n.z_axis.x, n.z_axis.y, n.z_axis.z, 0.0],
             ],
             base_color: d.base_color,
+            params: [d.morph, 0.0, 0.0, 0.0],
         }
     }
 }
@@ -180,6 +186,19 @@ pub(crate) fn vertex_attributes(
                 ],
             ))
         }
+        VertexLayout::PosNormalUvMorph => {
+            let o = layout.attribute_offsets();
+            Ok((
+                layout.stride(),
+                vec![
+                    attr(wgpu::VertexFormat::Float32x3, o[0], 0),
+                    attr(wgpu::VertexFormat::Float32x3, o[1], 1),
+                    attr(wgpu::VertexFormat::Float32x2, o[2], 2),
+                    attr(wgpu::VertexFormat::Float32x3, o[3], 3),
+                    attr(wgpu::VertexFormat::Float32x2, o[4], 4),
+                ],
+            ))
+        }
         #[allow(unreachable_patterns)]
         _ => Err(RenderError::Backend("unsupported vertex layout".into())),
     }
@@ -196,6 +215,20 @@ pub(crate) fn depth_stencil_state() -> wgpu::DepthStencilState {
     }
 }
 
+/// Vertex entry point for a shader and layout; the morph layout needs the lit shader.
+pub(crate) fn vertex_entry_point(
+    shader: ShaderId,
+    layout: VertexLayout,
+) -> Result<&'static str, RenderError> {
+    match (shader, layout) {
+        (ShaderId::LitTextured, VertexLayout::PosNormalUvMorph) => Ok("vs_morph"),
+        (_, VertexLayout::PosNormalUvMorph) => Err(RenderError::Backend(
+            "the morph vertex layout requires the lit textured shader".into(),
+        )),
+        _ => Ok("vs_main"),
+    }
+}
+
 pub(crate) fn create_render_pipeline(
     device: &wgpu::Device,
     desc: &PipelineDesc,
@@ -209,6 +242,7 @@ pub(crate) fn create_render_pipeline(
         _ => return Err(RenderError::Backend("unsupported shader".into())),
     };
     let (stride, attributes) = vertex_attributes(desc.vertex_layout)?;
+    let vertex_entry = vertex_entry_point(desc.shader, desc.vertex_layout)?;
     let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some(desc.label),
         source: wgpu::ShaderSource::Wgsl(source.into()),
@@ -233,7 +267,7 @@ pub(crate) fn create_render_pipeline(
             layout: Some(&layout),
             vertex: wgpu::VertexState {
                 module: &module,
-                entry_point: Some("vs_main"),
+                entry_point: Some(vertex_entry),
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
                 buffers: &[Some(wgpu::VertexBufferLayout {
                     array_stride: stride,
@@ -300,6 +334,40 @@ mod tests {
     }
 
     #[test]
+    fn pipeline_morph_attributes() {
+        let (stride, attrs) = vertex_attributes(VertexLayout::PosNormalUvMorph).unwrap();
+        assert_eq!(stride, 52);
+        assert_eq!(attrs.len(), 5);
+        let want = [
+            (0, wgpu::VertexFormat::Float32x3),
+            (12, wgpu::VertexFormat::Float32x3),
+            (24, wgpu::VertexFormat::Float32x2),
+            (32, wgpu::VertexFormat::Float32x3),
+            (44, wgpu::VertexFormat::Float32x2),
+        ];
+        for (i, (off, fmt)) in want.into_iter().enumerate() {
+            assert_eq!(attrs[i].shader_location, i as u32);
+            assert_eq!(attrs[i].offset, off);
+            assert_eq!(attrs[i].format, fmt);
+        }
+    }
+
+    #[test]
+    fn morph_layout_entry_points() {
+        assert_eq!(
+            vertex_entry_point(ShaderId::LitTextured, VertexLayout::PosNormalUvMorph),
+            Ok("vs_morph")
+        );
+        assert_eq!(
+            vertex_entry_point(ShaderId::LitTextured, VertexLayout::PosNormalUv),
+            Ok("vs_main")
+        );
+        assert!(
+            vertex_entry_point(ShaderId::UnlitVertexColor, VertexLayout::PosNormalUvMorph).is_err()
+        );
+    }
+
+    #[test]
     fn pipeline_draw_uniform_offsets() {
         assert_eq!(draw_uniform_offset(0), 0);
         assert_eq!(draw_uniform_offset(1), 256);
@@ -325,8 +393,13 @@ mod tests {
     #[test]
     fn uniform_sizes_and_offsets() {
         use std::mem::{offset_of, size_of};
+        // The structs grew (fog, params), so the byte counts changed from 48 and 192.
+        assert_eq!(FRAME_UNIFORM_BYTES, 64);
+        assert_eq!(DRAW_UNIFORM_BYTES, 208);
         assert_eq!(size_of::<FrameUniform>() as u64, FRAME_UNIFORM_BYTES);
         assert_eq!(size_of::<DrawUniform>() as u64, DRAW_UNIFORM_BYTES);
+        assert_eq!(offset_of!(FrameUniform, fog), 48);
+        assert_eq!(offset_of!(DrawUniform, params), 192);
         assert_eq!(offset_of!(DrawUniform, model), 64);
         assert_eq!(offset_of!(DrawUniform, normal), 128);
         assert_eq!(offset_of!(DrawUniform, base_color), 176);
@@ -366,13 +439,14 @@ mod tests {
             normal: Mat3::from_cols(a, b, c),
             base_color: [0.1, 0.2, 0.3, 0.4],
             texture: None,
-            morph: 0.0,
+            morph: 0.75,
         };
         let u = DrawUniform::from_draw(&d);
         assert_eq!(u.normal[0], [1.0, 2.0, 3.0, 0.0]);
         assert_eq!(u.normal[1], [4.0, 5.0, 6.0, 0.0]);
         assert_eq!(u.normal[2], [7.0, 8.0, 9.0, 0.0]);
         assert_eq!(u.base_color, [0.1, 0.2, 0.3, 0.4]);
+        assert_eq!(u.params, [0.75, 0.0, 0.0, 0.0]);
         assert_eq!(u.mvp, Mat4::IDENTITY.to_cols_array_2d());
         assert_eq!(u.model, d.model.to_cols_array_2d());
     }
@@ -385,7 +459,12 @@ mod tests {
             intensity: 2.0,
             ambient: [0.1, 0.2, 0.3],
         };
-        let u = FrameUniform::from_light(&l);
+        let fog = DistanceFog {
+            color: [0.3, 0.4, 0.5],
+            density: 0.25,
+        };
+        let u = FrameUniform::from_frame(&l, &fog);
+        assert_eq!(u.fog, [0.3, 0.4, 0.5, 0.25]);
         assert_eq!(u.light_dir, [0.0, -1.0, 0.0, 0.0]);
         assert_eq!(&u.light_color[..3], &[2.0, 1.0, 0.5]);
         assert_eq!(u.ambient, [0.1, 0.2, 0.3, 0.0]);
@@ -396,6 +475,7 @@ mod tests {
         for needle in [
             "fn vs_main",
             "fn fs_main",
+            "fn vs_morph",
             "@group(0) @binding(0)",
             "@group(1) @binding(0)",
             "@group(2) @binding(0)",
