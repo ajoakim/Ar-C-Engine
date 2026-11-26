@@ -49,6 +49,39 @@ jobs:
         run: "! cargo run --locked -p xtask -- check-deps --manifest-path xtask/fixtures/core-depends-on-ext/Cargo.toml"
       - name: Negative - wgpu/winit misplaced (must fail)
         run: "! cargo run --locked -p xtask -- check-deps --manifest-path xtask/fixtures/wgpu-winit-misplaced/Cargo.toml"
+      - name: Build basic_scene example
+        run: cargo build --locked -p conventional-3d --example basic_scene
+      - name: Test without planetary-core (fast canary)
+        run: cargo test --workspace --exclude planetary-core --locked
+      - name: Canary - no planetary crate reachable from conventional-3d (must pass)
+        run: cargo run --locked -p xtask -- check-canary
+      - name: Negative - transitive planetary leak fixture (must fail)
+        run: "! cargo run --locked -p xtask -- check-canary --manifest-path xtask/fixtures/canary-leak/Cargo.toml"
+
+  canary:
+    name: canary (planetary crates absent)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned toolchain from rust-toolchain.toml
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - name: Remove all planetary crates from the workspace
+        run: |
+          rm -rf extensions/planetary
+          sed -i '/extensions\/planetary\//d' Cargo.toml
+          if grep -q planetary Cargo.toml; then echo "planetary still referenced in Cargo.toml"; exit 1; fi
+          test ! -e extensions/planetary
+      - name: Build workspace without planetary crates
+        run: cargo build --workspace   # no --locked: Cargo.lock legitimately loses planetary-core
+      - name: Test workspace without planetary crates
+        run: cargo test --workspace --exclude xtask   # xtask's layer-table policy test lists planetary-core by design
+      - name: Clippy conventional-3d
+        run: cargo clippy -p conventional-3d --all-targets -- -D warnings
+      - name: Run basic_scene headless without planetary crates
+        run: cargo run -p conventional-3d --example basic_scene -- --headless 5
+      - name: Canary check on the reduced workspace
+        run: cargo run -p xtask -- check-canary
 
   deny:
     name: cargo-deny
