@@ -83,7 +83,17 @@ Plans:
   2. Visibility and region-lookup queries work through the pluggable spatial interface with one default backend
   3. Resources are referenced by stable IDs and typed handles
   4. Resources move through the residency state machine, with budgets and per-frame upload caps enforced and observable in tests
-**Plans**: TBD
+**Plans**: 8 plans
+
+Plans:
+- [ ] 04-01-PLAN.md — Pin slotmap/uuid, wire world/spatial/assets manifests, ADR-0006 spatial index hash grid first (wave 1)
+- [ ] 04-02-PLAN.md — engine-world: EntityId, Transform, World spawn/despawn/hierarchy with stale/cycle rejection (wave 2)
+- [ ] 04-03-PLAN.md — engine-assets: AssetId (uuid v5, golden-pinned), Handle<T>, AssetRegistry<T> (wave 2)
+- [ ] 04-04-PLAN.md — engine-world: WorldTransform, dirty-flag top-down update, rebase, 6.4e6 m precision tests (wave 3)
+- [ ] 04-05-PLAN.md — engine-spatial: f64 volumes, SpatialIndex trait, LinearIndex oracle backend (wave 3)
+- [ ] 04-06-PLAN.md — engine-assets: residency transition table, ResidencyManager budgets/upload cap/LRU/stats (wave 3)
+- [ ] 04-07-PLAN.md — engine-spatial: HashGridIndex default backend + oracle and trait-object tests (wave 4)
+- [ ] 04-08-PLAN.md — engine-assets: AsyncLoader on JobSystem (load, cancel, panic, stale generation) (wave 4)
 
 ### Phase 5: Conventional Reference App (Canary)
 **Goal**: A conventional 3D scene runs on the SDK alone, proving the core is general-purpose
