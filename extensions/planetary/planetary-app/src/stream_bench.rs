@@ -48,6 +48,18 @@ pub struct StreamFrame {
     pub caps: (u32, u32, u32),
     /// True when drawn equals wanted exactly (converged).
     pub converged: bool,
+    /// Churn counters (zero unless diagnostics are on): level_changes, appeared, disappeared,
+    /// cull_toggles, overlap_pairs, flipflops, flipflops_unexplained.
+    pub churn: [u32; 7],
+    /// Select flags of the frame: trimmed_splits, node_budget_hit, leaf_budget_hit, coarsened.
+    pub sel: [u32; 4],
+    pub destroyed: u32,
+    /// Selection retained / rejected culled cells (see `SelectStats`).
+    pub retained: [u32; 3],
+    /// Why cells split last frame are not split now: total, culled, below band, in band or above, cascade.
+    pub unsplit: [u32; 6],
+    /// Culled-by-selection cells that the draw pass drew visibly (selection/draw cull mismatch).
+    pub unsplit_culled_drawn_visible: u32,
 }
 
 /// A whole run.
@@ -135,6 +147,29 @@ pub fn run_stream(
                 (b.uploads, b.starts, b.requests)
             },
             converged,
+            churn: [
+                rep.level_changes,
+                rep.drawn_appeared,
+                rep.drawn_disappeared,
+                rep.cull_toggles,
+                rep.overlap_pairs,
+                rep.flipflops,
+                rep.flipflops_unexplained,
+            ],
+            sel: [
+                rep.select.trimmed_splits,
+                u32::from(rep.select.node_budget_hit),
+                u32::from(rep.select.leaf_budget_hit),
+                rep.effective_coarsened,
+            ],
+            destroyed: rep.destroyed,
+            retained: [
+                rep.select.retained_culled,
+                rep.select.retain_rejected,
+                rep.retain_expired,
+            ],
+            unsplit: rep.unsplit,
+            unsplit_culled_drawn_visible: rep.unsplit_culled_drawn_visible,
         });
         pace(&mut app);
     }
@@ -294,7 +329,7 @@ pub fn analyze(run: &StreamRun) -> StreamMetrics {
 }
 
 /// CSV header of [`csv`].
-pub const CSV_HEADER: &str = "frame,sim_time_s,altitude_m,wanted_leaves,drawn_leaves,wanted_level,drawn_level,look_wanted_level,look_drawn_level,held,pending_requests,queued,started,uploads,in_flight,awaiting_upload,evicted,cancelled,requests_issued,closure_cells,closure_resident,draws,partition,cost_ms,cap_uploads,cap_starts,cap_requests,converged";
+pub const CSV_HEADER: &str = "frame,sim_time_s,altitude_m,wanted_leaves,drawn_leaves,wanted_level,drawn_level,look_wanted_level,look_drawn_level,held,pending_requests,queued,started,uploads,in_flight,awaiting_upload,evicted,cancelled,requests_issued,closure_cells,closure_resident,draws,partition,cost_ms,cap_uploads,cap_starts,cap_requests,converged,level_changes,drawn_appeared,drawn_disappeared,cull_toggles,overlap_pairs,flipflops,flipflops_unexplained,trimmed_splits,node_budget_hit,leaf_budget_hit,coarsened,destroyed,retained_culled,retain_rejected,retain_expired,unsplit_total,unsplit_frustum,unsplit_horizon,unsplit_below_band,unsplit_in_band_or_above,unsplit_cascade,unsplit_culled_drawn_visible";
 
 /// CSV text of a run (header plus one row per frame).
 #[must_use]
@@ -331,7 +366,15 @@ pub fn csv(run: &StreamRun) -> String {
             r.caps.1.to_string(),
             r.caps.2.to_string(),
             u8::from(r.converged).to_string(),
-        ];
+        ]
+        .into_iter()
+        .chain(r.churn.iter().map(ToString::to_string))
+        .chain(r.sel.iter().map(ToString::to_string))
+        .chain(std::iter::once(r.destroyed.to_string()))
+        .chain(r.retained.iter().map(ToString::to_string))
+        .chain(r.unsplit.iter().map(ToString::to_string))
+        .chain(std::iter::once(r.unsplit_culled_drawn_visible.to_string()))
+        .collect();
         s.push_str(&cols.join(","));
         s.push('\n');
     }

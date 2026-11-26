@@ -16,9 +16,10 @@ use planetary_core::lod::{
     DEFAULT_KAPPA, LodModel, LodParams, SelectStats, View, cell_bound, eye_in_cone,
     frustum_visible, horizon_visible,
 };
-use planetary_core::topology::select::select_cells;
+use planetary_core::topology::select::{retain_culled, select_cells, unsplit_reasons};
 use planetary_core::{MAX_LEVEL, PlanetTerrain, TerrainParams, Topology};
 
+use crate::churn::{ChurnFlags, ChurnTracker};
 use crate::effective::effective_cut;
 use crate::key::CellKey;
 use crate::palette::{DEBUG_PALETTE_H, PALETTE_H, PALETTE_W, debug_palette_rgba8, palette_rgba8};
@@ -59,6 +60,12 @@ pub struct TerrainConfig {
     pub adaptive: bool,
     /// Hard maxima and the time target of the adaptive budget.
     pub budget: BudgetLimits,
+    /// Compute the per-frame churn counters of [`TerrainReport`] (flicker diagnosis). Off by
+    /// default: the counters then stay 0 and cost nothing.
+    pub diagnostics: bool,
+    /// Frames a split cell that was culled (outside the frustum or beyond the horizon) is kept
+    /// split instead of dropping out of the selection (07.1-20); 0 disables the retention.
+    pub retain_frames: u32,
 }
 
 /// Hard maxima and target of the adaptive per-frame streaming budget.
@@ -211,6 +218,8 @@ impl Default for TerrainConfig {
             debug_cells: false,
             adaptive: false,
             budget: BudgetLimits::default(),
+            diagnostics: false,
+            retain_frames: 8,
         }
     }
 }
@@ -240,6 +249,25 @@ pub struct TerrainReport {
     /// Wanted pieces plus ancestors, and how many of them are resident.
     pub closure_cells: usize,
     pub closure_resident: usize,
+    /// Splits removed by the effective-cut coarsen stage this frame.
+    pub effective_coarsened: u32,
+    /// Churn counters (only with `TerrainConfig::diagnostics`, else 0); see [`crate::churn`].
+    pub level_changes: u32,
+    pub drawn_appeared: u32,
+    pub drawn_disappeared: u32,
+    pub cull_toggles: u32,
+    pub overlap_pairs: u32,
+    pub flipflops: u32,
+    pub flipflops_unexplained: u32,
+    /// Why cells split last selection are not split now (diagnostics): total, culled this frame,
+    /// below the hysteresis band, within the band or above tau (budget or trim), parent unsplit.
+    pub unsplit: [u32; 6],
+    /// Previously split cells not retained this frame because they had been culled for
+    /// `retain_frames` frames already (the retention age bound).
+    pub retain_expired: u32,
+    /// Cells the selection dropped as culled that the draw pass nevertheless drew visibly
+    /// (selection and draw culling disagree; diagnostics).
+    pub unsplit_culled_drawn_visible: u32,
 }
 
 /// Streams, uploads and draws the terrain of any [`Topology`].
@@ -278,6 +306,13 @@ pub struct TerrainSystem<T: Topology> {
     budget: StreamBudget,
     /// Measured cost (ms) of the previous frame as reported by the app.
     frame_cost_ms: Option<f64>,
+    /// Churn counters state (diagnostics only).
+    churn: ChurnTracker<T::Cell>,
+    /// Cells dropped from the split set by this frame's selection because they were culled
+    /// (diagnostics only).
+    unsplit_culled: BTreeSet<T::Cell>,
+    /// Consecutive frames each retained culled cell has been kept split.
+    retained_age: BTreeMap<T::Cell, u32>,
 }
 
 /// Maximum level difference across any shared edge of `cells` (cells may repeat).
@@ -409,6 +444,9 @@ impl<T: Topology> TerrainSystem<T> {
         Ok(Self {
             budget,
             frame_cost_ms: None,
+            churn: ChurnTracker::default(),
+            unsplit_culled: BTreeSet::new(),
+            retained_age: BTreeMap::new(),
             cfg,
             terrain,
             topo,
@@ -547,7 +585,7 @@ impl<T: Topology> TerrainSystem<T> {
         };
         self.last_view = Some(*view);
         self.budget = StreamBudget::next(&self.cfg, self.budget.scale, self.frame_cost_ms);
-        let sel = {
+        let mut sel = {
             let held = &self.held;
             select_cells(
                 &*self.topo,
@@ -558,11 +596,59 @@ impl<T: Topology> TerrainSystem<T> {
                 &|id| held.get(&id).map(|h| h.range),
             )
         };
+        // Pieces added by the retention: drawn if resident, never requested (they are not visible,
+        // and requests for them would compete with the detail the camera is waiting for).
+        let mut before: BTreeSet<T::Cell> = BTreeSet::new();
+        if self.cfg.retain_frames > 0 {
+            // Cells culled this frame keep their split for at most `retain_frames` frames, so a
+            // cell that leaves the view and returns is not split again (flip-flop).
+            let limit = self.cfg.retain_frames;
+            let ages = &self.retained_age;
+            let candidates: BTreeSet<T::Cell> = self
+                .prev_split
+                .iter()
+                .copied()
+                .filter(|c| ages.get(c).is_none_or(|a| *a < limit))
+                .collect();
+            rep.retain_expired = u32::try_from(
+                self.prev_split
+                    .iter()
+                    .filter(|c| ages.get(c).is_some_and(|a| *a >= limit) && !sel.split.contains(c))
+                    .count(),
+            )
+            .unwrap_or(u32::MAX);
+            let held = &self.held;
+            let r = retain_culled(
+                &*self.topo,
+                &self.model,
+                &self.cfg.lod,
+                view,
+                &candidates,
+                &|id| held.get(&id).map(|h| h.range),
+                &mut sel.split,
+            );
+            sel.stats.retained_culled = u32::try_from(r.cells.len()).unwrap_or(u32::MAX);
+            sel.stats.retain_rejected = r.rejected;
+            if !r.cells.is_empty() {
+                before = sel.pieces.iter().map(|p| p.cell).collect();
+                sel.pieces.clear();
+                self.topo.pieces(&sel.split, &mut sel.pieces);
+                sel.stats.leaves = sel.pieces.len();
+            }
+            self.retained_age = r
+                .cells
+                .iter()
+                .map(|c| (*c, self.retained_age.get(c).copied().unwrap_or(0) + 1))
+                .collect();
+        }
         // Urgency of each piece that is not resident yet: nearest and largest screen-space error
         // first. Resident pieces need no request, so they are not scored.
         let scored: Vec<(T::Cell, f64)> = sel
             .pieces
             .iter()
+            .filter(|p| {
+                before.is_empty() || before.contains(&p.cell) || self.held.contains_key(&p.cell)
+            })
             .map(|p| {
                 let score = if self.held.contains_key(&p.cell) {
                     0.0
@@ -578,6 +664,27 @@ impl<T: Topology> TerrainSystem<T> {
                 (p.cell, score)
             })
             .collect();
+        if self.cfg.diagnostics {
+            let held = &self.held;
+            let (u, culled_cells) = unsplit_reasons(
+                &*self.topo,
+                &self.model,
+                &self.cfg.lod,
+                view,
+                &self.prev_split,
+                &sel.split,
+                &|id| held.get(&id).map(|h| h.range),
+            );
+            self.unsplit_culled = culled_cells.into_iter().collect();
+            rep.unsplit = [
+                u.total,
+                u.culled,
+                u.culled_horizon,
+                u.below_band,
+                u.within_band_or_above,
+                u.cascade,
+            ];
+        }
         self.prev_split.clone_from(&sel.split);
         self.wanted_split = sel.split;
         self.wanted = sel.pieces.iter().map(|p| p.cell).collect();
@@ -700,10 +807,14 @@ impl<T: Topology> TerrainSystem<T> {
             .map(|(id, _)| *id)
             .collect();
         let mut destroyed = 0u32;
+        let mut destroyed_ids: Vec<T::Cell> = Vec::new();
         for id in stale {
             if let Some(h) = self.held.remove(&id) {
                 resources.destroy_mesh(h.mesh)?;
                 destroyed += 1;
+                if self.cfg.diagnostics {
+                    destroyed_ids.push(id);
+                }
             }
         }
 
@@ -726,6 +837,7 @@ impl<T: Topology> TerrainSystem<T> {
         self.drawn.clear();
         self.drawn_set.clear();
         let mut culled = 0u32;
+        let mut culled_cells: BTreeSet<T::Cell> = BTreeSet::new();
         let occluder = self.model.radius + self.model.height.min;
         for piece in &eff.pieces {
             let leaf = piece.cell;
@@ -745,6 +857,9 @@ impl<T: Topology> TerrainSystem<T> {
                         || frustum_visible(view, &cell_bound(self.model.radius, &fp, h.range)));
                 if !visible {
                     culled += 1;
+                    if self.cfg.diagnostics {
+                        culled_cells.insert(leaf);
+                    }
                     // Culled leaves still belong to the drawn partition.
                     record(&mut self.drawn, &mut self.drawn_set);
                     continue;
@@ -782,6 +897,43 @@ impl<T: Topology> TerrainSystem<T> {
             record(&mut self.drawn, &mut self.drawn_set);
         }
 
+        if self.cfg.diagnostics {
+            let sel = &self.report.select;
+            let flags = ChurnFlags {
+                budget_or_trim: sel.trimmed_splits > 0
+                    || sel.node_budget_hit
+                    || sel.leaf_budget_hit
+                    || sel.retain_rejected > 0
+                    || self.report.retain_expired > 0
+                    || eff.coarsened > 0,
+            };
+            let culled_for_diag = culled_cells.clone();
+            let c = self.churn.observe(
+                &*self.topo,
+                self.frame,
+                &eff.pieces,
+                &self.drawn_set,
+                culled_cells,
+                &self.drawn_split,
+                flags,
+                &destroyed_ids,
+            );
+            self.report.unsplit_culled_drawn_visible = u32::try_from(
+                self.unsplit_culled
+                    .iter()
+                    .filter(|x| self.drawn_set.contains(x) && !culled_for_diag.contains(x))
+                    .count(),
+            )
+            .unwrap_or(u32::MAX);
+            self.report.level_changes = c.level_changes;
+            self.report.drawn_appeared = c.drawn_appeared;
+            self.report.drawn_disappeared = c.drawn_disappeared;
+            self.report.cull_toggles = c.cull_toggles;
+            self.report.overlap_pairs = c.overlap_pairs;
+            self.report.flipflops = c.flipflops;
+            self.report.flipflops_unexplained = c.flipflops_unexplained;
+        }
+        self.report.effective_coarsened = eff.coarsened;
         self.report.frame = self.frame;
         self.report.stream = stream;
         self.report.drawn_leaves = self.drawn.len();

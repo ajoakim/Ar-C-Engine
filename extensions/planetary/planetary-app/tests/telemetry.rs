@@ -45,6 +45,51 @@ fn csv_columns_match_header() {
     assert_eq!(row.split(',').count(), n);
     assert_eq!(csv_columns(), n);
     assert!(csv_header().starts_with("frame,sim_time_s,frame_ms"));
+    let churn = [
+        "level_changes",
+        "drawn_appeared",
+        "drawn_disappeared",
+        "cull_toggles",
+        "overlap_pairs",
+        "flipflops",
+        "flipflops_unexplained",
+    ];
+    let cols: Vec<&str> = csv_header().split(',').collect();
+    assert_eq!(&cols[cols.len() - 7..], &churn);
+    let s = FrameSample {
+        level_changes: 1,
+        drawn_appeared: 2,
+        drawn_disappeared: 3,
+        cull_toggles: 4,
+        overlap_pairs: 5,
+        flipflops: 6,
+        flipflops_unexplained: 7,
+        ..FrameSample::default()
+    };
+    let row = csv_row(&s);
+    let cells: Vec<&str> = row.split(',').collect();
+    assert_eq!(
+        &cells[cells.len() - 7..],
+        &["1", "2", "3", "4", "5", "6", "7"]
+    );
+}
+
+#[test]
+fn churn_counters_default_to_zero_without_diagnostics() {
+    for s in run() {
+        assert_eq!(
+            (
+                s.level_changes,
+                s.drawn_appeared,
+                s.drawn_disappeared,
+                s.cull_toggles,
+                s.overlap_pairs,
+                s.flipflops,
+                s.flipflops_unexplained
+            ),
+            (0, 0, 0, 0, 0, 0, 0)
+        );
+    }
 }
 
 fn run() -> Vec<FrameSample> {

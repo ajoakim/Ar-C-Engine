@@ -7,7 +7,7 @@ use planetary_core::lod::{
     HeightRange, LodModel, LodParams, SelectStats, View, cell_bound, is_balanced, is_partition,
     patch_footprint, reference_views, screen_space_error,
 };
-use planetary_core::topology::select::select_cells;
+use planetary_core::topology::select::{Retained, retain_culled, select_cells};
 use planetary_core::{CubeSphere, PatchId};
 
 /// Cube-sphere selection through the generic `select_cells` (the `lod::select` wrapper is gone).
@@ -386,4 +386,95 @@ fn reference_stats_report() {
             );
         }
     }
+}
+
+/// 07.1-20: `retain_culled` keeps a cell that was split last frame and is culled this frame
+/// split (as long as the pieces fit the budget), so it is not split again when it returns.
+fn away_view(eye: DVec3) -> View {
+    // Looking away from the planet: everything but the cell under the eye is culled.
+    let planes = [
+        [1.0, 0.0, 0.0, -eye.x],
+        [0.0, 1.0, 0.0, 1e12],
+        [0.0, -1.0, 0.0, 1e12],
+        [0.0, 0.0, 1.0, 1e12],
+        [0.0, 0.0, -1.0, 1e12],
+        [-1.0, 0.0, 0.0, 1e12],
+    ];
+    view_at(eye).with_frustum(planes)
+}
+
+fn retain(
+    m: &LodModel,
+    p: &LodParams,
+    v: &View,
+    prev: &BTreeSet<PatchId>,
+) -> (BTreeSet<PatchId>, Retained<PatchId>) {
+    let topo = CubeSphere::new(m.cells_per_edge);
+    let mut split = select_cells(&topo, m, p, v, prev, &|_| None).split;
+    let r = retain_culled(&topo, m, p, v, prev, &|_| None, &mut split);
+    (split, r)
+}
+
+fn leaves_of_split(m: &LodModel, split: &BTreeSet<PatchId>) -> Vec<PatchId> {
+    let topo = CubeSphere::new(m.cells_per_edge);
+    let mut pieces = Vec::new();
+    planetary_core::Topology::pieces(&topo, split, &mut pieces);
+    pieces.iter().map(|q| q.cell).collect()
+}
+
+#[test]
+fn culled_previously_split_cells_stay_split() {
+    let m = model();
+    let p = LodParams::default();
+    let eye = x_eye(R + 100_000.0);
+    let first = sel(&m, &p, &view_at(eye), &BTreeSet::new());
+    assert!(
+        first.split.len() > 6,
+        "the first frame must refine something: {}",
+        first.split.len()
+    );
+    let away = away_view(eye);
+    // select_cells itself still drops culled cells (retention is a separate step).
+    let plain = sel(&m, &p, &away, &first.split);
+    assert!(plain.stats.culled_frustum > 0, "{:?}", plain.stats);
+    assert!(first.split.difference(&plain.split).count() > 0);
+    let (split, r) = retain(&m, &p, &away, &first.split);
+    let dropped: Vec<_> = first.split.difference(&split).collect();
+    assert!(
+        dropped.is_empty(),
+        "{} previously split cells were dropped because they were culled: {dropped:?}",
+        dropped.len()
+    );
+    assert!(!r.cells.is_empty());
+    let leaves = leaves_of_split(&m, &split);
+    assert!(is_partition(&leaves) && is_balanced(&leaves));
+    assert!(leaves.len() <= p.max_leaves);
+    // Deterministic.
+    assert_eq!(
+        (split.clone(), r.clone()),
+        retain(&m, &p, &away, &first.split)
+    );
+    // No candidates: nothing to retain.
+    let (_, none) = retain(&m, &p, &away, &BTreeSet::new());
+    assert!(none.cells.is_empty() && none.rejected == 0);
+}
+
+/// The retained cells never push the selection over the piece budget: when they do not fit they
+/// are dropped (what is visible keeps the budget).
+#[test]
+fn retained_culled_cells_respect_the_leaf_budget() {
+    let m = model();
+    let eye = x_eye(R + 100_000.0);
+    let big = LodParams::default();
+    let first = sel(&m, &big, &view_at(eye), &BTreeSet::new());
+    let away = away_view(eye);
+    let tight = LodParams {
+        max_leaves: 6 + 3,
+        ..big
+    };
+    let (split, r) = retain(&m, &tight, &away, &first.split);
+    let leaves = leaves_of_split(&m, &split);
+    assert!(leaves.len() <= tight.max_leaves, "{} pieces", leaves.len());
+    assert!(r.rejected > 0, "{r:?}");
+    assert!(is_partition(&leaves) && is_balanced(&leaves));
 }

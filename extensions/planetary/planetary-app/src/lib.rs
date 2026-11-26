@@ -77,6 +77,9 @@ pub struct AppSettings {
     /// Adapt the per-frame streaming caps to the measured prepare plus gpu_frame cost
     /// (default off; the flight example turns it on). Needs a real [`Clock`].
     pub adaptive_streaming: bool,
+    /// Compute the terrain churn counters (flicker diagnosis; default off, see
+    /// `TerrainConfig::diagnostics`).
+    pub diagnostics: bool,
 }
 
 impl AppSettings {
@@ -110,6 +113,7 @@ impl Default for AppSettings {
             script: None,
             perf: PerfSettings::default(),
             adaptive_streaming: false,
+            diagnostics: false,
         }
     }
 }
@@ -257,6 +261,7 @@ impl PlanetaryApp {
     pub fn with_clock(settings: AppSettings, clock: Box<dyn Clock>) -> Result<Self, SdkError> {
         let mut terrain_cfg = settings.terrain.clone();
         terrain_cfg.adaptive |= settings.adaptive_streaming;
+        terrain_cfg.diagnostics |= settings.diagnostics;
         let n = settings.terrain.cells_per_edge;
         let terrain = match settings.topology {
             TopologyKind::Hex => {
@@ -555,6 +560,13 @@ impl App for PlanetaryApp {
             culled_frustum: r.select.culled_frustum,
             node_budget_hit: r.select.node_budget_hit,
             leaf_budget_hit: r.select.leaf_budget_hit,
+            level_changes: r.level_changes,
+            drawn_appeared: r.drawn_appeared,
+            drawn_disappeared: r.drawn_disappeared,
+            cull_toggles: r.cull_toggles,
+            overlap_pairs: r.overlap_pairs,
+            flipflops: r.flipflops,
+            flipflops_unexplained: r.flipflops_unexplained,
             ..FrameSample::default()
         };
         self.telemetry.record(sample);

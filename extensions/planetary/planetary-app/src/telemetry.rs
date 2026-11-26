@@ -111,6 +111,14 @@ pub struct FrameSample {
     pub culled_frustum: u32,
     pub node_budget_hit: bool,
     pub leaf_budget_hit: bool,
+    /// Churn counters (zero unless `AppSettings::diagnostics`).
+    pub level_changes: u32,
+    pub drawn_appeared: u32,
+    pub drawn_disappeared: u32,
+    pub cull_toggles: u32,
+    pub overlap_pairs: u32,
+    pub flipflops: u32,
+    pub flipflops_unexplained: u32,
 }
 
 /// Aggregate frame-time statistics.
@@ -163,7 +171,7 @@ pub fn band_of(altitude_m: f64) -> usize {
         .unwrap_or(ALTITUDE_BANDS.len() - 1)
 }
 
-const COLUMNS: [&str; 34] = [
+const COLUMNS: [&str; 41] = [
     "frame",
     "sim_time_s",
     "frame_ms",
@@ -198,19 +206,26 @@ const COLUMNS: [&str; 34] = [
     "culled_frustum",
     "node_budget_hit",
     "leaf_budget_hit",
+    "level_changes",
+    "drawn_appeared",
+    "drawn_disappeared",
+    "cull_toggles",
+    "overlap_pairs",
+    "flipflops",
+    "flipflops_unexplained",
 ];
 
 /// CSV header line (no newline).
 #[must_use]
 pub fn csv_header() -> &'static str {
-    "frame,sim_time_s,frame_ms,prepare_ms,gpu_frame_ms,altitude_m,nominal_altitude_m,center_distance_m,nodes_visited,leaves,wanted_leaves,drawn_leaves,held_meshes,pending,in_flight,awaiting_upload,started,completions,uploads,uploaded_bytes,evicted,cancelled,destroyed,upload_rejects,pending_requests,draw_items,culled_draws,tau_eff,forced_splits,trimmed_splits,culled_horizon,culled_frustum,node_budget_hit,leaf_budget_hit"
+    "frame,sim_time_s,frame_ms,prepare_ms,gpu_frame_ms,altitude_m,nominal_altitude_m,center_distance_m,nodes_visited,leaves,wanted_leaves,drawn_leaves,held_meshes,pending,in_flight,awaiting_upload,started,completions,uploads,uploaded_bytes,evicted,cancelled,destroyed,upload_rejects,pending_requests,draw_items,culled_draws,tau_eff,forced_splits,trimmed_splits,culled_horizon,culled_frustum,node_budget_hit,leaf_budget_hit,level_changes,drawn_appeared,drawn_disappeared,cull_toggles,overlap_pairs,flipflops,flipflops_unexplained"
 }
 
 /// One CSV row (no newline).
 #[must_use]
 pub fn csv_row(s: &FrameSample) -> String {
     format!(
-        "{},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{:.3},{},{},{},{},{},{}",
+        "{},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{:.3},{},{},{},{},{},{},{},{},{},{},{},{},{}",
         s.frame,
         s.sim_time_s,
         s.frame_ms,
@@ -245,6 +260,13 @@ pub fn csv_row(s: &FrameSample) -> String {
         s.culled_frustum,
         u8::from(s.node_budget_hit),
         u8::from(s.leaf_budget_hit),
+        s.level_changes,
+        s.drawn_appeared,
+        s.drawn_disappeared,
+        s.cull_toggles,
+        s.overlap_pairs,
+        s.flipflops,
+        s.flipflops_unexplained,
     )
 }
 
@@ -352,8 +374,29 @@ impl Telemetry {
                 .collect();
             let sum = summarize(&ms);
             if let Some(l) = self.recent.back() {
+                let churn = if l.level_changes
+                    + l.drawn_appeared
+                    + l.drawn_disappeared
+                    + l.cull_toggles
+                    + l.overlap_pairs
+                    + l.flipflops
+                    > 0
+                {
+                    format!(
+                        " churn: lvl={} app={} dis={} cull={} overlap={} flip={}/{}",
+                        l.level_changes,
+                        l.drawn_appeared,
+                        l.drawn_disappeared,
+                        l.cull_toggles,
+                        l.overlap_pairs,
+                        l.flipflops,
+                        l.flipflops_unexplained
+                    )
+                } else {
+                    String::new()
+                };
                 println!(
-                    "perf: frames={} avg={:.2}ms p95={:.2}ms max={:.2}ms fps={:.1} alt={:.0}m nodes={} wanted={} drawn={} held={} pending={}",
+                    "perf: frames={} avg={:.2}ms p95={:.2}ms max={:.2}ms fps={:.1} alt={:.0}m nodes={} wanted={} drawn={} held={} pending={}{churn}",
                     sum.count,
                     sum.avg_ms,
                     sum.p95_ms,

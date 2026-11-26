@@ -13,6 +13,11 @@
 //! error. `--debug-cells` colours every cell by level and id so hexes visibly give way to their
 //! parts while descending.
 //!
+//! `--diagnostics` turns on the per-frame churn counters (drawn cells appearing, disappearing,
+//! flip-flopping, cull toggles, overlaps) in the perf log, the console line and `--out`.
+//! `--retain-frames <n>` sets how many frames a split cell that is culled stays split (default 8,
+//! 0 switches the retention off to compare).
+//!
 //! `--headless` runs on the null backend with `settle_each_frame` enabled so the smoke run
 //! is deterministic (workers are awaited every frame); the windowed run never blocks.
 //! `--frames <n>` exits after n frames; `--perf-log` writes one CSV row per frame;
@@ -41,7 +46,7 @@ use planetary_app::{
     spin_for_ms, summarize,
 };
 
-const USAGE: &str = "usage: planetary_flight [--topology <hex|cube>] [--debug-cells] [--headless <frames>] [--descent] [--ascent] [--frames <n>] [--perf-log <file.csv>] [--no-console] [--bench-descent] [--budget-ms <ms>] [--strict] [--bench-stream] [--fast] [--settle] [--no-adaptive] [--frame-ms <ms>] [--out <file.csv>]";
+const USAGE: &str = "usage: planetary_flight [--topology <hex|cube>] [--debug-cells] [--headless <frames>] [--descent] [--ascent] [--frames <n>] [--perf-log <file.csv>] [--no-console] [--bench-descent] [--budget-ms <ms>] [--strict] [--bench-stream] [--fast] [--settle] [--no-adaptive] [--frame-ms <ms>] [--out <file.csv>] [--diagnostics] [--retain-frames <n>]";
 
 #[derive(Default, Clone, Copy)]
 struct BandMax {
@@ -212,6 +217,8 @@ fn main() -> Result<(), SdkError> {
     let mut adaptive = true;
     let mut topology = TopologyKind::Hex;
     let mut debug_cells = false;
+    let mut diagnostics = false;
+    let mut retain_frames: Option<u32> = None;
     let mut so = StreamOpts {
         fast: false,
         settle: false,
@@ -236,6 +243,14 @@ fn main() -> Result<(), SdkError> {
                     .ok_or_else(usage)?;
             }
             "--debug-cells" => debug_cells = true,
+            "--diagnostics" => diagnostics = true,
+            "--retain-frames" => {
+                retain_frames = Some(
+                    args.next()
+                        .and_then(|v| v.parse::<u32>().ok())
+                        .ok_or_else(usage)?,
+                );
+            }
             "--descent" => descent = true,
             "--ascent" => ascent = true,
             "--frames" => {
@@ -278,6 +293,10 @@ fn main() -> Result<(), SdkError> {
         TopologyKind::Cube => AppSettings::cube_default(),
     };
     settings.terrain.debug_cells = debug_cells;
+    settings.diagnostics = diagnostics;
+    if let Some(n) = retain_frames {
+        settings.terrain.retain_frames = n;
+    }
     settings.perf.exit_after_frames = frames;
     settings.perf.csv_path = perf_log;
     if descent {

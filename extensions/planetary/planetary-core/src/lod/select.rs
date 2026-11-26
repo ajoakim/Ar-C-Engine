@@ -40,6 +40,12 @@ pub struct SelectStats {
     pub trimmed_splits: u32,
     pub node_budget_hit: bool,
     pub leaf_budget_hit: bool,
+    /// Previously split cells kept split although culled this frame (set by the caller of
+    /// `topology::select::retain_culled`, never by `select_cells`).
+    pub retained_culled: u32,
+    /// Cells that would have been retained but were dropped because they did not fit the piece
+    /// budget.
+    pub retain_rejected: u32,
     /// Equal to `tau_px` (kept for telemetry continuity).
     pub tau_eff: f64,
 }

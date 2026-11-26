@@ -62,6 +62,34 @@ fn range_for<T: Topology>(
     model.height
 }
 
+/// Why a cell cannot be seen.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Cull {
+    Horizon,
+    Frustum,
+}
+
+/// Whether `id` cannot be seen: beyond the horizon, or outside the frustum while not under the eye.
+fn cell_culled<T: Topology>(
+    topo: &T,
+    model: &LodModel,
+    view: &View,
+    id: T::Cell,
+    range: HeightRange,
+    occluder: f64,
+) -> Option<Cull> {
+    let fp = topo.footprint(id);
+    if !horizon_visible(model.radius, view.eye, &fp, range, occluder) {
+        Some(Cull::Horizon)
+    } else if !eye_in_cone(view.eye, &fp)
+        && !frustum_visible(view, &cell_bound(model.radius, &fp, range))
+    {
+        Some(Cull::Frustum)
+    } else {
+        None
+    }
+}
+
 /// Whether removing split `s` keeps `split` closed: no split child, and no split cell of the next
 /// level that requires `s`. Such a cell is a child of `s` or a child of a neighbour of `s`, because
 /// `required_splits` of a cell lists its parents and cells next to them.
@@ -112,6 +140,185 @@ fn piece_count<T: Topology>(
     buf.clear();
     topo.pieces(split, buf);
     buf.len()
+}
+
+/// Why cells split in the previous selection are not split in this one (diagnostics, 07.1-20).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct UnsplitReasons {
+    /// Cells in `prev_split` and not in the new split.
+    pub total: u32,
+    /// Cell outside the frustum this frame (not refined while culled).
+    pub culled: u32,
+    /// Cell beyond the horizon this frame.
+    pub culled_horizon: u32,
+    /// Not culled, parent still split, and `rho <= tau * (1 - hysteresis)`: a legitimate drop.
+    pub below_band: u32,
+    /// Not culled, `rho` inside the hysteresis band or above tau, parent split, yet unsplit:
+    /// budgets, trimming or a stop of the best-first loop.
+    pub within_band_or_above: u32,
+    /// The parent (or one of the parents) is no longer split: a cascade.
+    pub cascade: u32,
+}
+
+/// Classifies every cell of `prev_split` that is not in `split` (see [`UnsplitReasons`]) and
+/// returns the ones dropped because they are culled. Pure
+/// diagnostics: it repeats the cull and error evaluation of [`select_cells`] and changes nothing.
+#[must_use]
+pub fn unsplit_reasons<T: Topology>(
+    topo: &T,
+    model: &LodModel,
+    params: &LodParams,
+    view: &View,
+    prev_split: &BTreeSet<T::Cell>,
+    split: &BTreeSet<T::Cell>,
+    resident_range: &dyn Fn(T::Cell) -> Option<HeightRange>,
+) -> (UnsplitReasons, Vec<T::Cell>) {
+    let occluder = model.radius + model.height.min;
+    let low = params.tau_px * (1.0 - params.hysteresis);
+    let mut out = UnsplitReasons::default();
+    let mut culled_cells = Vec::new();
+    let mut ps = Vec::new();
+    for &c in prev_split.difference(split) {
+        out.total += 1;
+        ps.clear();
+        topo.parents(c, &mut ps);
+        if ps.iter().any(|p| !split.contains(p)) {
+            out.cascade += 1;
+            continue;
+        }
+        let range = range_for(topo, model, c, resident_range);
+        match cell_culled(topo, model, view, c, range, occluder) {
+            Some(Cull::Frustum) => {
+                out.culled += 1;
+                culled_cells.push(c);
+                continue;
+            }
+            Some(Cull::Horizon) => {
+                out.culled_horizon += 1;
+                culled_cells.push(c);
+                continue;
+            }
+            None => {}
+        }
+        let fp = topo.footprint(c);
+        let d = cell_distance(model.radius, view.eye, &fp, range);
+        let d = if d > params.min_distance {
+            d
+        } else {
+            params.min_distance
+        };
+        let rho = model.geometric_error(topo.level(c)) * view.proj_scale / d;
+        if rho <= low {
+            out.below_band += 1;
+        } else {
+            out.within_band_or_above += 1;
+        }
+    }
+    (out, culled_cells)
+}
+
+/// Result of [`retain_culled`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Retained<C> {
+    /// Cells added to the split set (culled last-frame splits that were kept), ascending
+    /// (level, raw). The closure forced by them is in the split set too but not listed.
+    pub cells: Vec<C>,
+    /// Candidates that did not fit the piece budget.
+    pub rejected: u32,
+}
+
+/// Keeps cells of `candidates` (the previous split set) that are culled this frame (outside the
+/// frustum or beyond the horizon) split, after [`select_cells`] dropped them (07.1-20).
+///
+/// A culled cell is never refined by the best-first loop, so without this a cell leaving the view
+/// would drop out of the split set and, when it returned a few frames later, be split again: its
+/// children disappear and reappear. `select_cells` itself is unchanged; the caller owns the
+/// retention age (it passes only candidates that may still be retained). Cells are retained in
+/// ascending (level, raw) order, only while all their parents are split, so the set stays closed
+/// upwards, and only within the piece budget that the visible selection left over (retaining
+/// never costs visible detail). The prefix that fits is found by a per-split estimate and
+/// verified exactly; if it does not fit it is halved. `split` must be closed on entry (as
+/// returned by `select_cells`) and is closed on exit.
+pub fn retain_culled<T: Topology>(
+    topo: &T,
+    model: &LodModel,
+    params: &LodParams,
+    view: &View,
+    candidates: &BTreeSet<T::Cell>,
+    resident_range: &dyn Fn(T::Cell) -> Option<HeightRange>,
+    split: &mut BTreeSet<T::Cell>,
+) -> Retained<T::Cell> {
+    let mut cand: Vec<T::Cell> = candidates
+        .iter()
+        .copied()
+        .filter(|c| !split.contains(c))
+        .collect();
+    if cand.is_empty() {
+        return Retained {
+            cells: Vec::new(),
+            rejected: 0,
+        };
+    }
+    cand.sort_by_key(|c| (topo.level(*c), topo.raw(*c)));
+    let occluder = model.radius + model.height.min;
+    // Culled candidates whose parents are all split (including earlier retained ones).
+    let mut chain = split.clone();
+    let mut kept: Vec<T::Cell> = Vec::new();
+    let mut ps = Vec::new();
+    for c in cand {
+        ps.clear();
+        topo.parents(c, &mut ps);
+        if ps.iter().any(|p| !chain.contains(p)) {
+            continue;
+        }
+        let range = range_for(topo, model, c, resident_range);
+        if cell_culled(topo, model, view, c, range, occluder).is_some() {
+            chain.insert(c);
+            kept.push(c);
+        }
+    }
+    if kept.is_empty() {
+        return Retained {
+            cells: Vec::new(),
+            rejected: 0,
+        };
+    }
+    let mut buf: Vec<Piece<T::Cell>> = Vec::new();
+    let base = piece_count(topo, split, &mut buf);
+    let room = params.max_leaves.saturating_sub(base);
+    // Per-split estimate: a split replaces one piece by its children.
+    let mut take = 0usize;
+    let mut est = 0usize;
+    let mut kids: Vec<T::Cell> = Vec::new();
+    for &c in &kept {
+        kids.clear();
+        topo.children(c, &mut kids);
+        let add = kids.len().saturating_sub(1);
+        if est + add > room {
+            break;
+        }
+        est += add;
+        take += 1;
+    }
+    while take > 0 {
+        let mut trial = split.clone();
+        trial.extend(kept[..take].iter().copied());
+        close_balance(topo, &mut trial);
+        if piece_count(topo, &trial, &mut buf) <= params.max_leaves {
+            let rejected = u32::try_from(kept.len() - take).unwrap_or(u32::MAX);
+            kept.truncate(take);
+            *split = trial;
+            return Retained {
+                cells: kept,
+                rejected,
+            };
+        }
+        take /= 2;
+    }
+    Retained {
+        cells: Vec::new(),
+        rejected: u32::try_from(kept.len()).unwrap_or(u32::MAX),
+    }
 }
 
 /// Selects the split set for `view`.
@@ -293,7 +500,6 @@ pub fn select_cells<T: Topology>(
     }
 
     stats.forced_splits = close_balance(topo, &mut split);
-
     // Trim to the hard piece budget by removing the lowest-error split that is safe to remove.
     // Splits at the deepest level are always removable, so this terminates at the roots.
     let mut pieces: Vec<Piece<T::Cell>> = Vec::new();

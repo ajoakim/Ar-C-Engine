@@ -625,3 +625,72 @@ fn partition_holds_under_throttling_and_eviction() {
     assert!(evicted > 0, "eviction never happened");
     app.sys.shutdown();
 }
+
+#[test]
+fn frozen_view_has_zero_churn_after_convergence() {
+    let cfg = TerrainConfig {
+        diagnostics: true,
+        ..test_cfg()
+    };
+    let (mut rt, mut app) = start(cfg, above_pos_x());
+    let mut converged = false;
+    for _ in 0..400 {
+        step(&mut rt, &mut app);
+        if app.sys.drawn() == app.sys.wanted_leaves() && app.sys.report().requests_issued == 0 {
+            converged = true;
+            break;
+        }
+    }
+    assert!(converged, "did not converge");
+    for f in 0..30 {
+        step(&mut rt, &mut app);
+        let r = app.sys.report();
+        assert_eq!(r.level_changes, 0, "frame {f}");
+        assert_eq!(r.drawn_appeared, 0, "frame {f}");
+        assert_eq!(r.drawn_disappeared, 0, "frame {f}");
+        assert_eq!(r.cull_toggles, 0, "frame {f}");
+        assert_eq!(r.overlap_pairs, 0, "frame {f}");
+        assert_eq!(r.flipflops, 0, "frame {f}");
+    }
+    app.sys.shutdown();
+}
+
+#[test]
+fn counters_are_zero_when_diagnostics_are_off() {
+    let (mut rt, mut app) = start(test_cfg(), orbit(40, 2000.0));
+    for _ in 0..40 {
+        step(&mut rt, &mut app);
+        let r = app.sys.report();
+        assert_eq!(
+            (
+                r.level_changes,
+                r.drawn_appeared,
+                r.drawn_disappeared,
+                r.cull_toggles,
+                r.overlap_pairs,
+                r.flipflops,
+                r.flipflops_unexplained
+            ),
+            (0, 0, 0, 0, 0, 0, 0)
+        );
+    }
+    app.sys.shutdown();
+}
+
+#[test]
+fn moving_view_with_diagnostics_reports_churn_and_no_overlap() {
+    let cfg = TerrainConfig {
+        diagnostics: true,
+        ..test_cfg()
+    };
+    let (mut rt, mut app) = start(cfg, orbit(120, 2000.0));
+    let mut appeared = 0u32;
+    for _ in 0..120 {
+        step(&mut rt, &mut app);
+        let r = app.sys.report();
+        assert_eq!(r.overlap_pairs, 0);
+        appeared += r.drawn_appeared;
+    }
+    assert!(appeared > 0, "the counters never saw a change");
+    app.sys.shutdown();
+}

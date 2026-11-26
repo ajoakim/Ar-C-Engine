@@ -9,6 +9,8 @@
 
 pub mod camera;
 pub use camera::{CameraParams, PlanetaryCamera, TAN_HALF_FOV_Y};
+pub mod churn;
+pub use churn::{ChurnCounts, ChurnFlags, ChurnTracker, count_overlaps};
 pub mod effective;
 pub use effective::{EffectiveCut, effective_cut, naive_cut};
 pub mod requests;
