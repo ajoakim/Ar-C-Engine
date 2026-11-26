@@ -1,7 +1,7 @@
 //! `WgpuBackend`: the wgpu implementation of the engine `RenderBackend` trait.
 
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use engine_render::{
     BufferDesc, BufferId, BufferUsage, FramePacket, PipelineDesc, PipelineId, RenderBackend,
@@ -18,6 +18,19 @@ use crate::target::Target;
 
 fn backend_err(e: impl std::fmt::Display) -> RenderError {
     RenderError::Backend(e.to_string())
+}
+
+/// First asynchronous GPU error (uncaptured validation/OOM error or device loss), reported by
+/// the next `submit` instead of wgpu's default panic.
+type ErrorSlot = Arc<Mutex<Option<RenderError>>>;
+
+fn store_error(slot: &ErrorSlot, err: RenderError) {
+    tracing::error!(error = %err, "wgpu asynchronous error");
+    if let Ok(mut g) = slot.lock()
+        && g.is_none()
+    {
+        *g = Some(err);
+    }
 }
 
 type TexView = (wgpu::Texture, wgpu::TextureView);
@@ -108,6 +121,7 @@ pub struct WgpuBackend {
     sampler: wgpu::Sampler,
     textures: HashMap<TextureId, GpuTexture>,
     default_texture: GpuTexture,
+    gpu_error: ErrorSlot,
 }
 
 impl WgpuBackend {
@@ -205,6 +219,15 @@ impl WgpuBackend {
         let (device, queue) =
             pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default()))
                 .map_err(backend_err)?;
+        let gpu_error: ErrorSlot = Arc::new(Mutex::new(None));
+        let slot = gpu_error.clone();
+        device.on_uncaptured_error(Arc::new(move |e: wgpu::Error| {
+            store_error(&slot, RenderError::Backend(format!("gpu error: {e}")));
+        }));
+        let slot = gpu_error.clone();
+        device.set_device_lost_callback(move |reason, msg| {
+            store_error(&slot, RenderError::DeviceLost(format!("{reason:?}: {msg}")));
+        });
         if u64::from(device.limits().min_uniform_buffer_offset_alignment) > DRAW_UNIFORM_STRIDE {
             return Err(RenderError::Backend(
                 "device uniform offset alignment exceeds draw uniform stride".into(),
@@ -285,6 +308,7 @@ impl WgpuBackend {
             sampler,
             textures: HashMap::new(),
             default_texture,
+            gpu_error,
         })
     }
 
@@ -417,6 +441,14 @@ impl WgpuBackend {
             self.reconfigure()?;
         }
         Ok(())
+    }
+
+    /// Takes the stored asynchronous GPU error, if any.
+    fn take_gpu_error(&self) -> Result<(), RenderError> {
+        match self.gpu_error.lock().ok().and_then(|mut g| g.take()) {
+            Some(e) => Err(e),
+            None => Ok(()),
+        }
     }
 
     fn render(
@@ -622,6 +654,15 @@ impl RenderBackend for WgpuBackend {
     }
 
     fn submit(&mut self, packet: &FramePacket) -> Result<(), RenderError> {
+        self.take_gpu_error()?;
+        let result = self.submit_inner(packet);
+        self.take_gpu_error()?;
+        result
+    }
+}
+
+impl WgpuBackend {
+    fn submit_inner(&mut self, packet: &FramePacket) -> Result<(), RenderError> {
         self.table.validate_packet(packet)?;
         if self.size.0 == 0 || self.size.1 == 0 {
             return Ok(());

@@ -344,3 +344,37 @@ fn draw_items_plus_culled_equals_drawn() {
     assert!(culled_any, "no draw was ever culled");
     app.sys.shutdown();
 }
+
+#[test]
+fn held_meshes_bounded_while_hovering() {
+    let cfg = TerrainConfig {
+        detail_budget_patches: 60,
+        ..test_cfg()
+    };
+    let base_levels = u32::from(cfg.base_levels);
+    let base = 6 * ((1u64 << (2 * (base_levels + 1))) - 1) / 3 + 16;
+    let bound = usize::try_from(base + cfg.detail_budget_patches).expect("bound");
+    // Slow drift 40 m above the surface: new cells keep entering the wanted set.
+    let eyes: Vec<DVec3> = (0..600)
+        .map(|i| {
+            let a = f64::from(i) * 2.0e-6;
+            DVec3::new(a.cos(), a.sin(), 0.0) * (RADIUS + 40.0)
+        })
+        .collect();
+    let (mut rt, mut app) = start(cfg.clone(), eyes);
+    let mut max_held = 0usize;
+    for _ in 0..600 {
+        step(&mut rt, &mut app);
+        let r = app.sys.report();
+        assert!(r.stream.pending <= cfg.stream.max_pending);
+        assert!(app.sys.held_mesh_count() <= bound, "held {}", r.held_meshes);
+        assert!(
+            r.pending_requests <= bound,
+            "requests {}",
+            r.pending_requests
+        );
+        max_held = max_held.max(app.sys.held_mesh_count());
+    }
+    assert!(max_held > 0);
+    app.sys.shutdown();
+}

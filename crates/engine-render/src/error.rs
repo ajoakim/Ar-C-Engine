@@ -95,6 +95,9 @@ pub enum RenderError {
     /// A required pipeline was not registered.
     #[error("missing pipeline: {0}")]
     MissingPipeline(&'static str),
+    /// The GPU device was lost (driver reset, removal or destruction).
+    #[error("device lost: {0}")]
+    DeviceLost(String),
     /// Backend-specific failure.
     #[error("backend error: {0}")]
     Backend(String),
