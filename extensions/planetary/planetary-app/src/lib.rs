@@ -29,6 +29,10 @@ pub struct AppSettings {
     /// Initial altitude above the nominal radius for the interactive camera.
     pub start_altitude: f64,
     pub viewport_height: u32,
+    /// Initial viewport width (updated from resize events).
+    pub viewport_width: u32,
+    /// Attach the camera frustum to the selection view (default true).
+    pub frustum_culling: bool,
     /// Scripted descent; `None` means the interactive camera.
     pub script: Option<DescentScript>,
     /// Frame telemetry options (all off by default).
@@ -42,6 +46,8 @@ impl Default for AppSettings {
             camera: CameraParams::default(),
             start_altitude: TerrainParams::default().radius,
             viewport_height: 720,
+            viewport_width: 1280,
+            frustum_culling: true,
             script: None,
             perf: PerfSettings::default(),
         }
@@ -55,6 +61,7 @@ pub struct PlanetaryApp {
     camera: PlanetaryCamera,
     viewport_h: u32,
     viewport_w: u32,
+    frustum_culling: bool,
     time: f64,
     last_view: Option<View>,
     quit: bool,
@@ -107,7 +114,8 @@ impl PlanetaryApp {
             terrain,
             camera,
             viewport_h,
-            viewport_w: viewport_h.saturating_mul(16) / 9,
+            viewport_w: settings.viewport_width.max(1),
+            frustum_culling: settings.frustum_culling,
             time: 0.0,
             last_view: View::new(pos, viewport_h, TAN_HALF_FOV_Y),
             quit: false,
@@ -221,7 +229,11 @@ impl App for PlanetaryApp {
             let aspect = (f64::from(self.viewport_w) / f64::from(self.viewport_h)).max(16.0 / 9.0);
             let alt = self.camera.altitude(&|d| self.terrain.surface_radius_at(d));
             let near = f64::from(PlanetaryCamera::near_plane(alt));
-            self.last_view = Some(view.with_frustum(self.camera.frustum_planes(aspect, near)));
+            self.last_view = Some(if self.frustum_culling {
+                view.with_frustum(self.camera.frustum_planes(aspect, near))
+            } else {
+                view
+            });
         }
         if let Some(view) = self.last_view {
             self.telemetry.begin_phase();

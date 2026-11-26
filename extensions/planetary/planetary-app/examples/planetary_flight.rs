@@ -3,7 +3,9 @@
 //! Controls: WASD/arrows move, E/Space up, Q/Ctrl down, Shift boost,
 //! hold right mouse button to look, Esc quits.
 //!
-//! Usage: `planetary_flight [--headless <frames>] [--descent] [--frames <n>]
+//! Recommended: `cargo run --release -p planetary-app --example planetary_flight -- --descent --perf-log flight.csv`
+//!
+//! Usage: `planetary_flight [--headless <frames>] [--descent] [--ascent] [--frames <n>]
 //! [--perf-log <file.csv>] [--no-console] [--bench-descent] [--budget-ms <ms>] [--strict]`
 //!
 //! `--headless` runs on the null backend with `settle_each_frame` enabled so the smoke run
@@ -23,7 +25,7 @@ use planetary_app::{
     ALTITUDE_BANDS, AppSettings, DescentScript, PlanetaryApp, WallClock, band_of, summarize,
 };
 
-const USAGE: &str = "usage: planetary_flight [--headless <frames>] [--descent] [--frames <n>] [--perf-log <file.csv>] [--no-console] [--bench-descent] [--budget-ms <ms>] [--strict]";
+const USAGE: &str = "usage: planetary_flight [--headless <frames>] [--descent] [--ascent] [--frames <n>] [--perf-log <file.csv>] [--no-console] [--bench-descent] [--budget-ms <ms>] [--strict]";
 
 #[derive(Default, Clone, Copy)]
 struct BandMax {
@@ -113,6 +115,7 @@ fn bench(mut settings: AppSettings, n: u64, budget: f64, strict: bool) -> Result
 fn main() -> Result<(), SdkError> {
     let mut headless: Option<u32> = None;
     let mut descent = false;
+    let mut ascent = false;
     let mut frames: Option<u64> = None;
     let mut perf_log: Option<std::path::PathBuf> = None;
     let mut console = true;
@@ -131,6 +134,7 @@ fn main() -> Result<(), SdkError> {
                 headless = Some(n);
             }
             "--descent" => descent = true,
+            "--ascent" => ascent = true,
             "--frames" => {
                 frames = Some(
                     args.next()
@@ -159,6 +163,11 @@ fn main() -> Result<(), SdkError> {
     settings.perf.csv_path = perf_log;
     if descent {
         settings.script = Some(DescentScript::orbit_to_surface(
+            settings.terrain.terrain.radius,
+        ));
+    }
+    if ascent {
+        settings.script = Some(DescentScript::surface_to_orbit(
             settings.terrain.terrain.radius,
         ));
     }

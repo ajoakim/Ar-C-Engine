@@ -27,6 +27,31 @@ impl DescentScript {
         }
     }
 
+    /// Scripted ascent from the surface back to orbit.
+    ///
+    /// Starts at the direction where [`DescentScript::orbit_to_surface`] ends (its start
+    /// direction rotated by `lateral_radians` about the same perpendicular axis, computed with
+    /// the same quaternion formula as `raw_pose`) at altitude 3 m and rises geometrically to
+    /// `radius`.
+    #[must_use]
+    pub fn surface_to_orbit(radius: f64) -> Self {
+        let d = Self::orbit_to_surface(radius);
+        let start = d.start_dir.normalize();
+        let up_ref = if start.y.abs() > 0.99 {
+            DVec3::Z
+        } else {
+            DVec3::Y
+        };
+        let axis = start.cross(up_ref).normalize();
+        let end_dir = (DQuat::from_axis_angle(axis, d.lateral_radians) * start).normalize();
+        Self {
+            start_dir: end_dir,
+            start_altitude: 3.0,
+            end_altitude: radius,
+            ..d
+        }
+    }
+
     /// Pose at simulated time `t` (clamped to `[0, descent_seconds]`).
     ///
     /// Altitude decays geometrically from start to end; the direction rotates by
@@ -98,5 +123,21 @@ mod tests {
         assert!(p1.length() < p0.length());
         assert!((p2.length() - 1003.0).abs() < 1e-6);
         assert_eq!(s.pose_at(4.0, &sphere), s.pose_at(4.0, &sphere));
+    }
+
+    #[test]
+    fn ascent_rises_and_is_pure() {
+        let s = DescentScript::surface_to_orbit(1000.0);
+        let (p0, _) = s.pose_at(0.0, &sphere);
+        let (p1, _) = s.pose_at(4.0, &sphere);
+        let (p2, _) = s.pose_at(100.0, &sphere);
+        assert!((p0.length() - 1003.0).abs() < 1e-6);
+        assert!(p1.length() > p0.length());
+        assert!((p2.length() - 2000.0).abs() < 1e-6);
+        assert_eq!(s.pose_at(4.0, &sphere), s.pose_at(4.0, &sphere));
+        // Starts where the descent ends.
+        let d = DescentScript::orbit_to_surface(1000.0);
+        let (e, _) = d.pose_at(d.descent_seconds, &sphere);
+        assert!((e - p0).length() < 1e-6);
     }
 }
