@@ -28,6 +28,8 @@ pub enum PayloadError {
     NonFinite,
     IndexOutOfRange(u32),
     BadRange,
+    BadClass(u8),
+    BadPadding,
 }
 
 impl core::fmt::Display for PayloadError {
@@ -47,6 +49,8 @@ impl core::fmt::Display for PayloadError {
             PayloadError::NonFinite => write!(f, "non-finite float in payload"),
             PayloadError::IndexOutOfRange(i) => write!(f, "index {i} out of range"),
             PayloadError::BadRange => write!(f, "payload height range min > max"),
+            PayloadError::BadClass(c) => write!(f, "unknown vertex class {c}"),
+            PayloadError::BadPadding => write!(f, "non-zero reserved payload bytes"),
         }
     }
 }
