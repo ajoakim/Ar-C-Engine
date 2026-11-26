@@ -16,11 +16,11 @@ pub use requests::{plan_requests, priority_for_level, stale_requests, wanted_clo
 pub mod key;
 pub use key::{CellKey, PatchKey};
 pub mod palette;
-pub use palette::{PALETTE_H, PALETTE_W, palette_rgba8};
+pub use palette::{DEBUG_PALETTE_H, PALETTE_H, PALETTE_W, debug_palette_rgba8, palette_rgba8};
 pub mod source;
-pub use source::PatchSource;
+pub use source::{CellSource, cell_payload_estimate};
 pub mod uploader;
-pub use uploader::{GpuUploader, HeldPatch};
+pub use uploader::{GpuUploader, HeldCell};
 pub mod system;
 pub use system::{DRAW_MARGIN, TerrainConfig, TerrainReport, TerrainSystem};
 

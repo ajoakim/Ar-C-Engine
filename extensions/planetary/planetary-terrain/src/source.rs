@@ -1,39 +1,69 @@
-//! Worker-side patch producer.
+//! Worker-side cell producer (v3 cell payloads), generic over the topology.
 
 use std::sync::Arc;
 
 use engine_sdk::CancelToken;
 use engine_sdk::streaming::StreamSource;
 use planetary_core::lod::LodModel;
-use planetary_core::{PlanetTerrain, build_patch_cancellable, encode_payload, payload_len};
+use planetary_core::{CELL_HEADER_LEN, PlanetTerrain, Topology, encode_cell_payload};
 
-use crate::key::PatchKey;
+use crate::key::CellKey;
 
-/// Builds patch meshes on worker threads and encodes them as validated payloads.
-pub struct PatchSource {
+/// Bytes of one vertex in a cell payload (position, normal, uv as f32).
+const VERTEX_BYTES: usize = 32;
+
+/// Estimated payload size for a cell with `max_vertex_count` vertices.
+#[must_use]
+pub fn cell_payload_estimate(max_vertex_count: u32) -> u64 {
+    (CELL_HEADER_LEN + max_vertex_count as usize * VERTEX_BYTES) as u64
+}
+
+/// Builds cell meshes on worker threads and encodes them as validated v3 payloads.
+pub struct CellSource<T: Topology> {
+    topo: Arc<T>,
     terrain: Arc<PlanetTerrain>,
     model: LodModel,
+    debug_cells: bool,
+    estimate: u64,
 }
 
-impl PatchSource {
+impl<T: Topology> CellSource<T> {
+    /// `max_vertex_count` is the largest vertex count over the topology's vertex classes.
     #[must_use]
-    pub fn new(terrain: Arc<PlanetTerrain>, model: LodModel) -> Self {
-        Self { terrain, model }
+    pub fn new(
+        topo: Arc<T>,
+        terrain: Arc<PlanetTerrain>,
+        model: LodModel,
+        debug_cells: bool,
+        max_vertex_count: u32,
+    ) -> Self {
+        Self {
+            topo,
+            terrain,
+            model,
+            debug_cells,
+            estimate: cell_payload_estimate(max_vertex_count),
+        }
     }
 }
 
-impl StreamSource<PatchKey> for PatchSource {
-    fn estimate_bytes(&self, _key: &PatchKey) -> u64 {
-        payload_len(self.terrain.cells_per_edge()) as u64
+impl<T: Topology> StreamSource<CellKey<T>> for CellSource<T> {
+    fn estimate_bytes(&self, _key: &CellKey<T>) -> u64 {
+        self.estimate
     }
 
-    fn produce(&self, key: &PatchKey, cancel: &CancelToken) -> Option<Vec<u8>> {
+    fn produce(&self, key: &CellKey<T>, cancel: &CancelToken) -> Option<Vec<u8>> {
         if cancel.is_cancelled() {
             return None;
         }
-        build_patch_cancellable(&self.terrain, &self.model, key.cell, &|| {
-            cancel.is_cancelled()
-        })
-        .map(|m| encode_payload(&m))
+        self.topo
+            .build_mesh(
+                key.cell,
+                &self.terrain,
+                &self.model,
+                self.debug_cells,
+                &|| cancel.is_cancelled(),
+            )
+            .map(|m| encode_cell_payload(&m))
     }
 }
