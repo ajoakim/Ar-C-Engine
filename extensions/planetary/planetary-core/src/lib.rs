@@ -17,6 +17,13 @@ pub use mapping::{
     patch_corner_dirs, vertex_dir,
 };
 pub mod lod;
+pub mod mesh;
+pub mod payload;
+pub use mesh::{
+    PatchMesh, SKIRT_MARGIN, border_positions_f64, build_patch, build_patch_cancellable,
+    grid_indices, index_count, skirt_depth, vertex_count, vertex_position_f64,
+};
+pub use payload::{PayloadError, decode_payload, encode_payload, payload_len};
 pub mod terrain;
 pub use terrain::{
     BASE_LAYER, BaseLayer, DETAIL_LAYER, DetailLayer, LAYER_VERSION, LayerSeeds, MASK_LAYER,
