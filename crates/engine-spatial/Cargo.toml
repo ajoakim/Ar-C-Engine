@@ -10,6 +10,8 @@ description = "Pluggable spatial query interface and default backend."
 [dependencies]
 engine-math.workspace = true
 engine-world.workspace = true
+glam.workspace = true
+thiserror.workspace = true
 
 [lints]
 workspace = true

@@ -56,3 +56,5 @@ winit = "0.30.13"
 raw-window-handle = "0.6.2"
 pollster = "1.0.3"
 bytemuck = { version = "1.25.2", features = ["derive"] }
+slotmap = "1.1.1"
+uuid = { version = "1.29.3", default-features = false, features = ["v5"] }

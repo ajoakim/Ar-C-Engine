@@ -439,6 +439,9 @@ version = "0.1.0"
 dependencies = [
  "engine-core",
  "engine-jobs",
+ "slotmap",
+ "thiserror 2.0.21",
+ "uuid",
 ]
 
 [[package]]
@@ -542,6 +545,8 @@ version = "0.1.0"
 dependencies = [
  "engine-math",
  "engine-world",
+ "glam",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -550,6 +555,9 @@ version = "0.1.0"
 dependencies = [
  "engine-core",
  "engine-math",
+ "glam",
+ "slotmap",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -1764,6 +1772,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "sha1_smol"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbfa15b3dddfee50a0fff136974b3e1bde555604ba463834a7eb7deb6417705d"
+
+[[package]]
 name = "sharded-slab"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2104,6 +2118,15 @@ name = "unicode-width"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ca718471876992059f251e33aafc334346ada08042b7661dd1fe313a9bced557"
+
+[[package]]
+name = "uuid"
+version = "1.29.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c14b15dffa2f4bd712103e857140aa04a4f2ff6e955c77d7eb8e53ee02a3b64"
+dependencies = [
+ "sha1_smol",
+]
 
 [[package]]
 name = "valuable"

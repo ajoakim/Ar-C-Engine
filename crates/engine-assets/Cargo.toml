@@ -10,6 +10,9 @@ description = "Resource IDs, typed handles and residency state."
 [dependencies]
 engine-core.workspace = true
 engine-jobs.workspace = true
+slotmap.workspace = true
+uuid.workspace = true
+thiserror.workspace = true
 
 [lints]
 workspace = true

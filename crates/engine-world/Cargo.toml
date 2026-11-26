@@ -10,6 +10,9 @@ description = "Entities, transforms and coordinate spaces."
 [dependencies]
 engine-core.workspace = true
 engine-math.workspace = true
+glam.workspace = true
+slotmap.workspace = true
+thiserror.workspace = true
 
 [lints]
 workspace = true
