@@ -6,7 +6,10 @@
 //! clocks, I/O or global state; no planetary concepts.
 
 mod hash;
+mod noise;
 mod seed;
+
+pub use noise::{fbm_3d, value_noise_2d, value_noise_3d};
 
 pub use hash::{
     FNV_OFFSET_BASIS, FNV_PRIME, Fnv1a64, canonical_bits, fnv1a64, hash2, hash3, splitmix64,
