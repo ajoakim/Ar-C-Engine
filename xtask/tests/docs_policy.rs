@@ -140,3 +140,33 @@ fn adr_0008_determinism_present() {
         require(f, &t, lit);
     }
 }
+
+#[test]
+fn adr_0009_gpu_hook_present() {
+    let f = "docs/architecture/adr/0009-sdk-per-frame-gpu-hook.md";
+    let t = read(f);
+    for lit in [
+        "Status: accepted",
+        "gpu_frame",
+        "destroy_mesh",
+        "default no-op",
+    ] {
+        require(f, &t, lit);
+    }
+}
+
+#[test]
+fn adr_0010_lod_technique_present() {
+    let f = "docs/architecture/adr/0010-terrain-lod-skirts-and-shared-border-sampling.md";
+    let t = read(f);
+    for lit in [
+        "skirts",
+        "shared-border",
+        "2:1",
+        "effective cut",
+        "## Evidence",
+        "T(s)",
+    ] {
+        require(f, &t, lit);
+    }
+}

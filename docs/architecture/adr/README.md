@@ -12,3 +12,5 @@ To add an ADR, copy `0000-template.md` to the next free number (4-digit zero-pad
 | [0006](0006-spatial-index-hash-grid-first.md) | Spatial Index - Uniform Hash Grid First, Benchmark Later | accepted |
 | [0007](0007-lit-rendering-gltf-import-and-canary.md) | Lit Rendering, Materials, glTF Import and the Planetary-Absent Canary | accepted |
 | [0008](0008-deterministic-streaming-and-procedural-generation.md) | Generic Streaming and Deterministic Procedural Generation | accepted |
+| [0009](0009-sdk-per-frame-gpu-hook.md) | SDK Per-Frame GPU Hook and Mesh Destruction | accepted |
+| [0010](0010-terrain-lod-skirts-and-shared-border-sampling.md) | Terrain LOD - Skirts, Shared-Border Sampling and 2:1 Balance | proposed |
