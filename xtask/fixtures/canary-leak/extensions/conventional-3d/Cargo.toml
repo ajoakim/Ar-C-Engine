@@ -1,0 +1,8 @@
+[package]
+name = "conventional-3d"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+engine-sdk = { path = "../../crates/engine-sdk" }

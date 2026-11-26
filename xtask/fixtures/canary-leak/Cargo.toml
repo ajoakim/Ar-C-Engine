@@ -1,0 +1,3 @@
+[workspace]
+resolver = "3"
+members = ["extensions/conventional-3d", "crates/engine-sdk", "extensions/planetary/planetary-core"]
