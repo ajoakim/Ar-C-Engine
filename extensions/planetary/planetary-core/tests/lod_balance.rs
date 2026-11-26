@@ -168,16 +168,21 @@ fn max_level_jump_detects_negative_control() {
 
 #[test]
 fn reference_views_balanced() {
-    use planetary_core::lod::{LodParams, View, reference_views, select};
+    use planetary_core::lod::{LodParams, View, reference_views};
+    use planetary_core::topology::select::select_cells;
+    use planetary_core::{CubeSphere, Topology};
     let m = model();
     let p = LodParams::default();
     let views = reference_views(R, m.height.max);
     assert_eq!(views.len(), 8 + 8 + 12 + 2);
     for (name, eye) in views {
         let v = View::new(eye, 720, 1.0 / 3.0f64.sqrt()).unwrap();
-        let sel = select(&m, &p, &v, &BTreeSet::new(), &|_| None);
-        assert!(is_partition(&sel.leaves), "{name}");
-        assert!(max_level_jump(&sel.leaves) <= 1, "{name}");
-        assert!(sel.leaves.len() <= p.max_leaves, "{name}");
+        let cube = CubeSphere::new(m.cells_per_edge);
+        let sel = select_cells(&cube, &m, &p, &v, &BTreeSet::new(), &|_| None);
+        let leaves: Vec<PatchId> = sel.pieces.iter().map(|q| q.cell).collect();
+        assert!(is_partition(&leaves), "{name}");
+        assert!(max_level_jump(&leaves) <= 1, "{name}");
+        assert!(leaves.len() <= p.max_leaves, "{name}");
+        assert_eq!(cube.roots().len(), 6);
     }
 }

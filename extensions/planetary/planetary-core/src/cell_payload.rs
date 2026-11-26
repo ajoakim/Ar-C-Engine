@@ -3,7 +3,6 @@
 
 use engine_sdk::{DVec3, VertexPosNormalUv};
 
-use crate::payload::PayloadError;
 use crate::topology::CellMesh;
 
 /// `b"CELL"` little-endian.
@@ -12,6 +11,43 @@ pub const CELL_PAYLOAD_VERSION: u32 = 3;
 /// magic u32, version u32, raw u64, vertex_class u8 + 3 zero bytes, vertex_count u32,
 /// origin 3*f64, bound_radius f32, skirt_depth f64, height_min f64, height_max f64.
 pub const CELL_HEADER_LEN: usize = 76;
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum PayloadError {
+    Truncated { expected: usize, got: usize },
+    BadMagic(u32),
+    BadVersion(u32),
+    IdMismatch { expected: u64, got: u64 },
+    CountMismatch { vertices: u32, indices: u32 },
+    NonFinite,
+    BadRange,
+    BadClass(u8),
+    BadPadding,
+}
+
+impl core::fmt::Display for PayloadError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            PayloadError::Truncated { expected, got } => {
+                write!(f, "payload length {got}, expected {expected}")
+            }
+            PayloadError::BadMagic(m) => write!(f, "bad payload magic {m:#x}"),
+            PayloadError::BadVersion(v) => write!(f, "unsupported payload version {v}"),
+            PayloadError::IdMismatch { expected, got } => {
+                write!(f, "payload id {got:#x}, expected {expected:#x}")
+            }
+            PayloadError::CountMismatch { vertices, indices } => {
+                write!(f, "bad counts: {vertices} vertices, {indices} indices")
+            }
+            PayloadError::NonFinite => write!(f, "non-finite float in payload"),
+            PayloadError::BadRange => write!(f, "payload height range min > max"),
+            PayloadError::BadClass(c) => write!(f, "unknown vertex class {c}"),
+            PayloadError::BadPadding => write!(f, "non-zero reserved payload bytes"),
+        }
+    }
+}
+
+impl std::error::Error for PayloadError {}
 
 /// Serialises `mesh` (the vertex count is taken from the mesh).
 #[must_use]

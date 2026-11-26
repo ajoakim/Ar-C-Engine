@@ -1,16 +1,9 @@
-//! Best-first, budgeted screen-space-error selection with culling and hysteresis.
-//!
-//! One pass, no tau escalation: the highest-error cell is refined first, traversal stops at a node
-//! budget, and the split count is capped by a hard leaf budget, so the cost per frame is bounded
-//! and the result is always a balanced partition.
-
-use std::collections::BTreeSet;
+//! Selection parameters, statistics and the screen-space error of a cell. The selection itself is
+//! generic over the topology: see `topology::select::select_cells`.
 
 use crate::lod::cull::{HeightRange, cell_distance, patch_footprint};
 use crate::lod::model::{LodModel, View};
 use crate::patch_id::PatchId;
-use crate::topology::cube::CubeSphere;
-use crate::topology::select::select_cells;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct LodParams {
@@ -51,13 +44,6 @@ pub struct SelectStats {
     pub tau_eff: f64,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct Selection {
-    pub split: BTreeSet<PatchId>,
-    pub leaves: Vec<PatchId>,
-    pub stats: SelectStats,
-}
-
 /// `eps(L) * proj_scale / max(distance to the extruded footprint, min_distance)`.
 #[must_use]
 pub fn screen_space_error(
@@ -70,30 +56,4 @@ pub fn screen_space_error(
     let d = cell_distance(model.radius, view.eye, &patch_footprint(id), range);
     let d = if d > min_distance { d } else { min_distance };
     model.geometric_error(id.level()) * view.proj_scale / d
-}
-
-/// Selects the split set for `view`.
-///
-/// Cube-sphere convenience wrapper; removed in 07.1-16 once planetary-terrain uses `select_cells`.
-///
-/// A node splits when `rho > tau`, or, if it was split in `prev_split`, while
-/// `rho > tau * (1 - hysteresis)`. Cells that cannot be seen (beyond the horizon, outside the
-/// frustum) are not refined. `resident_range` returns the measured height range of a resident
-/// patch. The result is balanced (2:1), a partition, and has at most `max_leaves` leaves.
-#[must_use]
-pub fn select(
-    model: &LodModel,
-    params: &LodParams,
-    view: &View,
-    prev_split: &BTreeSet<PatchId>,
-    resident_range: &dyn Fn(PatchId) -> Option<HeightRange>,
-) -> Selection {
-    let topo = CubeSphere::new(model.cells_per_edge);
-    let sel = select_cells(&topo, model, params, view, prev_split, resident_range);
-    let leaves = sel.pieces.iter().map(|p| p.cell).collect();
-    Selection {
-        split: sel.split,
-        leaves,
-        stats: sel.stats,
-    }
 }

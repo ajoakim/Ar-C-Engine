@@ -14,4 +14,4 @@ pub use cull::{
     horizon_visible, patch_footprint,
 };
 pub use model::{Bound, DEFAULT_KAPPA, LodModel, RESIDUAL_LEVELS, View};
-pub use select::{LodParams, SelectStats, Selection, screen_space_error, select};
+pub use select::{LodParams, SelectStats, screen_space_error};

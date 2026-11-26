@@ -3,11 +3,35 @@
 use std::collections::BTreeSet;
 
 use engine_sdk::DVec3;
-use planetary_core::PatchId;
 use planetary_core::lod::{
-    HeightRange, LodModel, LodParams, Selection, View, cell_bound, is_balanced, is_partition,
-    patch_footprint, reference_views, screen_space_error, select,
+    HeightRange, LodModel, LodParams, SelectStats, View, cell_bound, is_balanced, is_partition,
+    patch_footprint, reference_views, screen_space_error,
 };
+use planetary_core::topology::select::select_cells;
+use planetary_core::{CubeSphere, PatchId};
+
+/// Cube-sphere selection through the generic `select_cells` (the `lod::select` wrapper is gone).
+#[derive(Debug, PartialEq)]
+struct Selection {
+    split: BTreeSet<PatchId>,
+    leaves: Vec<PatchId>,
+    stats: SelectStats,
+}
+
+fn select(
+    m: &LodModel,
+    p: &LodParams,
+    v: &View,
+    prev: &BTreeSet<PatchId>,
+    resident: &dyn Fn(PatchId) -> Option<HeightRange>,
+) -> Selection {
+    let s = select_cells(&CubeSphere::new(m.cells_per_edge), m, p, v, prev, resident);
+    Selection {
+        split: s.split,
+        leaves: s.pieces.iter().map(|q| q.cell).collect(),
+        stats: s.stats,
+    }
+}
 
 const R: f64 = 6_371_000.0;
 const RELIEF: f64 = 3800.0;

@@ -8,7 +8,8 @@ use engine_sdk::{
     App, AppControl, DVec3, Engine, EngineConfig, MAX_DRAWS_PER_FRAME, NullBackend, Resources,
     Runtime, SceneState, SdkError,
 };
-use planetary_core::lod::{LodParams, View, is_partition, select};
+use planetary_core::lod::{LodParams, View, is_partition};
+use planetary_core::topology::select::select_cells;
 use planetary_core::{CubeSphere, Face, PatchId};
 use planetary_terrain::{
     BudgetLimits, CameraParams, DRAW_MARGIN, GpuUploader, PatchKey, PlanetaryCamera, StreamBudget,
@@ -324,7 +325,8 @@ fn resident_ranges_reduce_node_visits() {
         proj_scale: 720.0 / (2.0 * TAN_HALF_FOV_Y),
         frustum: None,
     };
-    let none = select(
+    let none = select_cells(
+        &CubeSphere::new(app.sys.config().cells_per_edge),
         app.sys.model(),
         &app.sys.config().lod,
         &view,

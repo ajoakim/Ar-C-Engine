@@ -20,16 +20,14 @@ pub mod cell_payload;
 pub mod hex;
 pub mod lod;
 pub mod mesh;
-pub mod payload;
 pub use cell_payload::{
-    CELL_HEADER_LEN, CELL_PAYLOAD_MAGIC, CELL_PAYLOAD_VERSION, decode_cell_payload,
+    CELL_HEADER_LEN, CELL_PAYLOAD_MAGIC, CELL_PAYLOAD_VERSION, PayloadError, decode_cell_payload,
     encode_cell_payload,
 };
 pub use mesh::{
     PatchMesh, SKIRT_MARGIN, border_positions_f64, build_patch, build_patch_cancellable,
     grid_indices, index_count, skirt_depth, vertex_count, vertex_position_f64,
 };
-pub use payload::{PayloadError, decode_payload, encode_payload, payload_len};
 pub mod topology;
 pub use hex::HexSphere;
 pub use topology::{CellMesh, IndexVariant, Piece, Topology, cube::CubeSphere};

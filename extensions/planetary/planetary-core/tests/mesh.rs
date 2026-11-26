@@ -1,19 +1,17 @@
-//! Patch mesh topology, winding, border normals, determinism, cancellation and payload codec.
+//! Patch mesh topology, winding, border normals, determinism and cancellation. The payload codec
+//! tests live in `cell_payload.rs` (payload v3).
 
 use engine_sdk::DVec3;
 use engine_sdk::procedural::{Fnv1a64, splitmix64};
 use planetary_core::lod::{DEFAULT_KAPPA, LodModel};
 use planetary_core::mesh::{PatchMesh, grid_indices, index_count, skirt_depth, vertex_count};
-use planetary_core::payload::{
-    HEADER_LEN, PAYLOAD_MAGIC, PayloadError, decode_payload, encode_payload, payload_len,
-};
 use planetary_core::{
     Edge, Face, PatchId, PlanetTerrain, TerrainParams, build_patch, build_patch_cancellable,
     neighbor, patch_center_dir, vertex_dir,
 };
 
 const SEED: u64 = 0x0007_5EED_2026_0001;
-const GOLDEN_MESH: u64 = 0xd6e7_58c0_249e_3586; // payload v2 (height range); Windows-computed; cross-platform CI pending
+const GOLDEN_MESH: u64 = 0xd6e7_58c0_249e_3586; // FNV of the legacy v2 byte layout (kept so the hash is unchanged); Windows-computed; cross-platform CI pending
 
 fn terrain(n: u32) -> PlanetTerrain {
     PlanetTerrain::new(SEED, TerrainParams::default(), n).expect("terrain")
@@ -212,6 +210,34 @@ fn border_normals_identical_across_same_level_neighbors() {
     assert!(checked > 0);
 }
 
+/// The legacy v2 byte layout of a patch mesh: header (magic `PTCH`, version 2, id, counts, origin,
+/// bound radius, skirt depth, height range), vertices, then indices. Only used to hash meshes, so
+/// `GOLDEN_MESH` stays bit-identical after the v2 payload codec was removed.
+fn golden_bytes(mesh: &PatchMesh) -> Vec<u8> {
+    let mut out = Vec::new();
+    out.extend_from_slice(&0x4843_5450u32.to_le_bytes());
+    out.extend_from_slice(&2u32.to_le_bytes());
+    out.extend_from_slice(&mesh.id.raw().to_le_bytes());
+    out.extend_from_slice(&(mesh.vertices.len() as u32).to_le_bytes());
+    out.extend_from_slice(&(mesh.indices.len() as u32).to_le_bytes());
+    for f in [mesh.origin.x, mesh.origin.y, mesh.origin.z] {
+        out.extend_from_slice(&f.to_le_bytes());
+    }
+    out.extend_from_slice(&mesh.bound_radius.to_le_bytes());
+    for f in [mesh.skirt_depth, mesh.height_min, mesh.height_max] {
+        out.extend_from_slice(&f.to_le_bytes());
+    }
+    for v in &mesh.vertices {
+        for f in v.position.iter().chain(&v.normal).chain(&v.uv) {
+            out.extend_from_slice(&f.to_le_bytes());
+        }
+    }
+    for i in &mesh.indices {
+        out.extend_from_slice(&i.to_le_bytes());
+    }
+    out
+}
+
 #[test]
 fn deterministic_and_golden() {
     let n = 8;
@@ -219,8 +245,8 @@ fn deterministic_and_golden() {
     let m = model(&t);
     let mut h = Fnv1a64::new();
     for id in [PatchId::root(Face::PosX), pid(Face::PosZ, 2, 0, 0)] {
-        let a = encode_payload(&build_patch(&t, &m, id));
-        let b = encode_payload(&build_patch(&t, &m, id));
+        let a = golden_bytes(&build_patch(&t, &m, id));
+        let b = golden_bytes(&build_patch(&t, &m, id));
         assert_eq!(a, b);
         h.write(&a);
     }
@@ -238,102 +264,4 @@ fn cancellation() {
         build_patch_cancellable(&t, &m, id, &|| false),
         Some(build_patch(&t, &m, id))
     );
-}
-
-fn valid_payload() -> (Vec<u8>, PatchId, u32, PatchMesh) {
-    let n = 8;
-    let t = terrain(n);
-    let m = model(&t);
-    let id = pid(Face::PosY, 3, 7, 3);
-    let mesh = build_patch(&t, &m, id);
-    (encode_payload(&mesh), id, n, mesh)
-}
-
-#[test]
-fn payload_round_trip() {
-    let (bytes, id, n, mesh) = valid_payload();
-    assert_eq!(bytes.len(), payload_len(n));
-    assert_eq!(decode_payload(&bytes, id, n), Ok(mesh));
-}
-
-#[test]
-fn payload_rejects_malformed() {
-    let (bytes, id, n, _) = valid_payload();
-    let other = pid(Face::PosY, 3, 7, 2);
-    assert!(matches!(
-        decode_payload(&bytes[..bytes.len() - 1], id, n),
-        Err(PayloadError::Truncated { .. })
-    ));
-    let mut extra = bytes.clone();
-    extra.push(0);
-    assert!(matches!(
-        decode_payload(&extra, id, n),
-        Err(PayloadError::Truncated { .. })
-    ));
-    let mut b = bytes.clone();
-    b[0] ^= 0xff;
-    assert!(matches!(
-        decode_payload(&b, id, n),
-        Err(PayloadError::BadMagic(_))
-    ));
-    assert_eq!(PAYLOAD_MAGIC.to_le_bytes(), *b"PTCH");
-    let mut b = bytes.clone();
-    b[4..8].copy_from_slice(&3u32.to_le_bytes());
-    assert_eq!(decode_payload(&b, id, n), Err(PayloadError::BadVersion(3)));
-    let mut b = bytes.clone();
-    b[4..8].copy_from_slice(&1u32.to_le_bytes());
-    assert_eq!(decode_payload(&b, id, n), Err(PayloadError::BadVersion(1)));
-    // height_min > height_max is rejected; the range survives the round trip.
-    let ok = decode_payload(&bytes, id, n).expect("decode");
-    assert!(ok.height_min <= ok.height_max);
-    let mut b = bytes.clone();
-    b[60..68].copy_from_slice(&(ok.height_max + 1.0).to_le_bytes());
-    assert_eq!(decode_payload(&b, id, n), Err(PayloadError::BadRange));
-    let mut b = bytes.clone();
-    b[68..76].copy_from_slice(&f64::NAN.to_le_bytes());
-    assert_eq!(decode_payload(&b, id, n), Err(PayloadError::NonFinite));
-    assert!(matches!(
-        decode_payload(&bytes, other, n),
-        Err(PayloadError::IdMismatch { .. })
-    ));
-    let mut b = bytes.clone();
-    b[16..20].copy_from_slice(&5u32.to_le_bytes());
-    assert!(matches!(
-        decode_payload(&b, id, n),
-        Err(PayloadError::CountMismatch { .. })
-    ));
-    let mut b = bytes.clone();
-    b[20..24].copy_from_slice(&5u32.to_le_bytes());
-    assert!(matches!(
-        decode_payload(&b, id, n),
-        Err(PayloadError::CountMismatch { .. })
-    ));
-    let mut b = bytes.clone();
-    b[HEADER_LEN..HEADER_LEN + 4].copy_from_slice(&f32::NAN.to_le_bytes());
-    assert_eq!(decode_payload(&b, id, n), Err(PayloadError::NonFinite));
-    let mut b = bytes.clone();
-    let off = HEADER_LEN + vertex_count(n) * 32;
-    b[off..off + 4].copy_from_slice(&(vertex_count(n) as u32).to_le_bytes());
-    assert_eq!(
-        decode_payload(&b, id, n),
-        Err(PayloadError::IndexOutOfRange(vertex_count(n) as u32))
-    );
-}
-
-#[test]
-fn payload_fuzz_never_panics() {
-    let (bytes, id, n, _) = valid_payload();
-    let mut s = 0xFEED_u64;
-    for _ in 0..2000 {
-        s = splitmix64(s);
-        let mut b = bytes.clone();
-        let pos = (s % b.len() as u64) as usize;
-        b[pos] ^= ((s >> 32) as u8) | 1;
-        let _ = decode_payload(&b, id, n);
-    }
-    for _ in 0..200 {
-        s = splitmix64(s);
-        let cut = (s % bytes.len() as u64) as usize;
-        assert!(decode_payload(&bytes[..cut], id, n).is_err());
-    }
 }

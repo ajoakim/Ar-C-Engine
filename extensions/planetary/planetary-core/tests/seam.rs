@@ -6,12 +6,13 @@ use std::collections::{BTreeMap, BTreeSet};
 use engine_sdk::DVec3;
 use engine_sdk::procedural::splitmix64;
 use planetary_core::lod::{
-    DEFAULT_KAPPA, LodModel, LodParams, View, is_partition, max_level_jump, reference_views, select,
+    DEFAULT_KAPPA, LodModel, LodParams, View, is_partition, max_level_jump, reference_views,
 };
 use planetary_core::mesh::{border_positions_f64, build_patch, skirt_depth, vertex_position_f64};
+use planetary_core::topology::select::select_cells;
 use planetary_core::{
-    Edge, Face, PatchId, PlanetTerrain, TerrainParams, lattice_dir, neighbor, neighbor_children,
-    patch_corner_dirs,
+    CubeSphere, Edge, Face, PatchId, PlanetTerrain, TerrainParams, lattice_dir, neighbor,
+    neighbor_children, patch_corner_dirs,
 };
 
 const SEED: u64 = 0x0007_5EED_2026_0001;
@@ -189,11 +190,19 @@ fn collect_junctions(t: &PlanetTerrain, model: &LodModel) -> Junctions {
     let mut seen: BTreeSet<(PatchId, Edge)> = BTreeSet::new();
     for (name, eye) in reference_views(model.radius, model.height.max) {
         let view = View::new(eye, 720, 1.0 / 3.0f64.sqrt()).expect("view");
-        let sel = select(model, &params, &view, &BTreeSet::new(), &|_| None);
-        assert!(is_partition(&sel.leaves), "{name}: partition");
-        assert!(max_level_jump(&sel.leaves) <= 1, "{name}: jump");
-        let leaves: BTreeSet<PatchId> = sel.leaves.iter().copied().collect();
-        for &p in &sel.leaves {
+        let sel = select_cells(
+            &CubeSphere::new(model.cells_per_edge),
+            model,
+            &params,
+            &view,
+            &BTreeSet::new(),
+            &|_| None,
+        );
+        let sel_leaves: Vec<PatchId> = sel.pieces.iter().map(|q| q.cell).collect();
+        assert!(is_partition(&sel_leaves), "{name}: partition");
+        assert!(max_level_jump(&sel_leaves) <= 1, "{name}: jump");
+        let leaves: BTreeSet<PatchId> = sel_leaves.iter().copied().collect();
+        for &p in &sel_leaves {
             for e in Edge::ALL {
                 let Some(kids) = neighbor_children(p, e) else {
                     continue;

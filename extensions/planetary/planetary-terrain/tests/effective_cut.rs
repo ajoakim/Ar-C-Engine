@@ -8,8 +8,9 @@ use std::collections::BTreeSet;
 use engine_sdk::procedural::splitmix64;
 use planetary_core::lod::{
     DEFAULT_KAPPA, LodModel, LodParams, View, balance, is_partition, leaves_of, max_level_jump,
-    reference_views, select,
+    reference_views,
 };
+use planetary_core::topology::select::select_cells;
 use planetary_core::{
     CubeSphere, Face, MAX_LEVEL, PatchId, Piece, PlanetTerrain, TerrainParams, Topology,
 };
@@ -168,7 +169,15 @@ fn wanted_sets() -> Vec<BTreeSet<PatchId>> {
         .into_iter()
         .map(|(_, eye)| {
             let view = View::new(eye, 720, planetary_terrain::TAN_HALF_FOV_Y).expect("view");
-            select(&model, &lod, &view, &BTreeSet::new(), &|_| None).split
+            select_cells(
+                &CubeSphere::new(model.cells_per_edge),
+                &model,
+                &lod,
+                &view,
+                &BTreeSet::new(),
+                &|_| None,
+            )
+            .split
         })
         .collect()
 }
