@@ -16,3 +16,9 @@ pub use mapping::{
     equal_angle_t, face_of_dir, is_valid_cells_per_edge, lattice_dir, locate, patch_center_dir,
     patch_corner_dirs, vertex_dir,
 };
+pub mod terrain;
+pub use terrain::{
+    BASE_LAYER, BaseLayer, DETAIL_LAYER, DetailLayer, LAYER_VERSION, LayerSeeds, MASK_LAYER,
+    MaskLayer, PlanetTerrain, TerrainError, TerrainParams, TerrainSample, base_at, compose,
+    detail_at, mask_at,
+};
