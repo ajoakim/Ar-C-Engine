@@ -1,4 +1,7 @@
 //! Effective drawn cut under partial residency, negative control and request planning.
+//!
+//! Everything runs through the topology-generic API with `CubeSphere`; the Phase 7 cube-only cut
+//! is kept below as an oracle and must agree exactly.
 
 use std::collections::BTreeSet;
 
@@ -7,10 +10,148 @@ use planetary_core::lod::{
     DEFAULT_KAPPA, LodModel, LodParams, View, balance, is_partition, leaves_of, max_level_jump,
     reference_views, select,
 };
-use planetary_core::{Face, MAX_LEVEL, PatchId, PlanetTerrain, TerrainParams};
-use planetary_terrain::{effective_cut, naive_cut};
+use planetary_core::{
+    CubeSphere, Face, MAX_LEVEL, PatchId, Piece, PlanetTerrain, TerrainParams, Topology,
+};
 
 const SEED: u64 = 0x0007_5EED_2026_0001;
+
+type Cut = planetary_terrain::EffectiveCut<PatchId>;
+
+fn topo() -> CubeSphere {
+    CubeSphere::new(8)
+}
+
+fn effective_cut(w: &BTreeSet<PatchId>, r: &dyn Fn(PatchId) -> bool) -> Cut {
+    planetary_terrain::effective_cut(&topo(), w, r)
+}
+
+fn naive_cut(w: &BTreeSet<PatchId>, r: &dyn Fn(PatchId) -> bool) -> Cut {
+    planetary_terrain::naive_cut(&topo(), w, r)
+}
+
+fn leaves(cut: &Cut) -> Vec<PatchId> {
+    cut.pieces.iter().map(|p| p.cell).collect()
+}
+
+fn topo_pieces(w: &BTreeSet<PatchId>) -> Vec<Piece<PatchId>> {
+    let mut out = Vec::new();
+    topo().pieces(w, &mut out);
+    out
+}
+
+mod oracle {
+    //! The Phase 7 cube-only cut, kept verbatim as the parity oracle.
+    use std::collections::{BTreeMap, BTreeSet};
+
+    use planetary_core::{Edge, Face, PatchId, neighbor};
+
+    pub struct Old {
+        pub split: BTreeSet<PatchId>,
+        pub leaves: Vec<PatchId>,
+        pub coarsened: u32,
+    }
+
+    fn build_split(w: &BTreeSet<PatchId>, res: &dyn Fn(PatchId) -> bool) -> BTreeSet<PatchId> {
+        let mut split = BTreeSet::new();
+        let mut stack: Vec<PatchId> = Face::ALL
+            .iter()
+            .rev()
+            .map(|f| PatchId::root(*f))
+            .filter(|r| res(*r))
+            .collect();
+        while let Some(p) = stack.pop() {
+            if !w.contains(&p) {
+                continue;
+            }
+            let Some(ch) = p.children() else { continue };
+            if ch.iter().all(|c| res(*c)) {
+                split.insert(p);
+                stack.extend(ch);
+            }
+        }
+        split
+    }
+
+    fn drawn_leaves(split: &BTreeSet<PatchId>, res: &dyn Fn(PatchId) -> bool) -> Vec<PatchId> {
+        let mut out = Vec::new();
+        for f in Face::ALL {
+            let r = PatchId::root(f);
+            if !split.contains(&r) && res(r) {
+                out.push(r);
+            }
+        }
+        for s in split {
+            if let Some(ch) = s.children() {
+                for c in ch {
+                    if !split.contains(&c) {
+                        out.push(c);
+                    }
+                }
+            }
+        }
+        out.sort();
+        out
+    }
+
+    fn violating_parents(leaves: &[PatchId]) -> BTreeSet<PatchId> {
+        let level_of: BTreeMap<PatchId, u8> = leaves.iter().map(|l| (*l, l.level())).collect();
+        let mut parents = BTreeSet::new();
+        for &p in leaves {
+            let level = p.level();
+            if level < 2 {
+                continue;
+            }
+            for e in Edge::ALL {
+                let mut cur = Some(neighbor(p, e).patch);
+                while let Some(q) = cur {
+                    if let Some(&ql) = level_of.get(&q) {
+                        if ql + 2 <= level
+                            && let Some(par) = p.parent()
+                        {
+                            parents.insert(par);
+                        }
+                        break;
+                    }
+                    cur = q.parent();
+                }
+            }
+        }
+        parents
+    }
+
+    pub fn old_cut(w: &BTreeSet<PatchId>, res: &dyn Fn(PatchId) -> bool) -> Old {
+        let mut split = build_split(w, res);
+        let mut coarsened = 0u32;
+        loop {
+            let leaves = drawn_leaves(&split, res);
+            let bad = violating_parents(&leaves);
+            if bad.is_empty() {
+                return Old {
+                    split,
+                    leaves,
+                    coarsened,
+                };
+            }
+            let before = split.len();
+            split.retain(|s| !bad.iter().any(|b| s == b || b.is_ancestor_of(*s)));
+            coarsened += u32::try_from(before - split.len()).unwrap_or(u32::MAX);
+        }
+    }
+}
+
+fn assert_oracle(wanted: &BTreeSet<PatchId>, res: &dyn Fn(PatchId) -> bool) {
+    let new = effective_cut(wanted, res);
+    let old = oracle::old_cut(wanted, res);
+    assert_eq!(new.split, old.split, "split differs from the Phase 7 cut");
+    assert_eq!(
+        leaves(&new),
+        old.leaves,
+        "leaves differ from the Phase 7 cut"
+    );
+    assert_eq!(new.coarsened, old.coarsened, "coarsened differs");
+    assert!(new.pieces.iter().all(|p| p.variant == 0));
+}
 
 /// Wanted split sets for every reference view.
 fn wanted_sets() -> Vec<BTreeSet<PatchId>> {
@@ -44,12 +185,28 @@ fn closure_of(split: &BTreeSet<PatchId>) -> BTreeSet<PatchId> {
     out
 }
 
+/// With all six roots resident, every split cell has every required split split.
+fn assert_balanced(cut: &Cut) {
+    let t = topo();
+    let mut req = Vec::new();
+    for s in &cut.split {
+        req.clear();
+        t.required_splits(*s, &mut req);
+        assert!(
+            req.iter().all(|r| cut.split.contains(r)),
+            "required split missing for {s:?}"
+        );
+    }
+}
+
 fn check_cut(wanted: &BTreeSet<PatchId>, resident: &dyn Fn(PatchId) -> bool) {
     let cut = effective_cut(wanted, resident);
-    assert!(is_partition(&cut.leaves), "not a partition");
-    assert!(max_level_jump(&cut.leaves) <= 1, "unbalanced");
+    assert_oracle(wanted, resident);
+    let cl = leaves(&cut);
+    assert!(is_partition(&cl), "not a partition");
+    assert!(max_level_jump(&cl) <= 1, "unbalanced");
     let closure = closure_of(wanted);
-    for l in &cut.leaves {
+    for l in &cl {
         assert!(resident(*l), "non-resident leaf {l:?}");
         assert!(closure.contains(l), "leaf finer than wanted {l:?}");
     }
@@ -62,12 +219,14 @@ fn all_resident_equals_wanted() {
         let cut = effective_cut(&wanted, &|_| true);
         assert_eq!(
             cut,
-            planetary_terrain::EffectiveCut {
+            Cut {
                 split: wanted.clone(),
-                leaves: leaves_of(&wanted),
+                pieces: topo_pieces(&wanted),
                 coarsened: 0
             }
         );
+        assert_eq!(leaves(&cut), leaves_of(&wanted));
+        assert_oracle(&wanted, &|_| true);
     }
 }
 
@@ -114,6 +273,17 @@ fn non_closed_random_residency() {
 }
 
 #[test]
+fn generic_cut_is_balanced() {
+    let sets = wanted_sets();
+    for seed in 0..20u64 {
+        let r = closed_random(seed);
+        for wanted in &sets {
+            assert_balanced(&effective_cut(wanted, &r));
+        }
+    }
+}
+
+#[test]
 fn naive_cut_breaks_balance_effective_cut_fixes_it() {
     // Deep chain toward the cube corner (max, max) of PosX, balanced across faces.
     let depth = 10u8;
@@ -132,19 +302,21 @@ fn naive_cut_breaks_balance_effective_cut_fixes_it() {
     let res = |p: PatchId| resident.contains(&p);
 
     let naive = naive_cut(&wanted, &res);
-    assert!(max_level_jump(&naive.leaves) >= 2, "negative control");
+    assert!(max_level_jump(&leaves(&naive)) >= 2, "negative control");
     let eff = effective_cut(&wanted, &res);
-    assert!(max_level_jump(&eff.leaves) <= 1);
+    assert_oracle(&wanted, &res);
+    let el = leaves(&eff);
+    assert!(max_level_jump(&el) <= 1);
     assert!(eff.coarsened > 0);
-    assert!(is_partition(&eff.leaves));
-    assert!(eff.leaves.iter().all(|l| res(*l)));
+    assert!(is_partition(&el));
+    assert!(el.iter().all(|l| res(*l)));
 }
 
 #[test]
 fn nothing_resident_draws_nothing() {
     let wanted = wanted_sets().remove(0);
     let cut = effective_cut(&wanted, &|_| false);
-    assert!(cut.leaves.is_empty());
+    assert!(cut.pieces.is_empty());
     assert!(cut.split.is_empty());
 }
 
@@ -152,15 +324,17 @@ fn nothing_resident_draws_nothing() {
 fn missing_root_leaves_five_faces() {
     let missing = PatchId::root(Face::NegZ);
     for wanted in wanted_sets() {
-        let cut = effective_cut(&wanted, &|p| p != missing && p.face() != Face::NegZ);
-        let area: u128 = cut
-            .leaves
+        let res = |p: PatchId| p != missing && p.face() != Face::NegZ;
+        let cut = effective_cut(&wanted, &res);
+        assert_oracle(&wanted, &res);
+        let cl = leaves(&cut);
+        let area: u128 = cl
             .iter()
             .map(|p| 1u128 << (2 * u32::from(MAX_LEVEL - p.level())))
             .sum();
         assert_eq!(area, 5u128 << (2 * u32::from(MAX_LEVEL)));
-        assert!(cut.leaves.iter().all(|p| p.face() != Face::NegZ));
-        assert!(max_level_jump(&cut.leaves) <= 1);
+        assert!(cl.iter().all(|p| p.face() != Face::NegZ));
+        assert!(max_level_jump(&cl) <= 1);
     }
 }
 
@@ -168,7 +342,7 @@ fn missing_root_leaves_five_faces() {
 fn nothing_resident_requests_the_six_roots() {
     let wanted = wanted_sets().remove(0);
     let leaves = leaves_of(&wanted);
-    let reqs = planetary_terrain::plan_requests(&leaves, &|_| false, &|_| false, 100);
+    let reqs = planetary_terrain::plan_requests(&topo(), &leaves, &|_| false, &|_| false, 100);
     let mut roots: Vec<PatchId> = Face::ALL.iter().map(|f| PatchId::root(*f)).collect();
     roots.sort();
     assert_eq!(reqs, roots);
@@ -177,13 +351,14 @@ fn nothing_resident_requests_the_six_roots() {
 #[test]
 fn requests_are_ancestors_first_unique_sorted_capped() {
     let sets = wanted_sets();
+    let t = topo();
     for seed in 0..20u64 {
         let res = closed_random(seed);
         let pending = move |p: PatchId| splitmix64(seed ^ p.raw() ^ 0xABCD).is_multiple_of(5);
         for wanted in &sets {
             let leaves = leaves_of(wanted);
-            let all = planetary_terrain::plan_requests(&leaves, &res, &pending, usize::MAX);
-            let capped = planetary_terrain::plan_requests(&leaves, &res, &pending, 7);
+            let all = planetary_terrain::plan_requests(&t, &leaves, &res, &pending, usize::MAX);
+            let capped = planetary_terrain::plan_requests(&t, &leaves, &res, &pending, 7);
             assert!(capped.len() <= 7);
             assert_eq!(capped[..], all[..capped.len()]);
             let uniq: BTreeSet<_> = all.iter().collect();
@@ -204,7 +379,7 @@ fn requests_are_ancestors_first_unique_sorted_capped() {
 fn closure_and_stale_requests() {
     let wanted = wanted_sets().remove(5);
     let leaves = leaves_of(&wanted);
-    let closure = planetary_terrain::wanted_closure(&leaves);
+    let closure = planetary_terrain::wanted_closure(&topo(), &leaves);
     for l in &leaves {
         let mut cur = Some(*l);
         while let Some(c) = cur {

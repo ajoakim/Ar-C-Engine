@@ -240,7 +240,11 @@ impl App for Corrupt {
 
     fn gpu_frame(&mut self, r: &mut Resources<'_>, _s: &mut SceneState) -> Result<(), SdkError> {
         let mut held = BTreeMap::new();
-        let key = PatchKey::new(1, PatchId::root(Face::PosX))?;
+        let key = PatchKey::new(
+            &std::sync::Arc::new(planetary_core::CubeSphere::new(32)),
+            1,
+            PatchId::root(Face::PosX),
+        )?;
         let mut up = GpuUploader {
             resources: r,
             held: &mut held,

@@ -14,9 +14,12 @@ use engine_sdk::{
 };
 use planetary_core::lod::{
     DEFAULT_KAPPA, LodModel, LodParams, SelectStats, View, cell_bound, eye_in_cone,
-    frustum_visible, horizon_visible, max_level_jump, patch_footprint, select,
+    frustum_visible, horizon_visible, max_level_jump, patch_footprint,
 };
-use planetary_core::{MAX_LEVEL, PatchId, PlanetTerrain, TerrainParams, locate, payload_len};
+use planetary_core::topology::select::select_cells;
+use planetary_core::{
+    CubeSphere, MAX_LEVEL, PatchId, PlanetTerrain, TerrainParams, locate, payload_len,
+};
 
 use crate::effective::effective_cut;
 use crate::key::PatchKey;
@@ -99,6 +102,7 @@ pub struct TerrainReport {
 pub struct TerrainSystem {
     cfg: TerrainConfig,
     terrain: Arc<PlanetTerrain>,
+    topo: Arc<CubeSphere>,
     model: LodModel,
     manager: StreamManager<PatchKey, PatchSource>,
     jobs: JobSystem,
@@ -163,10 +167,12 @@ impl TerrainSystem {
         let mut manager = StreamManager::new(cfg.stream, residency, source)
             .map_err(|e| app_err("stream manager", e))?;
         manager.set_deterministic(cfg.settle_each_frame);
+        let cells_per_edge = cfg.cells_per_edge;
         let jobs = JobSystem::builder().workers(cfg.workers).build()?;
         Ok(Self {
             cfg,
             terrain,
+            topo: Arc::new(CubeSphere::new(cells_per_edge)),
             model,
             manager,
             jobs,
@@ -226,13 +232,18 @@ impl TerrainSystem {
         self.last_view = Some(*view);
         let sel = {
             let held = &self.held;
-            select(&self.model, &self.cfg.lod, view, &self.prev_split, &|id| {
-                held.get(&id).map(|h| h.range)
-            })
+            select_cells(
+                &*self.topo,
+                &self.model,
+                &self.cfg.lod,
+                view,
+                &self.prev_split,
+                &|id| held.get(&id).map(|h| h.range),
+            )
         };
         self.prev_split.clone_from(&sel.split);
         self.wanted_split = sel.split;
-        self.wanted = sel.leaves;
+        self.wanted = sel.pieces.iter().map(|p| p.cell).collect();
         rep.select = sel.stats;
         rep.wanted_leaves = self.wanted.len();
 
@@ -242,7 +253,7 @@ impl TerrainSystem {
             !matches!(manager.state(key), None | Some(ResidencyState::GpuResident))
         });
 
-        let closure = wanted_closure(&self.wanted);
+        let closure = wanted_closure(&*self.topo, &self.wanted);
         let ids: BTreeSet<PatchId> = self.requested.keys().copied().collect();
         for id in stale_requests(&ids, &closure) {
             if let Some((key, token)) = self.requested.remove(&id) {
@@ -256,6 +267,7 @@ impl TerrainSystem {
             let held = &self.held;
             let requested = &self.requested;
             plan_requests(
+                &*self.topo,
                 &self.wanted,
                 &|id| held.contains_key(&id),
                 &|id| requested.contains_key(&id),
@@ -263,7 +275,7 @@ impl TerrainSystem {
             )
         };
         for id in planned {
-            let Ok(key) = PatchKey::new(self.cfg.planet, id) else {
+            let Ok(key) = PatchKey::new(&self.topo, self.cfg.planet, id) else {
                 rep.request_errors += 1;
                 continue;
             };
@@ -339,13 +351,16 @@ impl TerrainSystem {
         }
 
         let held = &self.held;
-        let eff = effective_cut(&self.wanted_split, &|id| held.contains_key(&id));
+        let eff = effective_cut(&*self.topo, &self.wanted_split, &|id| {
+            held.contains_key(&id)
+        });
         scene.items.clear();
         self.drawn.clear();
         self.drawn_set.clear();
         let mut culled = 0u32;
         let occluder = self.model.radius + self.model.height.min;
-        for &leaf in &eff.leaves {
+        for piece in &eff.pieces {
+            let leaf = piece.cell;
             let Some(h) = self.held.get(&leaf) else {
                 continue;
             };
@@ -385,7 +400,8 @@ impl TerrainSystem {
         self.report.frame = self.frame;
         self.report.stream = stream;
         self.report.drawn_leaves = self.drawn.len();
-        self.report.drawn_max_jump = max_level_jump(&eff.leaves);
+        self.report.drawn_max_jump =
+            max_level_jump(&eff.pieces.iter().map(|p| p.cell).collect::<Vec<_>>());
         self.report.held_meshes = self.held.len();
         self.report.upload_rejects = upload_rejects;
         self.report.destroyed = destroyed;
