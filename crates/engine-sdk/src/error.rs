@@ -21,6 +21,15 @@ pub enum SdkError {
     /// Math failure (unknown frame, non-finite position).
     #[error("math error: {0}")]
     Math(#[from] MathError),
+    /// World failure.
+    #[error("world error: {0}")]
+    World(#[from] engine_world::WorldError),
+    /// Asset failure.
+    #[error("asset error: {0}")]
+    Asset(#[from] engine_assets::AssetError),
+    /// Job system failure.
+    #[error("job error: {0}")]
+    Job(#[from] engine_jobs::JobError),
     /// Application-level failure.
     #[error("app error: {0}")]
     App(String),

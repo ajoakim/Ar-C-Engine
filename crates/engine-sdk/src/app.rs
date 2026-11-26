@@ -3,8 +3,10 @@
 use engine_math::{FrameRegistry, WorldPos};
 use engine_platform::InputEvent;
 use engine_render::{
-    BufferDesc, BufferUsage, Camera, MeshHandle, RenderBackend, RenderItem, VertexPosColor,
-    encode_vertices,
+    BufferDesc, BufferUsage, Camera, DirectionalLight, Material, MaterialId, MaterialTable,
+    MeshHandle, RenderBackend, RenderError, RenderItem, TextureDesc, TextureId, VertexLayout,
+    VertexPosColor, VertexPosNormalUv, encode_indices, encode_lit_vertices, encode_vertices,
+    validate_indices,
 };
 
 use crate::error::SdkError;
@@ -29,6 +31,10 @@ pub struct SceneState {
     pub items: Vec<RenderItem>,
     /// Clear color.
     pub clear_color: [f32; 4],
+    /// Material table (id 0 is the default material).
+    pub materials: MaterialTable,
+    /// The directional light.
+    pub light: DirectionalLight,
 }
 
 impl SceneState {
@@ -42,7 +48,17 @@ impl SceneState {
             camera: Camera::new(origin),
             items: Vec::new(),
             clear_color: [0.02, 0.02, 0.05, 1.0],
+            materials: MaterialTable::new(),
+            light: DirectionalLight::default(),
         }
+    }
+
+    /// Add a material.
+    ///
+    /// # Errors
+    /// Returns an error when the material has non-finite values or the table is full.
+    pub fn add_material(&mut self, material: Material) -> Result<MaterialId, SdkError> {
+        Ok(self.materials.add(material)?)
     }
 }
 
@@ -78,10 +94,79 @@ impl Resources<'_> {
             },
             &bytes,
         )?;
-        Ok(MeshHandle {
+        Ok(MeshHandle::new(
+            VertexLayout::PosColor,
             vertex_buffer,
             vertex_count,
-        })
+        ))
+    }
+
+    /// Upload an indexed lit mesh (position, normal, uv; u32 indices).
+    ///
+    /// # Errors
+    /// Returns an error when the mesh is empty, indices are out of range, or the backend
+    /// rejects an upload. No buffer is leaked on failure.
+    pub fn create_lit_mesh(
+        &mut self,
+        label: &'static str,
+        vertices: &[VertexPosNormalUv],
+        indices: &[u32],
+    ) -> Result<MeshHandle, SdkError> {
+        let Ok(vertex_count) = u32::try_from(vertices.len()) else {
+            return Err(SdkError::App("mesh has too many vertices".into()));
+        };
+        let Ok(index_count) = u32::try_from(indices.len()) else {
+            return Err(SdkError::App("mesh has too many indices".into()));
+        };
+        if vertices.is_empty() {
+            return Err(RenderError::EmptyMesh.into());
+        }
+        validate_indices(indices, vertex_count)?;
+        let vertex_buffer = self.backend.create_buffer(
+            &BufferDesc {
+                label,
+                usage: BufferUsage::Vertex,
+            },
+            &encode_lit_vertices(vertices),
+        )?;
+        let index_buffer = match self.backend.create_buffer(
+            &BufferDesc {
+                label,
+                usage: BufferUsage::Index,
+            },
+            &encode_indices(indices),
+        ) {
+            Ok(id) => id,
+            Err(e) => {
+                let _ = self.backend.destroy_buffer(vertex_buffer);
+                return Err(e.into());
+            }
+        };
+        Ok(
+            MeshHandle::new(VertexLayout::PosNormalUv, vertex_buffer, vertex_count)
+                .with_indices(index_buffer, index_count),
+        )
+    }
+
+    /// Upload an RGBA8 (sRGB) texture of width*height*4 bytes.
+    ///
+    /// # Errors
+    /// Returns an error when dimensions or data length are invalid.
+    pub fn create_texture(
+        &mut self,
+        label: &'static str,
+        width: u32,
+        height: u32,
+        rgba8: &[u8],
+    ) -> Result<TextureId, SdkError> {
+        Ok(self.backend.create_texture(
+            &TextureDesc {
+                label,
+                width,
+                height,
+            },
+            rgba8,
+        )?)
     }
 }
 
@@ -102,4 +187,76 @@ pub trait App {
 
     /// Advance the app by `dt` seconds.
     fn update(&mut self, dt: f64, scene: &mut SceneState) -> AppControl;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use engine_render::NullBackend;
+
+    fn vtx() -> [VertexPosNormalUv; 3] {
+        let v = VertexPosNormalUv {
+            position: [0.0; 3],
+            normal: [0.0, 1.0, 0.0],
+            uv: [0.0; 2],
+        };
+        [v, v, v]
+    }
+
+    #[test]
+    fn lit_mesh_ok() {
+        let mut b = NullBackend::new();
+        let m = Resources { backend: &mut b }
+            .create_lit_mesh("m", &vtx(), &[0, 1, 2])
+            .unwrap();
+        assert_eq!(m.layout, VertexLayout::PosNormalUv);
+        assert_eq!(m.index.unwrap().count, 3);
+        assert_eq!(b.buffer_count(), 2);
+    }
+
+    #[test]
+    fn lit_mesh_bad_index_leaks_nothing() {
+        let mut b = NullBackend::new();
+        let err = Resources { backend: &mut b }
+            .create_lit_mesh("m", &vtx(), &[0, 1, 3])
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            SdkError::Render(RenderError::InvalidIndices(_))
+        ));
+        assert_eq!(b.buffer_count(), 0);
+        let err = Resources { backend: &mut b }
+            .create_lit_mesh("m", &[], &[])
+            .unwrap_err();
+        assert!(matches!(err, SdkError::Render(_)));
+    }
+
+    #[test]
+    fn texture_ok_and_bad_length() {
+        let mut b = NullBackend::new();
+        let t = Resources { backend: &mut b }
+            .create_texture("t", 2, 2, &[255; 16])
+            .unwrap();
+        assert!(t.raw() >= 3);
+        let err = Resources { backend: &mut b }
+            .create_texture("t", 2, 2, &[255; 15])
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            SdkError::Render(RenderError::InvalidTexture(_))
+        ));
+    }
+
+    #[test]
+    fn scene_materials_and_light() {
+        let mut s = SceneState::new();
+        assert_eq!(s.light, DirectionalLight::default());
+        let id = s.add_material(Material::default()).unwrap();
+        assert_eq!(id.raw(), 1);
+        let bad = Material {
+            base_color: [f32::NAN; 4],
+            base_color_texture: None,
+        };
+        assert!(s.add_material(bad).is_err());
+    }
 }

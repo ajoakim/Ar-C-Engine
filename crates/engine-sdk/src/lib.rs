@@ -14,16 +14,20 @@ mod run;
 mod runtime;
 
 pub use app::{App, AppControl, Resources, SceneState};
+pub use engine_assets::{AssetError, AssetId, AssetRegistry, Handle};
 pub use engine_core::{
     Engine, EngineConfig, EngineError, EnginePhase, Module, ModuleConfig, ModuleError,
 };
 pub use engine_diagnostics::{FrameStats, tracing};
+pub use engine_jobs::{CancelToken, JobError, JobHandle, JobStatus, JobSystem, Priority};
 pub use engine_math::{DQuat, DVec3, FrameId, FrameRegistry, MathError, Vec3, WorldPos};
 pub use engine_platform::{InputEvent, KeyCode, MouseButton, WindowConfig};
 pub use engine_render::{
-    Camera, Mat4, MeshHandle, NullBackend, Quat, RenderBackend, RenderError, RenderItem,
-    VertexPosColor,
+    Camera, DirectionalLight, MAX_TEXTURE_DIMENSION, Mat3, Mat4, Material, MaterialId,
+    MaterialTable, MeshHandle, NullBackend, Quat, RenderBackend, RenderError, RenderItem,
+    TextureId, VertexPosColor, VertexPosNormalUv,
 };
+pub use engine_world::{EntityId, Transform, World, WorldError, WorldTransform};
 pub use error::SdkError;
 pub use run::{AppConfig, run_app};
 pub use runtime::Runtime;
@@ -31,7 +35,8 @@ pub use runtime::Runtime;
 /// Convenient glob import for apps.
 pub mod prelude {
     pub use crate::{
-        App, AppConfig, AppControl, Camera, DQuat, DVec3, InputEvent, KeyCode, Quat, RenderItem,
-        Resources, SceneState, SdkError, Vec3, VertexPosColor, WorldPos, run_app,
+        App, AppConfig, AppControl, Camera, DQuat, DVec3, DirectionalLight, InputEvent, KeyCode,
+        Material, MaterialId, Quat, RenderItem, Resources, SceneState, SdkError, Transform, Vec3,
+        VertexPosColor, VertexPosNormalUv, WorldPos, run_app,
     };
 }

@@ -3,7 +3,7 @@
 use engine_core::{Engine, EnginePhase};
 use engine_platform::InputEvent;
 use engine_render::{
-    CompiledGraph, PipelineDesc, PipelineId, RenderBackend, RenderError, RenderGraph, ShaderId,
+    CompiledGraph, PipelineDesc, PipelineSet, RenderBackend, RenderError, RenderGraph, ShaderId,
     VertexLayout, extract,
 };
 
@@ -18,7 +18,7 @@ pub struct Runtime<B: RenderBackend> {
     backend: B,
     scene: SceneState,
     compiled: CompiledGraph,
-    pipeline: PipelineId,
+    pipelines: PipelineSet,
     frame_index: u64,
 }
 
@@ -36,11 +36,19 @@ impl<B: RenderBackend> Runtime<B> {
         if engine.phase() != EnginePhase::Running {
             return Err(SdkError::App("engine not running".into()));
         }
-        let pipeline = backend.create_pipeline(&PipelineDesc {
+        let mut pipelines = PipelineSet::new();
+        let unlit = backend.create_pipeline(&PipelineDesc {
             label: "unlit_vertex_color",
             shader: ShaderId::UnlitVertexColor,
             vertex_layout: VertexLayout::PosColor,
         })?;
+        pipelines.insert(VertexLayout::PosColor, unlit);
+        let lit = backend.create_pipeline(&PipelineDesc {
+            label: "lit_textured",
+            shader: ShaderId::LitTextured,
+            vertex_layout: VertexLayout::PosNormalUv,
+        })?;
+        pipelines.insert(VertexLayout::PosNormalUv, lit);
         let compiled = RenderGraph::main_p0()
             .compile()
             .map_err(RenderError::from)?;
@@ -49,7 +57,7 @@ impl<B: RenderBackend> Runtime<B> {
             backend,
             scene: SceneState::new(),
             compiled,
-            pipeline,
+            pipelines,
             frame_index: 0,
         })
     }
@@ -97,10 +105,12 @@ impl<B: RenderBackend> Runtime<B> {
             w as f32 / h as f32,
             &self.scene.items,
             self.frame_index,
+            &self.scene.materials,
+            &self.scene.light,
         )?;
         let packet =
             self.compiled
-                .build_frame_packet(&scene, self.pipeline, self.scene.clear_color)?;
+                .build_frame_packet(&scene, &self.pipelines, self.scene.clear_color)?;
         self.backend.submit(&packet)?;
         self.frame_index += 1;
         Ok(AppControl::Continue)
