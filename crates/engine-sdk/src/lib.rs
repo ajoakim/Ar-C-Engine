@@ -25,9 +25,10 @@ pub use engine_platform::{InputEvent, KeyCode, MouseButton, WindowConfig};
 /// Deterministic procedural generation (re-export of `engine-procedural`).
 pub use engine_procedural as procedural;
 pub use engine_render::{
-    Camera, DirectionalLight, IndexBufferHandle, MAX_DRAWS_PER_FRAME, MAX_TEXTURE_DIMENSION, Mat3,
-    Mat4, Material, MaterialId, MaterialTable, MeshHandle, NullBackend, Quat, RenderBackend,
-    RenderError, RenderItem, TextureId, VertexPosColor, VertexPosNormalUv,
+    Camera, DirectionalLight, DistanceFog, IndexBufferHandle, MAX_DRAWS_PER_FRAME,
+    MAX_TEXTURE_DIMENSION, Mat3, Mat4, Material, MaterialId, MaterialTable, MeshHandle,
+    NullBackend, Quat, RenderBackend, RenderError, RenderItem, TextureId, VertexPosColor,
+    VertexPosNormalUv, VertexPosNormalUvMorph, fog_factor,
 };
 /// Generic asynchronous streaming (re-export of `engine-streaming`).
 pub use engine_streaming as streaming;

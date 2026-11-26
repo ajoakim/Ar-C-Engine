@@ -49,6 +49,12 @@ impl<B: RenderBackend> Runtime<B> {
             vertex_layout: VertexLayout::PosNormalUv,
         })?;
         pipelines.insert(VertexLayout::PosNormalUv, lit);
+        let lit_morph = backend.create_pipeline(&PipelineDesc {
+            label: "lit_textured_morph",
+            shader: ShaderId::LitTextured,
+            vertex_layout: VertexLayout::PosNormalUvMorph,
+        })?;
+        pipelines.insert(VertexLayout::PosNormalUvMorph, lit_morph);
         let compiled = RenderGraph::main_p0()
             .compile()
             .map_err(RenderError::from)?;
@@ -105,7 +111,8 @@ impl<B: RenderBackend> Runtime<B> {
         }
         let span = engine_diagnostics::tracing::info_span!("render_frame");
         let _guard = span.enter();
-        let scene = extract(
+        self.scene.fog.validate()?;
+        let mut scene = extract(
             &self.scene.frames,
             &self.scene.camera,
             w as f32 / h as f32,
@@ -114,6 +121,7 @@ impl<B: RenderBackend> Runtime<B> {
             &self.scene.materials,
             &self.scene.light,
         )?;
+        scene.fog = self.scene.fog;
         let packet =
             self.compiled
                 .build_frame_packet(&scene, &self.pipelines, self.scene.clear_color)?;

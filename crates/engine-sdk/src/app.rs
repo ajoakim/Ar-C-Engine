@@ -3,10 +3,11 @@
 use engine_math::{FrameRegistry, WorldPos};
 use engine_platform::InputEvent;
 use engine_render::{
-    BufferDesc, BufferUsage, Camera, DirectionalLight, IndexBufferHandle, Material, MaterialId,
-    MaterialTable, MeshHandle, RenderBackend, RenderError, RenderItem, TextureDesc, TextureId,
-    VertexLayout, VertexPosColor, VertexPosNormalUv, encode_indices, encode_lit_vertices,
-    encode_vertices, validate_indices,
+    BufferDesc, BufferUsage, Camera, DirectionalLight, DistanceFog, IndexBufferHandle, Material,
+    MaterialId, MaterialTable, MeshHandle, RenderBackend, RenderError, RenderItem, TextureDesc,
+    TextureId, VertexLayout, VertexPosColor, VertexPosNormalUv, VertexPosNormalUvMorph,
+    encode_indices, encode_lit_morph_vertices, encode_lit_vertices, encode_vertices,
+    validate_indices,
 };
 
 use crate::error::SdkError;
@@ -35,6 +36,8 @@ pub struct SceneState {
     pub materials: MaterialTable,
     /// The directional light.
     pub light: DirectionalLight,
+    /// Distance fog (density 0, the default, disables it).
+    pub fog: DistanceFog,
 }
 
 impl SceneState {
@@ -50,6 +53,7 @@ impl SceneState {
             clear_color: [0.02, 0.02, 0.05, 1.0],
             materials: MaterialTable::new(),
             light: DirectionalLight::default(),
+            fog: DistanceFog::default(),
         }
     }
 
@@ -207,6 +211,36 @@ impl Resources<'_> {
         )?;
         Ok(MeshHandle::new(
             VertexLayout::PosNormalUv,
+            vertex_buffer,
+            vertex_count,
+        ))
+    }
+
+    /// Create a mesh of morph vertices (vertex buffer only; attach indices with
+    /// [`MeshHandle::with_indices`] or [`MeshHandle::with_index_range`]).
+    ///
+    /// # Errors
+    /// Returns an error when the list is empty, too large, or the backend rejects it.
+    pub fn create_lit_morph_vertices(
+        &mut self,
+        label: &'static str,
+        vertices: &[VertexPosNormalUvMorph],
+    ) -> Result<MeshHandle, SdkError> {
+        let Ok(vertex_count) = u32::try_from(vertices.len()) else {
+            return Err(SdkError::App("mesh has too many vertices".into()));
+        };
+        if vertices.is_empty() {
+            return Err(RenderError::EmptyMesh.into());
+        }
+        let vertex_buffer = self.backend.create_buffer(
+            &BufferDesc {
+                label,
+                usage: BufferUsage::Vertex,
+            },
+            &encode_lit_morph_vertices(vertices),
+        )?;
+        Ok(MeshHandle::new(
+            VertexLayout::PosNormalUvMorph,
             vertex_buffer,
             vertex_count,
         ))

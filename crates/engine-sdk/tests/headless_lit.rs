@@ -101,5 +101,6 @@ fn headless_mixed_scene_uses_two_pipelines() {
     let draws = &rt.backend().last_frame().unwrap().passes[0].draws;
     assert_eq!(draws.len(), 2);
     assert_ne!(draws[0].pipeline, draws[1].pipeline);
-    assert_eq!(rt.backend().pipeline_count(), 2);
+    // unlit, lit and (since 07.1-21) the lit morph pipeline are registered up front.
+    assert_eq!(rt.backend().pipeline_count(), 3);
 }
