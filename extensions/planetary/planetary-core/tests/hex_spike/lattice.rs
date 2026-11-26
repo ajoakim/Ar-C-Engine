@@ -73,7 +73,7 @@ pub fn face_index(sorted: [u8; 3]) -> u8 {
         .expect("not an icosahedron face") as u8
 }
 
-fn face_containing(vs: &[u8]) -> u8 {
+pub fn face_containing(vs: &[u8]) -> u8 {
     faces()
         .iter()
         .position(|f| vs.iter().all(|v| f.contains(v)))
@@ -182,7 +182,7 @@ fn diamond_point(d: u8, n: i64, i: i64, j: i64) -> FacePoint {
 
 /// Unfold across edges until all weights are non-negative (valid for points at most one lattice
 /// step outside a face that are not an icosahedron vertex). Returns `None` when it does not settle.
-fn reflect(mut fp: FacePoint) -> Option<FacePoint> {
+pub fn reflect(mut fp: FacePoint) -> Option<FacePoint> {
     for _ in 0..4 {
         let Some(k) = fp.w.iter().position(|x| *x < 0) else {
             return Some(fp);

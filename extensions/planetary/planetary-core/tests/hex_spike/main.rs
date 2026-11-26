@@ -5,3 +5,4 @@
 //! (`projection`: exact-op barycentric mapping). Run with `--nocapture` to see the evidence.
 
 mod lattice;
+mod projection;
