@@ -5,10 +5,11 @@
 //! Images are decoded by [`decode_image`] (not by `gltf::import`), so every decode
 //! is bounded.
 
+use std::collections::{HashMap, HashSet};
 use std::io::Cursor;
 use std::path::Path;
 
-use engine_sdk::{MAX_TEXTURE_DIMENSION, Transform, VertexPosNormalUv};
+use engine_sdk::{DVec3, MAX_TEXTURE_DIMENSION, Quat, Transform, Vec3, VertexPosNormalUv};
 
 use crate::error::ImportError;
 
@@ -187,6 +188,359 @@ pub fn decode_image(bytes: &[u8], limits: &ImportLimits) -> Result<ImportedTextu
     })
 }
 
+/// Import a `.glb`/`.gltf` file with default limits.
+///
+/// # Errors
+/// See [`ImportError`].
+pub fn import_gltf_path(path: &Path) -> Result<ImportedModel, ImportError> {
+    import_gltf_path_with(path, &ImportLimits::default())
+}
+
+/// Import a `.glb`/`.gltf` file with explicit limits.
+///
+/// # Errors
+/// See [`ImportError`].
+pub fn import_gltf_path_with(
+    path: &Path,
+    limits: &ImportLimits,
+) -> Result<ImportedModel, ImportError> {
+    let size = std::fs::metadata(path)?.len();
+    if size > limits.max_file_bytes {
+        return Err(ImportError::FileTooLarge {
+            size,
+            max: limits.max_file_bytes,
+        });
+    }
+    let bytes = std::fs::read(path)?;
+    import_gltf_slice_with(&bytes, path.parent(), limits)
+}
+
+/// Import from bytes with default limits; external URIs are rejected.
+///
+/// # Errors
+/// See [`ImportError`].
+pub fn import_gltf_slice(bytes: &[u8]) -> Result<ImportedModel, ImportError> {
+    import_gltf_slice_with(bytes, None, &ImportLimits::default())
+}
+
+fn check_external_size(
+    uri: &str,
+    base: Option<&Path>,
+    limits: &ImportLimits,
+) -> Result<(), ImportError> {
+    check_uri(uri, base)?;
+    if uri.starts_with("data:") {
+        return Ok(());
+    }
+    if let Some(base) = base {
+        let size = std::fs::metadata(base.join(uri))?.len();
+        if size > limits.max_file_bytes {
+            return Err(ImportError::FileTooLarge {
+                size,
+                max: limits.max_file_bytes,
+            });
+        }
+    }
+    Ok(())
+}
+
+/// Import from bytes. `base` is the directory relative URIs resolve against.
+///
+/// Supported: static triangle meshes, base-color factor and texture (TEXCOORD_0 only),
+/// node TRS transforms. Everything else is ignored.
+///
+/// # Errors
+/// See [`ImportError`]; never panics on malformed input.
+pub fn import_gltf_slice_with(
+    bytes: &[u8],
+    base: Option<&Path>,
+    limits: &ImportLimits,
+) -> Result<ImportedModel, ImportError> {
+    let len = bytes.len() as u64;
+    if len > limits.max_file_bytes {
+        return Err(ImportError::FileTooLarge {
+            size: len,
+            max: limits.max_file_bytes,
+        });
+    }
+    let gltf::Gltf { document, blob } = gltf::Gltf::from_slice(bytes)?;
+
+    // URI pre-flight, before gltf touches any URI.
+    for buffer in document.buffers() {
+        if let gltf::buffer::Source::Uri(uri) = buffer.source() {
+            check_external_size(uri, base, limits)?;
+        }
+    }
+    for image in document.images() {
+        if let gltf::image::Source::Uri { uri, .. } = image.source() {
+            check_external_size(uri, base, limits)?;
+        }
+    }
+    let buffers = gltf::import_buffers(&document, base, blob)?;
+
+    // Textures: only base-color images on TEXCOORD_0 are decoded.
+    let mut wanted: Vec<usize> = Vec::new();
+    for material in document.materials() {
+        if let Some(info) = material.pbr_metallic_roughness().base_color_texture()
+            && info.tex_coord() == 0
+        {
+            let idx = info.texture().source().index();
+            if !wanted.contains(&idx) {
+                wanted.push(idx);
+            }
+        }
+    }
+    wanted.sort_unstable();
+    let mut model = ImportedModel::default();
+    let mut image_map: HashMap<usize, usize> = HashMap::new();
+    for image_index in wanted {
+        let Some(image) = document.images().nth(image_index) else {
+            return Err(ImportError::InvalidAccessor("image index out of range"));
+        };
+        let data: Vec<u8> = match image.source() {
+            gltf::image::Source::View { view, .. } => {
+                let buf = buffers
+                    .get(view.buffer().index())
+                    .ok_or(ImportError::InvalidAccessor("image buffer missing"))?;
+                let oob = ImportError::InvalidAccessor("image buffer view out of range");
+                let end = view.offset().checked_add(view.length()).ok_or(oob)?;
+                buf.get(view.offset()..end)
+                    .ok_or(ImportError::InvalidAccessor(
+                        "image buffer view out of range",
+                    ))?
+                    .to_vec()
+            }
+            gltf::image::Source::Uri { uri, .. } => {
+                gltf::buffer::Data::from_source(gltf::buffer::Source::Uri(uri), base)?
+                    .0
+                    .clone()
+            }
+        };
+        let tex = decode_image(&data, limits)?;
+        image_map.insert(image_index, model.textures.len());
+        model.textures.push(tex);
+    }
+
+    for material in document.materials() {
+        let pbr = material.pbr_metallic_roughness();
+        let base_color = pbr.base_color_factor();
+        if !base_color.iter().all(|c| c.is_finite()) {
+            return Err(ImportError::NonFinite("material base color"));
+        }
+        let texture = pbr
+            .base_color_texture()
+            .filter(|info| info.tex_coord() == 0)
+            .and_then(|info| image_map.get(&info.texture().source().index()).copied());
+        model.materials.push(ImportedMaterial {
+            base_color,
+            texture,
+        });
+    }
+
+    let mut mesh_map: Vec<Vec<usize>> = Vec::new();
+    for mesh in document.meshes() {
+        let mut mapped = Vec::new();
+        for primitive in mesh.primitives() {
+            if primitive.mode() != gltf::mesh::Mode::Triangles {
+                engine_sdk::tracing::debug!("skipping non-triangle primitive");
+                continue;
+            }
+            let reader = primitive.reader(|b| buffers.get(b.index()).map(|d| &d[..]));
+            let Some(pos_iter) = reader.read_positions() else {
+                engine_sdk::tracing::debug!("skipping primitive without positions");
+                continue;
+            };
+            let n = pos_iter.len();
+            if n > limits.max_vertices_per_mesh as usize {
+                return Err(ImportError::TooManyVertices {
+                    mesh: mesh.index(),
+                    count: n,
+                    max: limits.max_vertices_per_mesh,
+                });
+            }
+            let positions: Vec<[f32; 3]> = pos_iter.collect();
+            if !positions.iter().flatten().all(|c| c.is_finite()) {
+                return Err(ImportError::NonFinite("position"));
+            }
+            let uvs: Vec<[f32; 2]> = match reader.read_tex_coords(0) {
+                Some(t) => {
+                    let v: Vec<[f32; 2]> = t.into_f32().collect();
+                    if v.len() != n {
+                        return Err(ImportError::InvalidAccessor("TEXCOORD_0 count mismatch"));
+                    }
+                    v
+                }
+                None => vec![[0.0, 0.0]; n],
+            };
+            if !uvs.iter().flatten().all(|c| c.is_finite()) {
+                return Err(ImportError::NonFinite("texcoord"));
+            }
+            let indices: Vec<u32> = match reader.read_indices() {
+                Some(i) => {
+                    let it = i.into_u32();
+                    if it.len() > limits.max_indices_per_mesh as usize {
+                        return Err(ImportError::TooManyIndices {
+                            mesh: mesh.index(),
+                            count: it.len(),
+                            max: limits.max_indices_per_mesh,
+                        });
+                    }
+                    it.collect()
+                }
+                None => {
+                    if n > limits.max_indices_per_mesh as usize {
+                        return Err(ImportError::TooManyIndices {
+                            mesh: mesh.index(),
+                            count: n,
+                            max: limits.max_indices_per_mesh,
+                        });
+                    }
+                    (0..n as u32).collect()
+                }
+            };
+            if !indices.len().is_multiple_of(3) {
+                return Err(ImportError::InvalidAccessor(
+                    "index count not a multiple of 3",
+                ));
+            }
+            if let Some(&bad) = indices.iter().find(|&&i| i as usize >= n) {
+                return Err(ImportError::InvalidIndex {
+                    mesh: mesh.index(),
+                    index: bad,
+                    vertex_count: n as u32,
+                });
+            }
+            let normals: Vec<[f32; 3]> = match reader.read_normals() {
+                Some(it) => {
+                    let v: Vec<[f32; 3]> = it.collect();
+                    if v.len() == n && v.iter().flatten().all(|c| c.is_finite()) {
+                        v
+                    } else {
+                        generate_normals(&positions, &indices)
+                    }
+                }
+                None => generate_normals(&positions, &indices),
+            };
+            let vertices = positions
+                .iter()
+                .zip(&normals)
+                .zip(&uvs)
+                .map(|((p, nm), uv)| VertexPosNormalUv {
+                    position: *p,
+                    normal: *nm,
+                    uv: *uv,
+                })
+                .collect();
+            mapped.push(model.meshes.len());
+            model.meshes.push(ImportedMesh {
+                vertices,
+                indices,
+                material: primitive.material().index(),
+            });
+        }
+        mesh_map.push(mapped);
+    }
+
+    let scene = document
+        .default_scene()
+        .or_else(|| document.scenes().next());
+    if let Some(scene) = scene {
+        // Iterative pre-order DFS: children pushed in reverse so document order is kept.
+        let mut stack: Vec<(gltf::Node<'_>, Option<usize>, usize)> =
+            scene.nodes().map(|n| (n, None, 0)).collect();
+        stack.reverse();
+        let mut visited: HashSet<usize> = HashSet::new();
+        while let Some((node, parent, depth)) = stack.pop() {
+            if !visited.insert(node.index()) {
+                return Err(ImportError::HierarchyCycle);
+            }
+            if depth > limits.max_depth {
+                return Err(ImportError::HierarchyTooDeep {
+                    max: limits.max_depth,
+                });
+            }
+            if model.nodes.len() >= limits.max_nodes {
+                return Err(ImportError::TooManyNodes {
+                    max: limits.max_nodes,
+                });
+            }
+            let (t, r, s) = node.transform().decomposed();
+            let rotation = Quat::from_array(r);
+            let local = Transform::new(
+                DVec3::new(f64::from(t[0]), f64::from(t[1]), f64::from(t[2])),
+                rotation,
+                Vec3::from_array(s),
+            );
+            if !local.is_finite() || rotation.length() < 1e-6 {
+                return Err(ImportError::NonFinite("node transform"));
+            }
+            let local = Transform::new(local.translation, rotation.normalize(), local.scale);
+            let meshes = match node.mesh() {
+                Some(m) => mesh_map
+                    .get(m.index())
+                    .ok_or(ImportError::InvalidAccessor("mesh index out of range"))?
+                    .clone(),
+                None => Vec::new(),
+            };
+            let own = model.nodes.len();
+            model.nodes.push(ImportedNode {
+                name: node.name().map(str::to_owned),
+                parent,
+                local,
+                meshes,
+            });
+            let mark = stack.len();
+            for child in node.children() {
+                stack.push((child, Some(own), depth + 1));
+            }
+            if let Some(tail) = stack.get_mut(mark..) {
+                tail.reverse();
+            }
+        }
+    }
+    Ok(model)
+}
+
+/// Area-weighted vertex normals; `(0, 1, 0)` where no usable face contributes.
+///
+/// Indices must already be validated against `positions.len()`.
+fn generate_normals(positions: &[[f32; 3]], indices: &[u32]) -> Vec<[f32; 3]> {
+    let mut acc = vec![[0.0f32; 3]; positions.len()];
+    for tri in indices.as_chunks::<3>().0 {
+        let (Some(a), Some(b), Some(c)) = (
+            positions.get(tri[0] as usize),
+            positions.get(tri[1] as usize),
+            positions.get(tri[2] as usize),
+        ) else {
+            continue;
+        };
+        let e1 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+        let e2 = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+        let n = [
+            e1[1] * e2[2] - e1[2] * e2[1],
+            e1[2] * e2[0] - e1[0] * e2[2],
+            e1[0] * e2[1] - e1[1] * e2[0],
+        ];
+        for &i in tri {
+            if let Some(slot) = acc.get_mut(i as usize) {
+                slot[0] += n[0];
+                slot[1] += n[1];
+                slot[2] += n[2];
+            }
+        }
+    }
+    acc.into_iter()
+        .map(|n| {
+            let len = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
+            if len.is_finite() && len > 1e-12 {
+                [n[0] / len, n[1] / len, n[2] / len]
+            } else {
+                [0.0, 1.0, 0.0]
+            }
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -254,6 +608,16 @@ mod tests {
         assert_eq!((tex.width, tex.height), (8, 8));
         assert_eq!(tex.rgba8.len(), 256);
         assert!(tex.rgba8.chunks(4).all(|p| p[3] == 255));
+    }
+
+    #[test]
+    fn generate_normals_ccw_and_degenerate() {
+        let p = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]];
+        let n = generate_normals(&p, &[0, 1, 2]);
+        assert!(n.iter().all(|v| *v == [0.0, 0.0, 1.0]));
+        let d = [[0.0; 3]; 3];
+        let n = generate_normals(&d, &[0, 1, 2]);
+        assert!(n.iter().all(|v| *v == [0.0, 1.0, 0.0]));
     }
 
     #[test]

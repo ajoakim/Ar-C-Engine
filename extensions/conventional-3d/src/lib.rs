@@ -14,5 +14,6 @@ pub mod procedural;
 pub use error::ImportError;
 pub use import::{
     ImportLimits, ImportedMaterial, ImportedMesh, ImportedModel, ImportedNode, ImportedTexture,
-    decode_image,
+    decode_image, import_gltf_path, import_gltf_path_with, import_gltf_slice,
+    import_gltf_slice_with,
 };
