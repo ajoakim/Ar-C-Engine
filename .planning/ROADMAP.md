@@ -13,7 +13,8 @@ Build a small, stable Rust engine core and validate it with two reference apps. 
 - [x] **Phase 3: Platform, Render Backend & Vertical Slice** - Window/input, engine-owned render boundary with wgpu and null backends, RenderScene extraction, triangle via SDK (completed 2026-11-26)
 - [x] **Phase 4: World, Spatial & Assets** - Entities and transforms, spatial queries, typed handles and residency state machine
  (completed 2026-11-26)
-- [x] **Phase 5: Conventional Reference App (Canary)** - Lit meshes, glTF, basic-scene app on SDK only, building without planetary crates (completed 2026-11-26)
+- [x] **Phase 5: Conventional Reference App (Canary)** - Lit meshes, glTF, basic-scene app on SDK only, building without planetary crates
+ (completed 2026-11-26)
 - [ ] **Phase 6: Streaming & Procedural Framework** - Generic streaming with fallback, deterministic seeded generator layers
 - [ ] **Phase 7: Planetary Extension & Terrain LOD** - Cube-sphere, quadtree SSE LOD, crack-free transitions, planetary camera, planetary app
 - [ ] **Phase 8: Hardening & Decisions** - Atmosphere, debug overlays, regression/perf tests, docs, decision ADRs
@@ -129,7 +130,15 @@ Plans:
   2. Under artificial slow loading, frames keep their time budget and coarse parent data is shown until refinement is resident
   3. Generator layers are pure functions of stable ID and seed, with independent layer seeds
   4. Golden-hash tests show identical output across thread counts and platforms (Windows, Linux and macOS CI)
-**Plans**: TBD
+**Plans**: 6 plans
+
+Plans:
+- [ ] 06-01-PLAN.md — Scaffold engine-streaming (tier 3) and engine-procedural (tier 1): workspace, Cargo.lock, xtask layers, dependency doc, SDK re-exports, ADR-0008
+- [ ] 06-02-PLAN.md — Procedural primitives: splitmix64/fnv1a64 KATs, layer seeds, exact-arithmetic value noise/fBm, banned-ops scan
+- [ ] 06-03-PLAN.md — Streaming pipeline: StreamKey/StreamRequest/StreamSource, reject-on-full priority queue, budget-freeing cancel, capped non-blocking update
+- [ ] 06-04-PLAN.md — Generator trait, LayerStack, canonical output hashing, golden hashes across 1/2/4/8 threads and layer compositions
+- [ ] 06-05-PLAN.md — Pinned coarse-ancestor fallback, resolve(), pin-aware LRU eviction, gate-driven slow-load and pin terminal-path tests
+- [ ] 06-06-PLAN.md — Streamed procedural determinism at 1 vs 4 JobSystem workers, goldens recorded in ADR-0008, full phase gate
 
 ### Phase 7: Planetary Extension & Terrain LOD
 **Goal**: A user can fly from orbit to the surface of a procedurally generated planet with crack-free, streamed terrain
