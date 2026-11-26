@@ -180,30 +180,30 @@ Plans:
   5. A `Topology` trait has cube-sphere and half-cell hex implementations; the hex cut covers the sphere exactly once with balanced neighbors, and its seam/coverage proofs (with negative controls) pass
   6. The hex planet runs the full scripted orbit-to-surface descent at real defaults in the planetary app (SDK only), and the user's window flight confirms detail rendering in on descent and aggregating on ascent
   7. The flight feedback items are fixed or measured with evidence and confirmed in the human flight: flicker cause established (plan 20), seamless level changes via geomorphing (plans 21-24), scale and contrast with mountain ranges, colour bands, relief light and distance haze (plan 25; the haze is a generic precursor that Phase 8 atmosphere PLAN-08 supersedes), present mode and window readout (plan 26), hex streaming speed (plan 27)
-**Plans:** 28 plans (27 numbered plus 07.1-16b; 21 waves; 07.1-07 and 07.1-18 are checkpoints; plans 19-27 were added after the user's flight feedback and 07.1-18 is the last wave)
+**Plans:** 21/27 plans executed
 
 Plans:
-- [ ] 07.1-01-PLAN.md — Telemetry (Clock/SimClock/WallClock, CSV, --bench-descent at real defaults) + evidence-based crash/stutter diagnosis on the baseline (G3, G2 diagnosis)
-- [ ] 07.1-02-PLAN.md — planetary-core selection fixes: extruded-footprint distance, resident-ancestor ranges + residual, horizon/frustum culling, node/leaf budgets, no tau reruns, max_level 16 (G1)
-- [ ] 07.1-03-PLAN.md — planetary-terrain: measured ranges into selection, explicit 1024-draw budget, frustum planes, telemetry columns, crash root-cause fixes (G1/G2)
-- [ ] 07.1-04-PLAN.md — Spikes S1 (diamond IDs, 12 pentagons, adjacency) + S2 (exact-op projection bit identity), test-only
-- [ ] 07.1-05-PLAN.md — App frustum wiring, descent + ascent suite at REAL defaults, debug/release bench evidence, ADR-0012, ADR-0010 amendment (closes G1/G2 for the cube-sphere)
-- [ ] 07.1-06-PLAN.md — Spikes S3 (half-cell coverage on the sphere) + S4 (skirt gap on edges and half diagonals), test-only
-- [ ] 07.1-07-PLAN.md — CHECKPOINT: go/no-go on the half-cell hex topology (GO / FALLBACK triangles / STOP), ADR-0011 proposed
-- [ ] 07.1-08-PLAN.md — Topology trait + CubeSphere + generic select/balance + v3 cell payload (go-dependent)
-- [ ] 07.1-09-PLAN.md — Generic shared index buffers + index-range draws in engine-render/wgpu/sdk, ADR-0013 (go-dependent)
-- [ ] 07.1-10-PLAN.md — Hex CellId + icosahedron/diamond tables + parents/children/neighbours (go-dependent)
-- [ ] 07.1-11-PLAN.md — planetary-terrain generic keys/requests/effective cut (go-dependent)
-- [ ] 07.1-12-PLAN.md — Hex exact-op projection, sample lattice, locate, footprints, goldens (go-dependent)
-- [ ] 07.1-13-PLAN.md — Generic TerrainSystem<T>, v3 payloads, index-range draws, debug-cells palette (go-dependent)
-- [ ] 07.1-14-PLAN.md — Hex balance closure, half-cell pieces, coverage proof with negative controls (go-dependent)
-- [ ] 07.1-15-PLAN.md — Hex sector meshes, 8 index variants, skirts incl. diagonals, seam proofs with negative control (go-dependent)
-- [ ] 07.1-16-PLAN.md — HexSphere: Topology, hex selection at real parameters, legacy cube paths removed (go-dependent)
-- [ ] 07.1-17-PLAN.md — App on hex (default) + cube fallback, hex descent/ascent at real defaults, benches, ADR-0011 accepted, docs (go-dependent)
-- [ ] 07.1-16b (summary only, no plan file) — parents-only hex balance closure, hex_selection_reaches_max_level un-ignored
-- [ ] 07.1-19-PLAN.md — Streaming throughput: windowed-realistic harness, adaptive caps, nearest-first ordering, coarse fallback partition, lag bounds (added after the Phase 7.1 flight feedback)
-- [ ] 07.1-20-PLAN.md — Flicker diagnosis with counters (level_changes, appear/disappear, cull_toggles, overlap_pairs, flipflops), absolute invariants, targeted fix or documented finding (reconciled with the existing 0.2 selection hysteresis)
-- [ ] 07.1-21-PLAN.md — Generic render path: morph vertex layout (stride 52), per-draw morph, per-frame distance fog, identity tests (morph 0 and density 0 bit-identical)
+- [x] 07.1-01-PLAN.md — Telemetry (Clock/SimClock/WallClock, CSV, --bench-descent at real defaults) + evidence-based crash/stutter diagnosis on the baseline (G3, G2 diagnosis)
+- [x] 07.1-02-PLAN.md — planetary-core selection fixes: extruded-footprint distance, resident-ancestor ranges + residual, horizon/frustum culling, node/leaf budgets, no tau reruns, max_level 16 (G1)
+- [x] 07.1-03-PLAN.md — planetary-terrain: measured ranges into selection, explicit 1024-draw budget, frustum planes, telemetry columns, crash root-cause fixes (G1/G2)
+- [x] 07.1-04-PLAN.md — Spikes S1 (diamond IDs, 12 pentagons, adjacency) + S2 (exact-op projection bit identity), test-only
+- [x] 07.1-05-PLAN.md — App frustum wiring, descent + ascent suite at REAL defaults, debug/release bench evidence, ADR-0012, ADR-0010 amendment (closes G1/G2 for the cube-sphere)
+- [x] 07.1-06-PLAN.md — Spikes S3 (half-cell coverage on the sphere) + S4 (skirt gap on edges and half diagonals), test-only
+- [x] 07.1-07-PLAN.md — CHECKPOINT: go/no-go on the half-cell hex topology (GO / FALLBACK triangles / STOP), ADR-0011 proposed
+- [x] 07.1-08-PLAN.md — Topology trait + CubeSphere + generic select/balance + v3 cell payload (go-dependent)
+- [x] 07.1-09-PLAN.md — Generic shared index buffers + index-range draws in engine-render/wgpu/sdk, ADR-0013 (go-dependent)
+- [x] 07.1-10-PLAN.md — Hex CellId + icosahedron/diamond tables + parents/children/neighbours (go-dependent)
+- [x] 07.1-11-PLAN.md — planetary-terrain generic keys/requests/effective cut (go-dependent)
+- [x] 07.1-12-PLAN.md — Hex exact-op projection, sample lattice, locate, footprints, goldens (go-dependent)
+- [x] 07.1-13-PLAN.md — Generic TerrainSystem<T>, v3 payloads, index-range draws, debug-cells palette (go-dependent)
+- [x] 07.1-14-PLAN.md — Hex balance closure, half-cell pieces, coverage proof with negative controls (go-dependent)
+- [x] 07.1-15-PLAN.md — Hex sector meshes, 8 index variants, skirts incl. diagonals, seam proofs with negative control (go-dependent)
+- [x] 07.1-16-PLAN.md — HexSphere: Topology, hex selection at real parameters, legacy cube paths removed (go-dependent)
+- [x] 07.1-17-PLAN.md — App on hex (default) + cube fallback, hex descent/ascent at real defaults, benches, ADR-0011 accepted, docs (go-dependent)
+- [x] 07.1-16b (summary only, no plan file) — parents-only hex balance closure, hex_selection_reaches_max_level un-ignored
+- [x] 07.1-19-PLAN.md — Streaming throughput: windowed-realistic harness, adaptive caps, nearest-first ordering, coarse fallback partition, lag bounds (added after the Phase 7.1 flight feedback)
+- [x] 07.1-20-PLAN.md — Flicker diagnosis with counters (level_changes, appear/disappear, cull_toggles, overlap_pairs, flipflops), absolute invariants, targeted fix or documented finding (reconciled with the existing 0.2 selection hysteresis)
+- [x] 07.1-21-PLAN.md — Generic render path: morph vertex layout (stride 52), per-draw morph, per-frame distance fog, identity tests (morph 0 and density 0 bit-identical)
 - [ ] 07.1-22-PLAN.md — Morph targets: parent-mesh surface at the vertex direction for cube and hex (oracle, seam proof with negative controls)
 - [ ] 07.1-23-PLAN.md — Cell payload v4, morph upload and byte budgets, ADR-0014
 - [ ] 07.1-24-PLAN.md — Morph driving from the selector refine distance, child appears at morph 1, handover continuity proofs and benches

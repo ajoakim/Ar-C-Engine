@@ -61,10 +61,10 @@
 - [ ] **PLAN-07**: A scripted orbit-to-surface descent holds the target frame-time budget without stalls
 - [ ] **PLAN-08**: Planet shows a minimal atmosphere (first item to cut if schedule slips)
 - [ ] **HEX-01**: Planet can use an H3-inspired hex-grid topology on an icosahedron (half-cell scheme: each hex gives way to a centre hex plus six half-covered edge hexes, 12 pentagons) with stable packed cell IDs and tested parent/child/neighbor derivation, built with exact arithmetic only (ADR-0008)
-- [ ] **HEX-02**: The hex drawn cut covers the sphere exactly once with balanced neighbors, and terrain is crack-free at cell borders, pentagons and mixed levels (seam and coverage proofs with negative controls)
-- [ ] **HEX-03**: A `Topology` trait has the cube-sphere quadtree and the hex grid as implementations; the cube-sphere stays as test oracle and fallback until hex passes the full descent
+- [x] **HEX-02**: The hex drawn cut covers the sphere exactly once with balanced neighbors, and terrain is crack-free at cell borders, pentagons and mixed levels (seam and coverage proofs with negative controls)
+- [x] **HEX-03**: A `Topology` trait has the cube-sphere quadtree and the hex grid as implementations; the cube-sphere stays as test oracle and fallback until hex passes the full descent
 - [ ] **PERF-01**: Telemetry reports frame time (avg/p95/max), FPS, altitude, distance to surface and selection/streaming stats, with a CSV log and a headless descent benchmark at the real default parameters
-- [ ] **PERF-02**: The scripted orbit-to-surface descent at the real default LOD parameters streams detail in as the camera descends, aggregates on ascent, holds the frame budget and completes without a crash in debug and release
+- [x] **PERF-02**: The scripted orbit-to-surface descent at the real default LOD parameters streams detail in as the camera descends, aggregates on ascent, holds the frame budget and completes without a crash in debug and release
 
 ### Reference Apps & Quality
 
@@ -149,10 +149,10 @@
 | PLAN-06 | Phase 7 | Pending |
 | PLAN-07 | Phase 7 | Pending |
 | HEX-01 | Phase 7.1 | Pending |
-| HEX-02 | Phase 7.1 | Pending |
-| HEX-03 | Phase 7.1 | Pending |
+| HEX-02 | Phase 7.1 | Complete |
+| HEX-03 | Phase 7.1 | Complete |
 | PERF-01 | Phase 7.1 | Pending |
-| PERF-02 | Phase 7.1 | Pending |
+| PERF-02 | Phase 7.1 | Complete |
 | PLAN-08 | Phase 8 | Pending |
 | APP-01 | Phase 5 | Complete |
 | APP-02 | Phase 7 | Pending |
