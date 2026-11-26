@@ -31,6 +31,7 @@ pub use mesh::{
 };
 pub use payload::{PayloadError, decode_payload, encode_payload, payload_len};
 pub mod topology;
+pub use hex::HexSphere;
 pub use topology::{CellMesh, IndexVariant, Piece, Topology, cube::CubeSphere};
 pub mod terrain;
 pub use terrain::{

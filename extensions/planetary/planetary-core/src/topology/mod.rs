@@ -78,6 +78,13 @@ pub trait Topology: Send + Sync + 'static {
     fn neighbors(&self, c: Self::Cell, out: &mut Vec<Self::Cell>);
     /// Appends the cells that must be split if `c` is split; all strictly shallower than `c`.
     fn required_splits(&self, c: Self::Cell, out: &mut Vec<Self::Cell>);
+    /// Whether selection charges the piece budget for the cells the closure forces at the moment
+    /// a cell is split, instead of only repairing the set afterwards. Topologies whose closure is
+    /// large (several forced splits per split) need this to spend the budget on the cells that
+    /// matter; the cube-sphere keeps the original accounting.
+    fn eager_closure(&self) -> bool {
+        false
+    }
     /// Cone containing the cell on the unit sphere.
     fn footprint(&self, c: Self::Cell) -> Footprint;
     /// The cell of `level` containing the unit direction `dir`.

@@ -63,7 +63,8 @@ fn range_for<T: Topology>(
 }
 
 /// Whether removing split `s` keeps `split` closed: no split child, and no split cell of the next
-/// level touching a child of `s` from outside (the closure would require `s` again).
+/// level that requires `s`. Such a cell is a child of `s` or a child of a neighbour of `s`, because
+/// `required_splits` of a cell lists its parents and cells next to them.
 fn removable<T: Topology>(topo: &T, split: &BTreeSet<T::Cell>, s: T::Cell) -> bool {
     let mut children = Vec::new();
     topo.children(s, &mut children);
@@ -71,17 +72,19 @@ fn removable<T: Topology>(topo: &T, split: &BTreeSet<T::Cell>, s: T::Cell) -> bo
         return false;
     }
     let mut nbs = Vec::new();
-    let mut parents = Vec::new();
-    for &c in &children {
-        nbs.clear();
-        topo.neighbors(c, &mut nbs);
-        for &nb in &nbs {
-            if !split.contains(&nb) {
+    topo.neighbors(s, &mut nbs);
+    let mut cand = Vec::new();
+    let mut req = Vec::new();
+    for &n in &nbs {
+        cand.clear();
+        topo.children(n, &mut cand);
+        for &x in &cand {
+            if !split.contains(&x) {
                 continue;
             }
-            parents.clear();
-            topo.parents(nb, &mut parents);
-            if !parents.contains(&s) {
+            req.clear();
+            topo.required_splits(x, &mut req);
+            if req.contains(&s) {
                 return false;
             }
         }
@@ -172,9 +175,17 @@ pub fn select_cells<T: Topology>(
         }
     }
 
-    // Piece estimate: each split replaces one piece by its children.
+    // Piece estimate: each split replaces one piece by its children (exact in eager mode).
     let mut estimate = topo.roots().len();
     let mut children: Vec<T::Cell> = Vec::new();
+    // Eager mode: the cells that are a child of a split cell (drawn unless split themselves).
+    // Drawn pieces are the unsplit roots plus the unsplit cells of this set.
+    let mut drawn_kids: BTreeSet<T::Cell> = BTreeSet::new();
+    let mut new_kids: BTreeSet<T::Cell> = BTreeSet::new();
+    let mut expanded: BTreeSet<T::Cell> = BTreeSet::new();
+    let mut forced_group: Vec<T::Cell> = Vec::new();
+    let mut kids: Vec<T::Cell> = Vec::new();
+    let mut req: Vec<T::Cell> = Vec::new();
     while let Some((bits, Reverse(raw))) = heap.pop() {
         let rho = f64::from_bits(bits);
         if rho <= low {
@@ -197,19 +208,81 @@ pub fn select_cells<T: Topology>(
         let Some(&first) = children.first() else {
             continue;
         };
-        let gain = children.len() - 1;
-        if estimate + gain > params.max_leaves {
-            stats.leaf_budget_hit = true;
+        // A cell reachable through two parents is queued twice; refine it once.
+        if !expanded.insert(id) {
             continue;
         }
         let grandchildren = topo.level(first) < params.max_level;
         let need = u32::try_from(children.len()).unwrap_or(u32::MAX);
+        if split.contains(&id) {
+            // Already split by an earlier forced split (eager mode): only evaluate its children.
+            if grandchildren {
+                if stats.nodes_visited.saturating_add(need) > params.max_nodes_visited {
+                    stats.node_budget_hit = true;
+                    break;
+                }
+                for &c in &children {
+                    if let Some(r) = eval(c, &mut stats) {
+                        heap.push((key_of(r), Reverse(topo.raw(c))));
+                    }
+                }
+            }
+            continue;
+        }
+        let eager = topo.eager_closure();
+        // Piece-count change of splitting `id`: exact under the eager rule (see below), the
+        // replace-one-by-its-children estimate otherwise.
+        forced_group.clear();
+        new_kids.clear();
+        let delta: isize = if eager {
+            forced_group.push(id);
+            let mut at = 0;
+            while at < forced_group.len() {
+                let f = forced_group[at];
+                at += 1;
+                req.clear();
+                topo.required_splits(f, &mut req);
+                for &r in &req {
+                    if !split.contains(&r) && !forced_group.contains(&r) {
+                        forced_group.push(r);
+                    }
+                }
+            }
+            for &f in &forced_group {
+                kids.clear();
+                topo.children(f, &mut kids);
+                new_kids.extend(kids.iter().copied().filter(|x| !drawn_kids.contains(x)));
+            }
+            let added = new_kids
+                .iter()
+                .filter(|x| !forced_group.contains(x))
+                .count();
+            let removed = forced_group
+                .iter()
+                .filter(|f| topo.level(**f) == 0 || drawn_kids.contains(f))
+                .count();
+            isize::try_from(added).unwrap_or(isize::MAX)
+                - isize::try_from(removed).unwrap_or(isize::MAX)
+        } else {
+            isize::try_from(children.len() - 1).unwrap_or(isize::MAX)
+        };
+        let est_after = isize::try_from(estimate)
+            .unwrap_or(isize::MAX)
+            .saturating_add(delta);
+        if est_after > isize::try_from(params.max_leaves).unwrap_or(isize::MAX) {
+            stats.leaf_budget_hit = true;
+            continue;
+        }
         if grandchildren && stats.nodes_visited.saturating_add(need) > params.max_nodes_visited {
             stats.node_budget_hit = true;
             break;
         }
         split.insert(id);
-        estimate += gain;
+        if eager {
+            split.extend(forced_group.iter().copied());
+            drawn_kids.extend(new_kids.iter().copied());
+        }
+        estimate = usize::try_from(est_after).unwrap_or(0);
         if grandchildren {
             for &c in &children {
                 if let Some(r) = eval(c, &mut stats) {

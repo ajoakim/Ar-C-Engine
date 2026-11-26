@@ -729,3 +729,269 @@ fn pentagons_never_halved() {
     assert!(seen > 0);
     assert_eq!(partial, 0);
 }
+
+// ---------------------------------------------------------------- coverage of real selections
+
+/// Coverage of a real selection on a disc around the eye, checked exactly on atoms.
+///
+/// The global atom hierarchy above only reaches `TOPO_LEVELS`; selections reach deeper, so the
+/// atoms are generated lazily from the production adjacency, top-down from the 120 level-0 atoms,
+/// and only inside the disc. Every atom of the checked level `m` inside the disc must be covered by
+/// exactly one piece (counting the pieces of every coarser level that contain it), and adjacent
+/// atoms of different pieces may differ by one level at most.
+mod local {
+    use super::*;
+    use planetary_core::HexSphere;
+    use planetary_core::Topology;
+    use planetary_core::lod::{DEFAULT_KAPPA, LodModel, LodParams, View};
+    use planetary_core::topology::select::select_cells;
+    use planetary_core::{PlanetTerrain, TerrainParams};
+
+    fn common(a: CellId, b: CellId) -> Vec<CellId> {
+        let nbb = nb(b);
+        let out: Vec<CellId> = nb(a).into_iter().filter(|x| nbb.contains(x)).collect();
+        assert_eq!(out.len(), 2, "{a:?} {b:?} must share exactly 2 neighbours");
+        out
+    }
+
+    fn edge_child(a: CellId, b: CellId) -> CellId {
+        let mut kids = Vec::new();
+        children(a, &mut kids);
+        kids.into_iter()
+            .skip(1)
+            .find(|x| {
+                let mut p = Vec::new();
+                parents(*x, &mut p);
+                p.len() == 2 && p.contains(&a) && p.contains(&b)
+            })
+            .unwrap_or_else(|| panic!("no edge child of {a:?} {b:?}"))
+    }
+
+    fn atom_children([a, b, c]: Atom) -> [Atom; 4] {
+        let mut kids = Vec::new();
+        children(a, &mut kids);
+        let af = kids[0];
+        let (mab, mac, mbc) = (edge_child(a, b), edge_child(a, c), edge_child(b, c));
+        [
+            [af, mab, mac],
+            [mab, af, mac],
+            [mab, mac, af],
+            [mab, mac, mbc],
+        ]
+    }
+
+    /// Atoms of a piece (the atoms of its drawn sectors).
+    fn piece_atoms(p: &Piece<CellId>) -> Vec<Atom> {
+        let x = p.cell;
+        let r = ring(x);
+        let mut v = Vec::new();
+        for k in variant_sectors(p.variant) {
+            let n = r[usize::from(*k)];
+            for q in common(x, n) {
+                v.push([x, n, q]);
+            }
+        }
+        v
+    }
+
+    pub struct Local {
+        pub atoms: usize,
+        pub zero: usize,
+        pub multi: usize,
+        pub max_jump: u8,
+        pub jump_pairs: BTreeMap<u8, usize>,
+    }
+
+    fn spacing(level: u8) -> f64 {
+        1.2 / f64::from(1u32 << level)
+    }
+
+    fn angle(a: CellId, eye_dir: DVec3) -> f64 {
+        cell_center_dir(a, 2).dot(eye_dir).clamp(-1.0, 1.0).acos()
+    }
+
+    pub fn check(pcs: &[Piece<CellId>], eye_dir: DVec3, disc: f64, m: u8) -> Local {
+        let mut direct: BTreeMap<Atom, (u32, u32)> = BTreeMap::new();
+        let mut plevel = Vec::new();
+        for (pid, p) in pcs.iter().enumerate() {
+            plevel.push(p.cell.level());
+            for a in piece_atoms(p) {
+                let e = direct.entry(a).or_insert((0, 0));
+                e.0 += 1;
+                e.1 = u32::try_from(pid).expect("piece id");
+            }
+        }
+        let mut level0: BTreeSet<Atom> = BTreeSet::new();
+        for p in CellId::level_iter(0) {
+            for n in nb(p) {
+                for q in common(p, n) {
+                    level0.insert([p, n, q]);
+                }
+            }
+        }
+        assert_eq!(level0.len(), 120);
+        let mut fine: BTreeMap<Atom, (u32, u32)> = BTreeMap::new();
+        let mut stack: Vec<(Atom, u8, u32, u32)> = level0
+            .into_iter()
+            .map(|a| (a, 0u8, 0u32, u32::MAX))
+            .collect();
+        while let Some((a, level, inh, ipid)) = stack.pop() {
+            if angle(a[0], eye_dir) > disc + 2.0 * spacing(level) {
+                continue;
+            }
+            let (dc, dp) = direct.get(&a).copied().unwrap_or((0, 0));
+            let cnt = inh + dc;
+            let pid = if dc > 0 { dp } else { ipid };
+            if level == m {
+                fine.insert(a, (cnt, pid));
+            } else {
+                for ch in atom_children(a) {
+                    stack.push((ch, level + 1, cnt, pid));
+                }
+            }
+        }
+        // Only atoms whose own cell is inside the disc are judged (the rim is a sampling margin).
+        let mut r = Local {
+            atoms: 0,
+            zero: 0,
+            multi: 0,
+            max_jump: 0,
+            jump_pairs: BTreeMap::new(),
+        };
+        for (a, (cnt, pid)) in &fine {
+            if angle(a[0], eye_dir) > disc {
+                continue;
+            }
+            r.atoms += 1;
+            if *cnt == 0 {
+                r.zero += 1;
+            }
+            if *cnt > 1 {
+                r.multi += 1;
+            }
+            let [p, n, q] = *a;
+            for b in [[n, p, q], [p, q, n]] {
+                let Some((c2, pid2)) = fine.get(&b) else {
+                    continue;
+                };
+                if *cnt != 1 || *c2 != 1 || pid == pid2 || b < *a {
+                    continue;
+                }
+                let d = plevel[*pid as usize].abs_diff(plevel[*pid2 as usize]);
+                *r.jump_pairs.entry(d).or_insert(0) += 1;
+                r.max_jump = r.max_jump.max(d);
+            }
+        }
+        r
+    }
+
+    fn views(radius: f64, alt: f64) -> Vec<(String, DVec3)> {
+        let roots: Vec<CellId> = CellId::level_iter(0).collect();
+        let mut out: Vec<(String, DVec3)> = roots
+            .iter()
+            .enumerate()
+            .map(|(i, r)| (format!("pentagon{i}"), cell_center_dir(*r, 2)))
+            .collect();
+        let mut edges = Vec::new();
+        for (i, a) in roots.iter().enumerate() {
+            for b in nb(*a) {
+                if *a < b {
+                    edges.push((i, *a, b));
+                }
+            }
+        }
+        assert_eq!(edges.len(), 30);
+        for k in 0..18usize {
+            let (i, a, b) = edges[k * 30 / 18];
+            let (da, db) = (cell_center_dir(a, 2), cell_center_dir(b, 2));
+            let s = DVec3::new(da.x + db.x, da.y + db.y, da.z + db.z);
+            let l = s.dot(s).sqrt();
+            out.push((
+                format!("edge{k}_from{i}"),
+                DVec3::new(s.x / l, s.y / l, s.z / l),
+            ));
+        }
+        out.into_iter()
+            .map(|(n, d)| {
+                let s = radius + alt;
+                (n, DVec3::new(d.x * s, d.y * s, d.z * s))
+            })
+            .collect()
+    }
+
+    /// Returns (views, atoms, violations, max jump, level-diff-1 pairs). With `drop_half` one half
+    /// piece is removed from each selection (negative control).
+    pub fn run(label: &str, drop_half: bool) -> (usize, usize, usize, u8, usize) {
+        let hex = HexSphere::new(16).expect("hex");
+        let terrain =
+            PlanetTerrain::new(0x0007_5EED_2026_0001, TerrainParams::default(), 16).expect("t");
+        let model = LodModel::for_topology(&terrain, DEFAULT_KAPPA, hex.sample_angle0());
+        let params = LodParams::default();
+        let (mut atoms, mut bad, mut views_n, mut max_jump, mut pairs1) = (0, 0, 0, 0u8, 0usize);
+        for (name, eye) in
+            views(model.radius, 1000.0)
+                .into_iter()
+                .take(if drop_half { 12 } else { usize::MAX })
+        {
+            let view = View {
+                eye,
+                proj_scale: 720.0 / (2.0 * (1.0 / 3.0f64.sqrt())),
+                frustum: None,
+            };
+            let sel = select_cells(&hex, &model, &params, &view, &BTreeSet::new(), &|_| None);
+            let mut pcs = sel.pieces.clone();
+            let deepest = pcs.iter().map(|p| p.cell.level()).max().unwrap_or(0);
+            let l = (eye.x * eye.x + eye.y * eye.y + eye.z * eye.z).sqrt();
+            let dir = DVec3::new(eye.x / l, eye.y / l, eye.z / l);
+            if drop_half {
+                // The half piece closest to the eye (inside the checked disc).
+                let Some(i) = (0..pcs.len())
+                    .filter(|i| pcs[*i].variant >= 2)
+                    .min_by(|a, b| angle(pcs[*a].cell, dir).total_cmp(&angle(pcs[*b].cell, dir)))
+                else {
+                    continue;
+                };
+                pcs.remove(i);
+            }
+            let disc = 3.0 * spacing(deepest);
+            let r = check(&pcs, dir, disc, deepest + 2);
+            println!(
+                "HEX-02 {label} {name}: pieces {} deepest {deepest} checked L{} atoms {} zero {} multi {} max jump {} pairs {:?}",
+                pcs.len(),
+                deepest + 2,
+                r.atoms,
+                r.zero,
+                r.multi,
+                r.max_jump,
+                r.jump_pairs
+            );
+            assert!(r.atoms > 0);
+            atoms += r.atoms;
+            bad += r.zero + r.multi;
+            views_n += 1;
+            max_jump = max_jump.max(r.max_jump);
+            pairs1 += r.jump_pairs.get(&1).copied().unwrap_or(0);
+        }
+        println!(
+            "HEX-02 {label} TOTAL: {views_n} views, {atoms} atoms, {bad} violations, max jump {max_jump}, level-diff-1 pairs {pairs1}"
+        );
+        (views_n, atoms, bad, max_jump, pairs1)
+    }
+}
+
+#[test]
+fn coverage_of_selected_cuts() {
+    let (views, atoms, bad, max_jump, pairs1) = local::run("selected cuts", false);
+    assert_eq!(views, 30);
+    assert!(atoms > 0);
+    assert_eq!(bad, 0, "coverage violations in real selections");
+    assert!(max_jump <= 1, "level jump {max_jump} in real selections");
+    assert!(pairs1 > 0, "no mixed-level borders were exercised");
+}
+
+#[test]
+fn selected_cut_negative_control_dropped_half_detected() {
+    let (views, _, bad, _, _) = local::run("dropped half", true);
+    assert!(views > 0, "no selection drew a half piece");
+    assert!(bad > 0, "dropping a half piece must leave a hole");
+}
