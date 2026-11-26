@@ -6,10 +6,12 @@
 mod error;
 mod handle;
 mod id;
+mod loader;
 mod manager;
 mod registry;
 mod residency;
 
+pub use loader::{AsyncLoader, LoadEvent};
 pub use manager::{
     AssetClass, ClassBudget, ClassStats, MemoryPool, ResidencyManager, ResidencyStats,
 };
