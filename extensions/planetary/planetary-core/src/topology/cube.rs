@@ -9,7 +9,10 @@ use crate::adjacency::neighbor;
 use crate::face::{Edge, Face};
 use crate::lod::{Footprint, LodModel, leaves_of, patch_footprint};
 use crate::mapping::{locate, vertex_dir};
-use crate::mesh::{PatchData, build_patch_data, grid_indices, uv_at_level, uv_sampled};
+use crate::mesh::{
+    PatchData, build_patch_data, grid_indices, stencil_normal, uv_at_level, uv_sampled,
+    uv_with_normal,
+};
 use crate::morph::{
     EDGE_SNAP_M, MorphHit, MorphStats, MorphTargets, blend_uv, chord_target, identity_morph,
     project_to_triangle,
@@ -177,6 +180,40 @@ type PosUv = (DVec3, [f32; 2]);
 
 /// Parent-level vertex `(pi, pj)` of the parent of `c`: the child's own even grid vertex when it
 /// lies in the child's footprint (it always does for the vertices the targets need), else sampled.
+/// Attribute of child grid vertex `(ci, cj)` that coincides with parent vertex `(pi, pj)`, at the
+/// slope of the parent level (the v2 ramp depends on the mesh normal). An interior parent vertex
+/// has the stencil `pos(+-1)` of the parent grid, which are the child vertices two cells away: no
+/// extra samples. Elsewhere (parent border, or the stencil leaves the child grid) the
+/// face-independent border stencil of the parent level is sampled.
+fn parent_level_uv(
+    terrain: &PlanetTerrain,
+    c: PatchId,
+    data: &PatchData,
+    (ci, cj): (u32, u32),
+    (pi, pj): (u32, u32),
+) -> [f32; 2] {
+    let n = terrain.cells_per_edge();
+    let w = n as usize + 1;
+    let k = (cj as usize) * w + ci as usize;
+    let uv = data.uvs[k];
+    if terrain.params().generator_version < 2 {
+        return uv;
+    }
+    let parent_interior = (1..n).contains(&pi) && (1..n).contains(&pj);
+    let own_stencil =
+        (2..=n.saturating_sub(2)).contains(&ci) && (2..=n.saturating_sub(2)).contains(&cj);
+    if parent_interior && own_stencil {
+        uv_with_normal(
+            terrain,
+            uv,
+            stencil_normal(&data.pos, w, k, 2),
+            data.dirs[k],
+        )
+    } else {
+        uv_at_level(terrain, uv, c.level().saturating_sub(1), data.dirs[k])
+    }
+}
+
 fn parent_vertex(
     terrain: &PlanetTerrain,
     c: PatchId,
@@ -191,13 +228,7 @@ fn parent_vertex(
     let cj = i64::from(2 * pj) - i64::from(y & 1) * i64::from(n);
     if (0..=i64::from(n)).contains(&ci) && (0..=i64::from(n)).contains(&cj) {
         let k = (cj as usize) * (n as usize + 1) + ci as usize;
-        // The v2 ramp depends on the mesh normal: carry the parent level's value.
-        let uv = uv_at_level(
-            terrain,
-            data.uvs[k],
-            c.level().saturating_sub(1),
-            data.dirs[k],
-        );
+        let uv = parent_level_uv(terrain, c, data, (ci as u32, cj as u32), (pi, pj));
         return (data.pos[k], uv);
     }
     stats.parent_samples += 1;
@@ -249,7 +280,7 @@ pub(crate) fn cube_morph_targets(
             let target: Option<PosUv> = match (ni & 1, nj & 1) {
                 (0, 0) => {
                     stats.copied += 1;
-                    let uv = uv_at_level(terrain, own.1, c.level() - 1, d);
+                    let uv = parent_level_uv(terrain, c, data, (i, j), (qi, qj));
                     Some((own.0, uv))
                 }
                 (1, 0) | (0, 1) => {

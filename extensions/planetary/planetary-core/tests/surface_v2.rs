@@ -317,3 +317,48 @@ fn rock_ramp_is_not_inert_on_real_land() {
     assert!(frac(full) > 0.005, "full rock on {:.4}", frac(full));
     assert!(frac(full) < 0.2, "full rock on {:.4}", frac(full));
 }
+
+#[test]
+fn cube_v2_morph_target_colour_matches_the_parent_mesh() {
+    // A coincident child vertex must carry the colour the parent mesh draws there, so colour
+    // follows geometry through the handover. Bit-equal for interior parent vertices (the stencil
+    // is the parent's own) and for parent border vertices (same border stencil); the remaining
+    // coincident vertices (parent interior, child stencil outside its grid) use the border
+    // stencil, so only a small row difference is allowed.
+    let t = terrain(TerrainParams::demo_v2());
+    let m = cube_model(&t);
+    let w = N + 1;
+    let (mut exact, mut near, mut worst) = (0u32, 0u32, 0.0f32);
+    for level in [3u8, 6, 9, 12] {
+        for k in 0..6 {
+            let c = seeded_patch(level, 100 + k);
+            let p = c.parent().expect("parent");
+            let pm = build_patch(&t, &m, p);
+            let tg =
+                planetary_core::topology::cube::cube_morph_targets_f64(&t, &m, c).expect("targets");
+            let (x, y) = c.xy();
+            for j in 0..=N {
+                for i in 0..=N {
+                    let (ni, nj) = ((x & 1) * N + i, (y & 1) * N + j);
+                    if ni % 2 != 0 || nj % 2 != 0 {
+                        continue;
+                    }
+                    let (pi, pj) = (ni / 2, nj / 2);
+                    let want = pm.vertices[(pj * w + pi) as usize].uv;
+                    let got = tg.uv[(j * w + i) as usize];
+                    assert_eq!(got[0].to_bits(), want[0].to_bits());
+                    if got[1].to_bits() == want[1].to_bits() {
+                        exact += 1;
+                    } else {
+                        near += 1;
+                        worst = worst.max((got[1] - want[1]).abs());
+                    }
+                }
+            }
+        }
+    }
+    eprintln!("coincident uv: exact {exact}, near {near}, worst row diff {worst:e}");
+    assert!(exact > 0);
+    assert!(exact > 4 * near, "exact {exact} near {near}");
+    assert!(worst < 0.05, "worst {worst}");
+}

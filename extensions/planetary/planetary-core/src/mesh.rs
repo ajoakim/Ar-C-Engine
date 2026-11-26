@@ -13,7 +13,7 @@ use crate::face::Edge;
 use crate::lod::LodModel;
 use crate::mapping::{patch_center_dir, vertex_dir};
 use crate::patch_id::PatchId;
-use crate::terrain::{PlanetTerrain, TerrainSample};
+use crate::terrain::{PlanetTerrain, TerrainSample, mask_at};
 
 /// Skirt depth as a multiple of the coarser neighbor's geometric error.
 pub const SKIRT_MARGIN: f64 = 1.5;
@@ -211,6 +211,15 @@ pub(crate) fn uv_v2(uv: [f32; 2], normal: DVec3, dir: DVec3) -> [f32; 2] {
     [uv[0], ramp_row(q) as f32]
 }
 
+/// Interior grid normal at row-major index `k` of a `(n + 1)^2` grid with row length `w`, from the
+/// positions `step` cells away (`step = 1` is the builder's own stencil).
+pub(crate) fn stencil_normal(pos: &[DVec3], w: usize, k: usize, step: usize) -> DVec3 {
+    let a = vsub(pos[k + step], pos[k - step]);
+    let b = vsub(pos[k + step * w], pos[k - step * w]);
+    let c = vcross(a, b);
+    vnormalize(c.x, c.y, c.z)
+}
+
 /// Applies [`uv_v2`] to every vertex of a builder when the generator is v2 or newer.
 pub(crate) fn apply_surface_v2(
     terrain: &PlanetTerrain,
@@ -237,7 +246,14 @@ pub(crate) fn uv_sampled(
     uv_at_level(terrain, uv_of(terrain, s), level, dir)
 }
 
-/// Re-expresses the v1 attribute `uv` of the vertex at `dir` at the slope of a level-`level`
+/// The v1 attribute (`uv.y` = mask) of the vertex at `dir`, given its built attribute `uv` (whose
+/// `uv.x` is the normalised height). Needs only the 3-octave mask, not a full terrain sample.
+fn v1_uv(terrain: &PlanetTerrain, uv: [f32; 2], dir: DVec3) -> [f32; 2] {
+    let m = mask_at(terrain.seeds().mask, terrain.params(), dir);
+    [uv[0], m.clamp(0.0, 1.0) as f32]
+}
+
+/// Re-expresses the built attribute `uv` of the vertex at `dir` at the slope of a level-`level`
 /// patch (identity for generator v1). The v2 ramp depends on the mesh normal and therefore on the
 /// level, so a morph target must carry the parent level's ramp, not the child's.
 pub(crate) fn uv_at_level(
@@ -249,7 +265,21 @@ pub(crate) fn uv_at_level(
     if terrain.params().generator_version < 2 {
         return uv;
     }
-    uv_v2(uv, border_normal_f64(terrain, level, dir), dir)
+    uv_v2(
+        v1_uv(terrain, uv, dir),
+        border_normal_f64(terrain, level, dir),
+        dir,
+    )
+}
+
+/// Like [`uv_at_level`] with a given unit `normal` of the parent level.
+pub(crate) fn uv_with_normal(
+    terrain: &PlanetTerrain,
+    uv: [f32; 2],
+    normal: DVec3,
+    dir: DVec3,
+) -> [f32; 2] {
+    uv_v2(v1_uv(terrain, uv, dir), normal, dir)
 }
 
 /// Builds the mesh of `id`; identical to `build_patch_cancellable` that is never cancelled.
