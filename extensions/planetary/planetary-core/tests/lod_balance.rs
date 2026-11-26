@@ -4,7 +4,8 @@ use std::collections::BTreeSet;
 
 use engine_sdk::DVec3;
 use planetary_core::lod::{
-    LodModel, balance, is_balanced, is_partition, leaves_of, max_level_jump,
+    HeightRange, LodModel, balance, cell_bound, is_balanced, is_partition, leaves_of,
+    max_level_jump, patch_footprint,
 };
 use planetary_core::{Face, PatchId, patch_corner_dirs};
 
@@ -13,7 +14,11 @@ const R: f64 = 6_371_000.0;
 fn model() -> LodModel {
     LodModel {
         radius: R,
-        max_relief: 3800.0,
+        height: HeightRange {
+            min: -3800.0,
+            max: 3800.0,
+        },
+        residual: [0.0; 25],
         cells_per_edge: 32,
         kappa: 0.25,
     }
@@ -50,7 +55,7 @@ fn geometric_error_decreases_and_matches_formula() {
 }
 
 #[test]
-fn node_bound_contains_corner_vertices() {
+fn cell_bound_contains_patch_vertices() {
     let m = model();
     let mut s = 7u64;
     for _ in 0..200 {
@@ -60,9 +65,9 @@ fn node_bound_contains_corner_vertices() {
         let x = (splitmix(&mut s) % n) as u32;
         let y = (splitmix(&mut s) % n) as u32;
         let id = PatchId::new(face, level, x, y).unwrap();
-        let b = m.node_bound(id);
+        let b = cell_bound(R, &patch_footprint(id), m.height);
         for d in patch_corner_dirs(id) {
-            for h in [-m.max_relief, m.max_relief] {
+            for h in [m.height.min, m.height.max] {
                 let p = DVec3::new(d.x * (R + h), d.y * (R + h), d.z * (R + h));
                 assert!((p - b.center).length() <= b.radius);
             }
@@ -165,16 +170,13 @@ fn reference_views_balanced() {
     use planetary_core::lod::{LodParams, View, reference_views, select};
     let m = model();
     let p = LodParams::default();
-    let views = reference_views(R, m.max_relief);
+    let views = reference_views(R, m.height.max);
     assert_eq!(views.len(), 8 + 8 + 12 + 2);
     for (name, eye) in views {
         let v = View::new(eye, 720, 1.0 / 3.0f64.sqrt()).unwrap();
-        let sel = select(&m, &p, &v, &BTreeSet::new());
+        let sel = select(&m, &p, &v, &BTreeSet::new(), &|_| None);
         assert!(is_partition(&sel.leaves), "{name}");
         assert!(max_level_jump(&sel.leaves) <= 1, "{name}");
-        assert!(
-            sel.leaves.len() <= p.max_leaves || sel.stats.tau_steps == p.max_tau_steps,
-            "{name}"
-        );
+        assert!(sel.leaves.len() <= p.max_leaves, "{name}");
     }
 }

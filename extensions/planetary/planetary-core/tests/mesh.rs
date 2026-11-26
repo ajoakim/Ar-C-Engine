@@ -13,7 +13,7 @@ use planetary_core::{
 };
 
 const SEED: u64 = 0x0007_5EED_2026_0001;
-const GOLDEN_MESH: u64 = 0x51f4_dccc_04db_d5bd; // Windows-computed; cross-platform CI pending
+const GOLDEN_MESH: u64 = 0xd6e7_58c0_249e_3586; // payload v2 (height range); Windows-computed; cross-platform CI pending
 
 fn terrain(n: u32) -> PlanetTerrain {
     PlanetTerrain::new(SEED, TerrainParams::default(), n).expect("terrain")
@@ -278,8 +278,20 @@ fn payload_rejects_malformed() {
     ));
     assert_eq!(PAYLOAD_MAGIC.to_le_bytes(), *b"PTCH");
     let mut b = bytes.clone();
-    b[4..8].copy_from_slice(&2u32.to_le_bytes());
-    assert_eq!(decode_payload(&b, id, n), Err(PayloadError::BadVersion(2)));
+    b[4..8].copy_from_slice(&3u32.to_le_bytes());
+    assert_eq!(decode_payload(&b, id, n), Err(PayloadError::BadVersion(3)));
+    let mut b = bytes.clone();
+    b[4..8].copy_from_slice(&1u32.to_le_bytes());
+    assert_eq!(decode_payload(&b, id, n), Err(PayloadError::BadVersion(1)));
+    // height_min > height_max is rejected; the range survives the round trip.
+    let ok = decode_payload(&bytes, id, n).expect("decode");
+    assert!(ok.height_min <= ok.height_max);
+    let mut b = bytes.clone();
+    b[60..68].copy_from_slice(&(ok.height_max + 1.0).to_le_bytes());
+    assert_eq!(decode_payload(&b, id, n), Err(PayloadError::BadRange));
+    let mut b = bytes.clone();
+    b[68..76].copy_from_slice(&f64::NAN.to_le_bytes());
+    assert_eq!(decode_payload(&b, id, n), Err(PayloadError::NonFinite));
     assert!(matches!(
         decode_payload(&bytes, other, n),
         Err(PayloadError::IdMismatch { .. })

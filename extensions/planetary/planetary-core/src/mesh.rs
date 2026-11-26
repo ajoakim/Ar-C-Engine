@@ -27,6 +27,9 @@ pub struct PatchMesh {
     pub indices: Vec<u32>,
     pub bound_radius: f32,
     pub skirt_depth: f64,
+    /// Measured min/max of the grid sample heights (skirts excluded).
+    pub height_min: f64,
+    pub height_max: f64,
 }
 
 /// `(n + 1)^2` grid vertices plus `4 * (n + 1)` skirt vertices.
@@ -180,6 +183,8 @@ pub fn build_patch(terrain: &PlanetTerrain, model: &LodModel, id: PatchId) -> Pa
         indices: Vec::new(),
         bound_radius: 0.0,
         skirt_depth: 0.0,
+        height_min: 0.0,
+        height_max: 0.0,
     })
 }
 
@@ -202,6 +207,8 @@ pub fn build_patch_cancellable(
     let mut dirs: Vec<DVec3> = Vec::with_capacity(wu * wu);
     let mut pos: Vec<DVec3> = Vec::with_capacity(wu * wu);
     let mut uvs: Vec<[f32; 2]> = Vec::with_capacity(wu * wu);
+    let mut height_min = f64::INFINITY;
+    let mut height_max = f64::NEG_INFINITY;
     for j in 0..w {
         if cancelled() {
             return None;
@@ -213,6 +220,12 @@ pub fn build_patch_cancellable(
             } else {
                 samples[(j * w + i) as usize]
             };
+            if s.height < height_min {
+                height_min = s.height;
+            }
+            if s.height > height_max {
+                height_max = s.height;
+            }
             let r = terrain.params().radius + s.height;
             dirs.push(d);
             pos.push(DVec3::new(d.x * r, d.y * r, d.z * r));
@@ -278,5 +291,7 @@ pub fn build_patch_cancellable(
         indices: grid_indices(n),
         bound_radius,
         skirt_depth: depth,
+        height_min,
+        height_max,
     })
 }

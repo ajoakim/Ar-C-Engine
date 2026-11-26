@@ -3,10 +3,15 @@
 
 mod balance;
 mod check;
+mod cull;
 mod model;
 mod select;
 
 pub use balance::{balance, leaves_of};
 pub use check::{is_balanced, is_partition, max_level_jump, reference_views};
-pub use model::{Bound, DEFAULT_KAPPA, LodModel, View};
+pub use cull::{
+    Footprint, HeightRange, cell_bound, cell_distance, eye_in_cone, frustum_visible,
+    horizon_visible, patch_footprint,
+};
+pub use model::{Bound, DEFAULT_KAPPA, LodModel, RESIDUAL_LEVELS, View};
 pub use select::{LodParams, SelectStats, Selection, screen_space_error, select};

@@ -7,10 +7,10 @@ use crate::patch_id::PatchId;
 
 /// `b"PTCH"` little-endian.
 pub const PAYLOAD_MAGIC: u32 = 0x4843_5450;
-pub const PAYLOAD_VERSION: u32 = 1;
+pub const PAYLOAD_VERSION: u32 = 2;
 /// magic u32, version u32, id u64, vertex_count u32, index_count u32, origin 3*f64,
-/// bound_radius f32, skirt_depth f64.
-pub const HEADER_LEN: usize = 60;
+/// bound_radius f32, skirt_depth f64, height_min f64, height_max f64.
+pub const HEADER_LEN: usize = 76;
 
 /// Exact encoded size for `n` cells per edge.
 #[must_use]
@@ -27,6 +27,7 @@ pub enum PayloadError {
     CountMismatch { vertices: u32, indices: u32 },
     NonFinite,
     IndexOutOfRange(u32),
+    BadRange,
 }
 
 impl core::fmt::Display for PayloadError {
@@ -45,6 +46,7 @@ impl core::fmt::Display for PayloadError {
             }
             PayloadError::NonFinite => write!(f, "non-finite float in payload"),
             PayloadError::IndexOutOfRange(i) => write!(f, "index {i} out of range"),
+            PayloadError::BadRange => write!(f, "payload height range min > max"),
         }
     }
 }
@@ -66,6 +68,8 @@ pub fn encode_payload(mesh: &PatchMesh) -> Vec<u8> {
     out.extend_from_slice(&mesh.origin.z.to_le_bytes());
     out.extend_from_slice(&mesh.bound_radius.to_le_bytes());
     out.extend_from_slice(&mesh.skirt_depth.to_le_bytes());
+    out.extend_from_slice(&mesh.height_min.to_le_bytes());
+    out.extend_from_slice(&mesh.height_max.to_le_bytes());
     for v in &mesh.vertices {
         for f in v.position.iter().chain(&v.normal).chain(&v.uv) {
             out.extend_from_slice(&f.to_le_bytes());
@@ -133,15 +137,22 @@ pub fn decode_payload(bytes: &[u8], expected: PatchId, n: u32) -> Result<PatchMe
     let origin = DVec3::new(rd(24)?, rd(32)?, rd(40)?);
     let bound_radius = f32_at(bytes, 48).ok_or(PayloadError::NonFinite)?;
     let skirt_depth = rd(52)?;
+    let height_min = rd(60)?;
+    let height_max = rd(68)?;
     let header_floats = [
         origin.x,
         origin.y,
         origin.z,
         f64::from(bound_radius),
         skirt_depth,
+        height_min,
+        height_max,
     ];
     if header_floats.iter().any(|f| !f.is_finite()) {
         return Err(PayloadError::NonFinite);
+    }
+    if height_min > height_max {
+        return Err(PayloadError::BadRange);
     }
     let mut vertices = Vec::with_capacity(vc as usize);
     let mut o = HEADER_LEN;
@@ -177,5 +188,7 @@ pub fn decode_payload(bytes: &[u8], expected: PatchId, n: u32) -> Result<PatchMe
         indices,
         bound_radius,
         skirt_depth,
+        height_min,
+        height_max,
     })
 }

@@ -187,9 +187,9 @@ fn collect_junctions(t: &PlanetTerrain, model: &LodModel) -> Junctions {
     };
     let mut cache: BTreeMap<(PatchId, Edge), Vec<DVec3>> = BTreeMap::new();
     let mut seen: BTreeSet<(PatchId, Edge)> = BTreeSet::new();
-    for (name, eye) in reference_views(model.radius, model.max_relief) {
+    for (name, eye) in reference_views(model.radius, model.height.max) {
         let view = View::new(eye, 720, 1.0 / 3.0f64.sqrt()).expect("view");
-        let sel = select(model, &params, &view, &BTreeSet::new());
+        let sel = select(model, &params, &view, &BTreeSet::new(), &|_| None);
         assert!(is_partition(&sel.leaves), "{name}: partition");
         assert!(max_level_jump(&sel.leaves) <= 1, "{name}: jump");
         let leaves: BTreeSet<PatchId> = sel.leaves.iter().copied().collect();
