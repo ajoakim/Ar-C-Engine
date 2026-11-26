@@ -180,7 +180,7 @@ Plans:
   5. A `Topology` trait has cube-sphere and half-cell hex implementations; the hex cut covers the sphere exactly once with balanced neighbors, and its seam/coverage proofs (with negative controls) pass
   6. The hex planet runs the full scripted orbit-to-surface descent at real defaults in the planetary app (SDK only), and the user's window flight confirms detail rendering in on descent and aggregating on ascent
   7. The flight feedback items are fixed or measured with evidence and confirmed in the human flight: flicker cause established (plan 20), seamless level changes via geomorphing (plans 21-24), scale and contrast with mountain ranges, colour bands, relief light and distance haze (plan 25; the haze is a generic precursor that Phase 8 atmosphere PLAN-08 supersedes), present mode and window readout (plan 26), hex streaming speed (plan 27)
-**Plans:** 21/27 plans executed
+**Plans:** 23/27 plans executed
 
 Plans:
 - [x] 07.1-01-PLAN.md — Telemetry (Clock/SimClock/WallClock, CSV, --bench-descent at real defaults) + evidence-based crash/stutter diagnosis on the baseline (G3, G2 diagnosis)
@@ -204,8 +204,8 @@ Plans:
 - [x] 07.1-19-PLAN.md — Streaming throughput: windowed-realistic harness, adaptive caps, nearest-first ordering, coarse fallback partition, lag bounds (added after the Phase 7.1 flight feedback)
 - [x] 07.1-20-PLAN.md — Flicker diagnosis with counters (level_changes, appear/disappear, cull_toggles, overlap_pairs, flipflops), absolute invariants, targeted fix or documented finding (reconciled with the existing 0.2 selection hysteresis)
 - [x] 07.1-21-PLAN.md — Generic render path: morph vertex layout (stride 52), per-draw morph, per-frame distance fog, identity tests (morph 0 and density 0 bit-identical)
-- [ ] 07.1-22-PLAN.md — Morph targets: parent-mesh surface at the vertex direction for cube and hex (oracle, seam proof with negative controls)
-- [ ] 07.1-23-PLAN.md — Cell payload v4, morph upload and byte budgets, ADR-0014
+- [x] 07.1-22-PLAN.md — Morph targets: parent-mesh surface at the vertex direction for cube and hex (oracle, seam proof with negative controls)
+- [x] 07.1-23-PLAN.md — Cell payload v4, morph upload and byte budgets, ADR-0014
 - [ ] 07.1-24-PLAN.md — Morph driving from the selector refine distance, child appears at morph 1, handover continuity proofs and benches
 - [ ] 07.1-25-PLAN.md — Scale and contrast: generator v2 ridge layer, bounds, colour ramp and slope rock, relief light, distance haze (precursor to Phase 8 atmosphere), ADR-0015
 - [ ] 07.1-26-PLAN.md — Present mode setting, startup info and window title readout, strict flags, measured table, ADR-0016
