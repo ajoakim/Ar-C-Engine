@@ -1,6 +1,7 @@
 //! Engine-owned opaque resource handles.
 
 use crate::backend::VertexLayout;
+use crate::error::RenderError;
 
 /// Handle to a backend buffer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -62,8 +63,23 @@ impl TextureId {
 pub struct MeshIndices {
     /// Buffer holding indices.
     pub buffer: BufferId,
+    /// First index to draw.
+    pub first: u32,
     /// Number of indices to draw.
     pub count: u32,
+    /// True when the buffer is shared between meshes and owned by the app.
+    pub shared: bool,
+}
+
+/// A static u32 index buffer that several meshes can draw ranges of.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct IndexBufferHandle {
+    /// Buffer holding indices.
+    pub buffer: BufferId,
+    /// Number of indices in the buffer.
+    pub count: u32,
+    /// Largest index value stored in the buffer.
+    pub max_index: u32,
 }
 
 /// A drawable mesh: a vertex buffer, its layout and an optional index buffer.
@@ -93,8 +109,43 @@ impl MeshHandle {
     /// Attach an index buffer.
     #[must_use]
     pub fn with_indices(mut self, buffer: BufferId, count: u32) -> Self {
-        self.index = Some(MeshIndices { buffer, count });
+        self.index = Some(MeshIndices {
+            buffer,
+            first: 0,
+            count,
+            shared: false,
+        });
         self
+    }
+
+    /// Attach a range of a shared index buffer.
+    pub fn with_index_range(
+        mut self,
+        ib: &IndexBufferHandle,
+        first: u32,
+        count: u32,
+    ) -> Result<Self, RenderError> {
+        if count == 0 || !count.is_multiple_of(3) {
+            return Err(RenderError::InvalidIndices(
+                "index count must be a positive multiple of 3",
+            ));
+        }
+        let end = u64::from(first) + u64::from(count);
+        if end > u64::from(ib.count) {
+            return Err(RenderError::InvalidIndices("index range out of bounds"));
+        }
+        if ib.max_index >= self.vertex_count {
+            return Err(RenderError::InvalidIndices(
+                "shared index buffer references vertices beyond this mesh",
+            ));
+        }
+        self.index = Some(MeshIndices {
+            buffer: ib.buffer,
+            first,
+            count,
+            shared: true,
+        });
+        Ok(self)
     }
 }
 
@@ -113,7 +164,9 @@ mod tests {
             m.index,
             Some(MeshIndices {
                 buffer: ib,
-                count: 6
+                first: 0,
+                count: 6,
+                shared: false
             })
         );
     }

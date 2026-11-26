@@ -557,7 +557,7 @@ impl WgpuBackend {
                             .get(&ix.buffer)
                             .ok_or_else(|| RenderError::Backend("index buffer missing".into()))?;
                         rp.set_index_buffer(ib.slice(..), wgpu::IndexFormat::Uint32);
-                        rp.draw_indexed(0..ix.count, 0, 0..1);
+                        rp.draw_indexed(ix.first..ix.first + ix.count, 0, 0..1);
                     }
                     None => rp.draw(0..d.mesh.vertex_count, 0..1),
                 }

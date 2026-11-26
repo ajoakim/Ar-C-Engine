@@ -48,6 +48,8 @@ pub struct BufferInfo {
     pub usage: BufferUsage,
     /// Size in bytes.
     pub size: u64,
+    /// Largest u32 value for index buffers.
+    pub max_index: Option<u32>,
 }
 
 /// Tracks live handles. Ids are never reused, so stale ids stay invalid.
@@ -87,6 +89,18 @@ impl ResourceTable {
             return Err(RenderError::EmptyBuffer);
         }
         check_buffer_size(data.len())?;
+        let max_index = if desc.usage == BufferUsage::Index {
+            if !data.len().is_multiple_of(4) {
+                return Err(RenderError::InvalidIndices(
+                    "index data length must be a multiple of 4",
+                ));
+            }
+            data.chunks_exact(4)
+                .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+                .max()
+        } else {
+            None
+        };
         let raw = self
             .next_buffer
             .checked_add(1)
@@ -98,6 +112,7 @@ impl ResourceTable {
             BufferInfo {
                 usage: desc.usage,
                 size: data.len() as u64,
+                max_index,
             },
         );
         Ok(id)
@@ -270,7 +285,10 @@ impl ResourceTable {
                             "index count must be a positive multiple of 3",
                         ));
                     }
-                    let required = u64::from(ix.count) * 4;
+                    if ib.max_index.is_some_and(|m| m >= d.mesh.vertex_count) {
+                        return Err(RenderError::InvalidIndices("index exceeds vertex count"));
+                    }
+                    let required = (u64::from(ix.first) + u64::from(ix.count)) * 4;
                     if required > ib.size {
                         return Err(RenderError::MeshOutOfBounds {
                             buffer: ix.buffer.raw(),

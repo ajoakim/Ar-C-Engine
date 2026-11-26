@@ -25,7 +25,7 @@ pub use glam::{Mat3, Mat4, Quat};
 pub use graph::{
     BACKBUFFER, CompiledGraph, DEPTH, GraphError, MAIN_PASS, PassDesc, PipelineSet, RenderGraph,
 };
-pub use handles::{BufferId, MeshHandle, MeshIndices, PipelineId, TextureId};
+pub use handles::{BufferId, IndexBufferHandle, MeshHandle, MeshIndices, PipelineId, TextureId};
 pub use material::{
     DirectionalLight, MAX_MATERIALS, MAX_TEXTURE_DIMENSION, Material, MaterialId, MaterialTable,
     TextureDesc,

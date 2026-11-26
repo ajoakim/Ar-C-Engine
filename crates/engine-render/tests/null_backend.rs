@@ -378,3 +378,83 @@ fn null_submit_accepts_indexed_lit_mesh() {
     };
     assert_eq!(b.submit(&packet(0, vec![d])), Ok(()));
 }
+
+fn shared_handle(ib: BufferId, count: u32, max_index: u32) -> IndexBufferHandle {
+    IndexBufferHandle {
+        buffer: ib,
+        count,
+        max_index,
+    }
+}
+
+fn range_draw(pipe: PipelineId, mesh: MeshHandle) -> DrawCommand {
+    DrawCommand {
+        pipeline: pipe,
+        mesh,
+        mvp: Mat4::IDENTITY,
+        model: Mat4::IDENTITY,
+        normal: Mat3::IDENTITY,
+        base_color: [1.0; 4],
+        texture: None,
+    }
+}
+
+#[test]
+fn shared_index_buffer_range_draws() {
+    let mut b = NullBackend::new();
+    let vb1 = lit_buffer(&mut b, 4);
+    let vb2 = lit_buffer(&mut b, 4);
+    let ib = index_buffer(&mut b, &[0, 1, 2, 2, 1, 3]);
+    let h = shared_handle(ib, 6, 3);
+    let pipe = lit_pipeline(&mut b);
+    let m1 = MeshHandle::new(VertexLayout::PosNormalUv, vb1, 4)
+        .with_index_range(&h, 0, 3)
+        .unwrap();
+    let m2 = MeshHandle::new(VertexLayout::PosNormalUv, vb2, 4)
+        .with_index_range(&h, 3, 3)
+        .unwrap();
+    assert_eq!(
+        m2.index.map(|i| (i.first, i.count, i.shared)),
+        Some((3, 3, true))
+    );
+    let p = packet(0, vec![range_draw(pipe, m1), range_draw(pipe, m2)]);
+    assert_eq!(b.submit(&p), Ok(()));
+}
+
+#[test]
+fn range_out_of_bounds_rejected() {
+    let mut b = NullBackend::new();
+    let vb = lit_buffer(&mut b, 4);
+    let ib = index_buffer(&mut b, &[0, 1, 2, 2, 1, 3]);
+    let h = shared_handle(ib, 6, 3);
+    let m = MeshHandle::new(VertexLayout::PosNormalUv, vb, 4);
+    assert!(m.with_index_range(&h, 6, 3).is_err());
+    assert!(m.with_index_range(&h, 3, 6).is_err());
+    assert!(m.with_index_range(&h, 0, 0).is_err());
+    assert!(m.with_index_range(&h, 0, 4).is_err());
+    assert!(m.with_index_range(&h, u32::MAX, 3).is_err());
+    // A forged handle with an oversized range is caught at submit.
+    let pipe = lit_pipeline(&mut b);
+    let big = shared_handle(ib, 12, 3);
+    let bad = m.with_index_range(&big, 6, 6).unwrap();
+    assert!(matches!(
+        b.submit(&packet(0, vec![range_draw(pipe, bad)])),
+        Err(RenderError::MeshOutOfBounds { .. })
+    ));
+}
+
+#[test]
+fn max_index_beyond_vertex_count_rejected() {
+    let mut b = NullBackend::new();
+    let vb = lit_buffer(&mut b, 3);
+    let ib = index_buffer(&mut b, &[0, 1, 3]);
+    let pipe = lit_pipeline(&mut b);
+    let m = MeshHandle::new(VertexLayout::PosNormalUv, vb, 3);
+    assert!(m.with_index_range(&shared_handle(ib, 3, 3), 0, 3).is_err());
+    // A handle that understates max_index is still caught at submit.
+    let forged = m.with_index_range(&shared_handle(ib, 3, 2), 0, 3).unwrap();
+    assert_eq!(
+        b.submit(&packet(0, vec![range_draw(pipe, forged)])),
+        Err(RenderError::InvalidIndices("index exceeds vertex count"))
+    );
+}
