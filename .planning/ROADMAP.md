@@ -15,7 +15,8 @@ Build a small, stable Rust engine core and validate it with two reference apps. 
  (completed 2026-11-26)
 - [x] **Phase 5: Conventional Reference App (Canary)** - Lit meshes, glTF, basic-scene app on SDK only, building without planetary crates
  (completed 2026-11-26)
-- [x] **Phase 6: Streaming & Procedural Framework** - Generic streaming with fallback, deterministic seeded generator layers (completed 2026-11-26)
+- [x] **Phase 6: Streaming & Procedural Framework** - Generic streaming with fallback, deterministic seeded generator layers
+ (completed 2026-11-26)
 - [ ] **Phase 7: Planetary Extension & Terrain LOD** - Cube-sphere, quadtree SSE LOD, crack-free transitions, planetary camera, planetary app
 - [ ] **Phase 8: Hardening & Decisions** - Atmosphere, debug overlays, regression/perf tests, docs, decision ADRs
 
@@ -151,7 +152,18 @@ Plans:
   4. Neighboring patch borders agree because terrain comes from layered planet-space generators
   5. A user can navigate with the planetary camera from orbit to surface in the planetary app, which uses the public SDK only
   6. A scripted orbit-to-surface descent stays within the frame-time budget without stalls
-**Plans**: TBD
+**Plans:** 10 plans
+Plans:
+- [ ] 07-01-PLAN.md — SDK gpu_frame hook + destroy_mesh, scaffold planetary-terrain/planetary-app, xtask/docs/CI wiring, ADR-0009 and ADR-0010 (proposed)
+- [ ] 07-02-PLAN.md — planetary-core: packed PatchId, face bases, cross-face adjacency with exhaustive reciprocity + oracle tests
+- [ ] 07-03-PLAN.md — planetary-core: exact-op equal-angle mapping, locate, layered planet-space generators, goldens, banned-ops scan
+- [ ] 07-04-PLAN.md — planetary-core: SSE LOD selection with hysteresis, cross-face 2:1 balance, leaf cap, validators
+- [ ] 07-05-PLAN.md — planetary-core: patch mesh with skirts and per-patch origin, validated payload, CPU seam proofs, ADR-0010 evidence
+- [ ] 07-06-PLAN.md — planetary-terrain: planetary camera (altitude-scaled speed, parallel transport, clearance, near plane)
+- [ ] 07-07-PLAN.md — planetary-terrain: effective (residency-limited) cut with coarsen-to-balance, request planning
+- [ ] 07-08-PLAN.md — planetary-terrain: PatchKey/PatchSource/GpuUploader/TerrainSystem streaming glue, headless integration test
+- [ ] 07-09-PLAN.md — planetary-app: PlanetaryApp, DescentScript, planetary_flight example, sdk_only policy test, CI headless step
+- [ ] 07-10-PLAN.md — scripted descent test (PLAN-07), ADR-0010 accepted, validation sign-off, human window-flight checkpoint
 **UI hint**: yes
 
 ### Phase 8: Hardening & Decisions
@@ -179,5 +191,5 @@ Plans:
 | 4. World, Spatial & Assets | 8/8 | Complete    | 2026-11-26 |
 | 5. Conventional Reference App | 10/10 | Complete    | 2026-11-26 |
 | 6. Streaming & Procedural Framework | 6/6 | Complete    | 2026-11-26 |
-| 7. Planetary Extension & Terrain LOD | 0/TBD | Not started | - |
+| 7. Planetary Extension & Terrain LOD | 0/10 | Planned | - |
 | 8. Hardening & Decisions | 0/TBD | Not started | - |
