@@ -24,7 +24,7 @@ Build a small, stable Rust engine core and validate it with two reference apps. 
 **Depends on**: Nothing (first phase)
 **Requirements**: WS-01, WS-02, WS-03, WS-04
 **Success Criteria** (what must be TRUE):
-  1. A fresh checkout builds on Windows and Linux with the pinned toolchain (Rust >= 1.95, edition 2024) via `rust-toolchain.toml`
+  1. A fresh checkout builds on Windows, Linux and macOS with the pinned toolchain (Rust >= 1.95, edition 2024) via `rust-toolchain.toml`
   2. The workspace has coarse crates with a documented dependency direction
   3. CI fails when a core crate depends on an extension crate, or when wgpu/winit appear outside their designated crates (demonstrated by a failing negative test)
   4. An ADR template exists, and a conventions ADR fixes meters, axes, handedness and depth range
@@ -105,7 +105,7 @@ Plans:
   1. Stream requests carry key, priority, budget class and cancellation token, and cancelled requests free their budget
   2. Under artificial slow loading, frames keep their time budget and coarse parent data is shown until refinement is resident
   3. Generator layers are pure functions of stable ID and seed, with independent layer seeds
-  4. Golden-hash tests show identical output across thread counts and platforms (Windows and Linux CI)
+  4. Golden-hash tests show identical output across thread counts and platforms (Windows, Linux and macOS CI)
 **Plans**: TBD
 
 ### Phase 7: Planetary Extension & Terrain LOD

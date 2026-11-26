@@ -7,7 +7,7 @@
 
 ### Workspace & Guardrails
 
-- [x] **WS-01**: Developer can build the whole workspace on a pinned Rust toolchain (>= 1.95, edition 2024) via `rust-toolchain.toml` on Windows and Linux
+- [x] **WS-01**: Developer can build the whole workspace on a pinned Rust toolchain (>= 1.95, edition 2024) via `rust-toolchain.toml` on Windows, Linux and macOS
 - [x] **WS-02**: Workspace is split into coarse crates with documented dependency direction (core never depends on extensions)
 - [x] **WS-03**: CI fails if any core crate depends on an extension crate, or if wgpu/winit appear outside their designated crates
 - [x] **WS-04**: An ADR template exists and a conventions ADR fixes units (meters), axes, handedness, and depth range

@@ -15,7 +15,7 @@ Two layers of enforcement:
 1. `cargo xtask check-deps`: an in-repo checker using the `cargo_metadata` crate. It checks the declared dependencies of every workspace package against the layer table, rules R1-R6 (see `docs/architecture/dependency-direction.md`). Negative fixture tests under `xtask/fixtures/` must fail the checker.
 2. `cargo-deny` (`deny.toml`): transitive wgpu/winit bans via `wrappers`, a license allowlist and RustSec advisories.
 
-CI runs on GitHub Actions: an `ubuntu-latest` and `windows-latest` matrix runs fmt, clippy `-D warnings`, tests, `cargo xtask check-deps`, and a negative step asserting the checker fails on a fixture. A separate ubuntu job runs `cargo deny check`.
+CI runs on GitHub Actions: an `ubuntu-latest`, `windows-latest` and `macos-latest` matrix runs fmt, clippy `-D warnings`, tests, `cargo xtask check-deps`, and a negative step asserting the checker fails on a fixture. A separate ubuntu job runs `cargo deny check`.
 
 ## Alternatives Considered
 
