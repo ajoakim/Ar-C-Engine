@@ -294,17 +294,18 @@ impl Rng {
 enum Closure {
     /// No closure at all (negative control).
     None,
-    /// Only "all parents of a split cell are split" (negative control for balance).
-    ParentsOnly,
-    /// The production hex balance rule ([`close`]).
+    /// The production hex balance rule ([`close`]): all parents of a split cell are split.
+    Production,
+    /// The superseded full rule (parents plus all neighbours of the parents); informational only,
+    /// kept to show what the neighbour half bought (ADR-0011).
     Full,
 }
 
 fn close_mode(t: &Topo, split: &mut BTreeSet<CellId>, mode: Closure) -> u32 {
     match mode {
         Closure::None => 0,
-        Closure::Full => close(split),
-        Closure::ParentsOnly => {
+        Closure::Production => close(split),
+        Closure::Full => {
             let before = split.len();
             let mut work: Vec<CellId> = split.iter().copied().collect();
             while let Some(x) = work.pop() {
@@ -312,8 +313,12 @@ fn close_mode(t: &Topo, split: &mut BTreeSet<CellId>, mode: Closure) -> u32 {
                     continue;
                 }
                 for p in &t.pars[&x] {
-                    if split.insert(*p) {
-                        work.push(*p);
+                    let mut req = vec![*p];
+                    req.extend(t.nbrs[p].iter().copied());
+                    for r in req {
+                        if split.insert(r) {
+                            work.push(r);
+                        }
                     }
                 }
             }
@@ -422,11 +427,11 @@ fn pentagon_set(v: CellId, max_level: u8) -> SetResult {
 
 fn results(mode: Closure) -> &'static Vec<SetResult> {
     static NONE: OnceLock<Vec<SetResult>> = OnceLock::new();
-    static PARENTS: OnceLock<Vec<SetResult>> = OnceLock::new();
+    static PRODUCTION: OnceLock<Vec<SetResult>> = OnceLock::new();
     static FULL: OnceLock<Vec<SetResult>> = OnceLock::new();
     let cell = match mode {
         Closure::None => &NONE,
-        Closure::ParentsOnly => &PARENTS,
+        Closure::Production => &PRODUCTION,
         Closure::Full => &FULL,
     };
     cell.get_or_init(|| {
@@ -527,7 +532,7 @@ fn coverage_exactly_once() {
         }
     }
 
-    let rs = results(Closure::Full);
+    let rs = results(Closure::Production);
     summarize("closed+balanced", rs);
     let prs = pentagon_results();
     summarize("pentagon distance rule", prs);
@@ -558,7 +563,7 @@ fn coverage_exactly_once() {
 
 #[test]
 fn level_jump_is_at_most_one() {
-    let rs = results(Closure::Full);
+    let rs = results(Closure::Production);
     let prs = pentagon_results();
     let all = rs.iter().chain(prs.iter());
     let max_jump = all.clone().map(|r| r.cover.max_jump).max().unwrap_or(0);
@@ -570,7 +575,7 @@ fn level_jump_is_at_most_one() {
         .map(|r| r.cover.jump_pairs.get(&2).copied().unwrap_or(0))
         .sum();
     println!(
-        "HEX-02 balance (full closure): max jump {max_jump}, level-diff-1 adjacencies {pairs1}, level-diff-2 adjacencies {pairs2}"
+        "HEX-02 balance (parents-only closure): max jump {max_jump}, level-diff-1 adjacencies {pairs1}, level-diff-2 adjacencies {pairs2}"
     );
     assert!(pairs1 > 0, "no mixed-level borders were exercised");
     assert_eq!(pairs2, 0, "level jumps of 2 present");
@@ -594,16 +599,16 @@ fn negative_control_no_closure_detected() {
         "negative control: the checker found no violation without closure"
     );
 
-    // Finding (informational): parents-only closure, i.e. without the neighbour rule.
-    let po = results(Closure::ParentsOnly);
-    summarize("parents-only closure", po);
+    // Informational: the superseded full closure (with the neighbour rule) on the same sets.
+    let full = results(Closure::Full);
+    summarize("superseded full closure", full);
 
     // Power of the jump detector: a synthetic exact cover that is NOT balanced. Replace one whole
     // drawn cell X by its level+2 descendant atoms (one piece per atom). Coverage stays exactly 1,
     // so any detected jump comes from the level difference alone and must be 2.
     let t = topo();
     let h = hier();
-    let base = &results(Closure::Full)[0];
+    let base = &results(Closure::Production)[0];
     let m = base.max_level;
     let vi = base
         .pcs
@@ -638,7 +643,7 @@ fn negative_control_no_closure_detected() {
 fn negative_control_dropped_half_detected() {
     let t = topo();
     let h = hier();
-    let rs = results(Closure::Full);
+    let rs = results(Closure::Production);
     let mut detected = 0usize;
     let mut tried = 0usize;
     for r in rs {
@@ -662,7 +667,7 @@ fn negative_control_dropped_half_detected() {
 fn negative_control_duplicate_detected() {
     let t = topo();
     let h = hier();
-    let rs = results(Closure::Full);
+    let rs = results(Closure::Production);
     let mut detected = 0usize;
     let mut tried = 0usize;
     for r in rs {
@@ -709,7 +714,7 @@ fn pentagons_never_halved() {
     }
     let mut partial = 0usize;
     let mut seen = 0usize;
-    for r in [Closure::None, Closure::ParentsOnly, Closure::Full]
+    for r in [Closure::None, Closure::Production, Closure::Full]
         .iter()
         .flat_map(|m| results(*m).iter())
         .chain(pentagon_results().iter())
@@ -943,6 +948,13 @@ mod local {
             let deepest = pcs.iter().map(|p| p.cell.level()).max().unwrap_or(0);
             let l = (eye.x * eye.x + eye.y * eye.y + eye.z * eye.z).sqrt();
             let dir = DVec3::new(eye.x / l, eye.y / l, eye.z / l);
+            // The disc reaches past the nearest piece coarser than the deepest level, so that the
+            // checked region contains a mixed-level border even when the descent is deep.
+            let mut reach = pcs
+                .iter()
+                .filter(|p| p.cell.level() < deepest)
+                .map(|p| angle(p.cell, dir))
+                .fold(f64::MAX, f64::min);
             if drop_half {
                 // The half piece closest to the eye (inside the checked disc).
                 let Some(i) = (0..pcs.len())
@@ -951,9 +963,10 @@ mod local {
                 else {
                     continue;
                 };
+                reach = reach.max(angle(pcs[i].cell, dir));
                 pcs.remove(i);
             }
-            let disc = 3.0 * spacing(deepest);
+            let disc = reach.min(40.0 * spacing(deepest)) + 3.0 * spacing(deepest);
             let r = check(&pcs, dir, disc, deepest + 2);
             println!(
                 "HEX-02 {label} {name}: pieces {} deepest {deepest} checked L{} atoms {} zero {} multi {} max jump {} pairs {:?}",

@@ -1,7 +1,7 @@
 //! Hex balance closure and drawn pieces (half-cell rule, HEX-02). Integer only.
 //!
-//! A cell may be split only if all its parents are split and all lattice neighbours of those
-//! parents are split ([`required_splits`]); [`close`] inserts until that holds. The drawn pieces of
+//! A cell may be split only if all its parents are split ([`required_splits`], parents-only
+//! closure, ADR-0011); [`close`] inserts until that holds. The drawn pieces of
 //! a closed split set tile the sphere exactly once: unsplit roots are whole; every unsplit child
 //! of a split parent is drawn with the sectors owned by its split parents. The centre child is
 //! whole, an edge child is half (3 sectors on the side of its split parent) when only one of its
@@ -11,7 +11,7 @@
 //! Sector `k` of a cell is the sector toward `ring(cell)[k]` (see [`crate::hex::mapping::CellFrame`]).
 //! A half variant is defined over ring indices only, so it does not depend on where the ring starts.
 
-use super::adjacency::{children, is_pentagon, neighbors, parents};
+use super::adjacency::{children, is_pentagon, parents};
 use super::cell_id::CellId;
 use super::mapping::ring;
 use crate::topology::Piece;
@@ -49,20 +49,13 @@ pub fn variant_sectors(v: u16) -> &'static [u8] {
     }
 }
 
-/// Appends the cells that must be split for `c` to be split: its parents and all lattice
-/// neighbours of the parents, deduplicated, ascending raw. All are at `level(c) - 1`.
+/// Appends the cells that must be split for `c` to be split: its parents, ascending raw. All are
+/// at `level(c) - 1`. There is no neighbour rule (ADR-0011): jump-1 balance is empirical.
 pub fn required_splits(c: CellId, out: &mut Vec<CellId>) {
     let first = out.len();
     let mut ps = Vec::with_capacity(2);
     parents(c, &mut ps);
-    let mut set = BTreeSet::new();
-    let mut nb = Vec::with_capacity(6);
-    for p in ps {
-        set.insert(p);
-        nb.clear();
-        neighbors(p, &mut nb);
-        set.extend(nb.iter().copied());
-    }
+    let set: BTreeSet<CellId> = ps.into_iter().collect();
     debug_assert!(set.iter().all(|x| x.level() + 1 == c.level()));
     out.extend(set);
     debug_assert!(out[first..].windows(2).all(|w| w[0].raw() < w[1].raw()));
@@ -146,12 +139,6 @@ pub fn pieces(split: &BTreeSet<CellId>, out: &mut Vec<Piece<CellId>>) {
 mod tests {
     use super::*;
 
-    fn nb(c: CellId) -> Vec<CellId> {
-        let mut v = Vec::new();
-        neighbors(c, &mut v);
-        v
-    }
-
     fn pcs(split: &BTreeSet<CellId>) -> Vec<Piece<CellId>> {
         let mut v = Vec::new();
         pieces(split, &mut v);
@@ -159,18 +146,14 @@ mod tests {
     }
 
     #[test]
-    fn required_splits_are_parents_and_their_neighbours() {
+    fn required_splits_are_the_parents() {
         for level in 1..=3u8 {
             for c in CellId::level_iter(level) {
                 let mut req = Vec::new();
                 required_splits(c, &mut req);
                 let mut ps = Vec::new();
                 parents(c, &mut ps);
-                let mut expect = BTreeSet::new();
-                for p in &ps {
-                    expect.insert(*p);
-                    expect.extend(nb(*p));
-                }
+                let expect: BTreeSet<CellId> = ps.iter().copied().collect();
                 assert!(req.iter().all(|r| r.level() + 1 == level));
                 assert_eq!(req, expect.into_iter().collect::<Vec<_>>(), "{c:?}");
             }

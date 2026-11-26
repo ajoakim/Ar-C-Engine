@@ -350,15 +350,9 @@ fn hex_selection_within_budgets() {
     assert_eq!(reached.len(), dirs.len());
 }
 
-/// 07.1-16 must-have: from 3 m the look-at point is refined to level 16 within the real budgets.
-///
-/// BLOCKER (found while executing 07.1-16): not met with the ADR-0011 full balance closure. A pure
-/// chain of splits down to level 15 at one point needs 1260 pieces (about 80 per level, every split
-/// drags the neighbours of its parents), so the 900-piece budget stops the descent at level 12 at a
-/// generic point (level 16 only at pentagons, 14 at icosahedron edges). A parents-only closure
-/// needs about 30 pieces per level. Needs a decision (balance rule, N, or budget); see the SUMMARY.
+/// 07.1-16 must-have: from 3 m the look-at point is refined to level 16 within the real budgets
+/// (met with the parents-only closure, ADR-0011; the full closure stopped at level 12).
 #[test]
-#[ignore = "blocked: 900-piece budget cannot reach level 16 under the full hex closure (07.1-16 SUMMARY)"]
 fn hex_selection_reaches_max_level() {
     let hex = HexSphere::new(16).expect("hex");
     let model = hex_model(&hex);

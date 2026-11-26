@@ -12,7 +12,7 @@ use std::sync::OnceLock;
 
 use engine_sdk::DVec3;
 use engine_sdk::procedural::splitmix64;
-use planetary_core::hex::adjacency::{children, is_pentagon, parents};
+use planetary_core::hex::adjacency::{children, is_pentagon, neighbors, parents};
 use planetary_core::hex::mapping::{cell_center_dir, cell_sample_point, ring, vertices};
 use planetary_core::hex::mesh::{
     build_hex_cell, hex_skirt_depth, hex_vertex_position_f64, vertex_count_hex,
@@ -298,21 +298,27 @@ fn split_set(eye: DVec3, radius: f64, full: bool) -> BTreeSet<CellId> {
         frontier = next.into_iter().collect();
     }
     if full {
-        close(&mut split);
-    } else {
-        // Parents-only closure (no neighbour rule): also exposes coarse HALF pieces facing finer
-        // cells, which the full rule never produces (07.1-06 finding 1).
+        // Superseded full closure (parents plus all neighbours of the parents), informational.
         let mut work: Vec<CellId> = split.iter().copied().collect();
         let mut ps = Vec::new();
+        let mut nb = Vec::new();
         while let Some(x) = work.pop() {
             ps.clear();
             parents(x, &mut ps);
-            for q in &ps {
-                if split.insert(*q) {
-                    work.push(*q);
+            for q in ps.clone() {
+                nb.clear();
+                neighbors(q, &mut nb);
+                for r in std::iter::once(q).chain(nb.iter().copied()) {
+                    if split.insert(r) {
+                        work.push(r);
+                    }
                 }
             }
         }
+    } else {
+        // Production balance rule: parents-only closure (ADR-0011). It produces coarse HALF pieces
+        // facing finer cells, which the superseded full rule never produced.
+        close(&mut split);
     }
     split
 }
@@ -412,14 +418,16 @@ fn collect_junctions(full: bool) -> Junctions {
     out
 }
 
+/// Production closure (parents-only): the main path.
 fn junctions() -> &'static Junctions {
     static J: OnceLock<Junctions> = OnceLock::new();
-    J.get_or_init(|| collect_junctions(true))
+    J.get_or_init(|| collect_junctions(false))
 }
 
-fn junctions_parents_only() -> &'static Junctions {
+/// Superseded full closure (informational comparison).
+fn junctions_full() -> &'static Junctions {
     static J: OnceLock<Junctions> = OnceLock::new();
-    J.get_or_init(|| collect_junctions(false))
+    J.get_or_init(|| collect_junctions(true))
 }
 
 /// Number of odd-vertex violations; `forced_depth` overrides the real skirt depth.
@@ -448,6 +456,7 @@ fn hex_mixed_level_gap_bounded_by_skirts() {
     );
     assert_eq!(j.even_mismatches, 0, "even fine vertices must equal coarse");
     assert!(j.whole > 0, "no whole-cell coarse junction");
+    assert!(j.half > 0, "no coarse half-piece junction exercised");
     assert!(j.pentagon > 0, "no pentagon junction exercised");
     assert!(j.icosa_cross > 0, "no icosahedron-edge junction exercised");
     let (re, rd) = (max_ratio(j, true), max_ratio(j, false));
@@ -471,11 +480,11 @@ fn hex_mixed_level_gap_bounded_by_skirts() {
     assert!(re <= 1.0 && rd <= 1.0);
 }
 
-/// Coarse HALF pieces facing finer cells (only produced by the parents-only closure): the
-/// half piece's outer edges are bounded by the same skirts.
+/// Coarse HALF pieces facing finer cells (produced by the production parents-only closure): the
+/// half piece's outer edges are bounded by the same skirts, and the depth-0 control finds them.
 #[test]
 fn hex_mixed_level_gap_with_half_pieces() {
-    let j = junctions_parents_only();
+    let j = junctions();
     assert_eq!(
         j.structure_errors, 0,
         "junction structure (edge child / half piece)"
@@ -494,6 +503,25 @@ fn hex_mixed_level_gap_with_half_pieces() {
     assert!(
         violations(j, Some(0.0)) == j.samples.iter().filter(|s| s.gap > 0.0).count()
             && violations(j, Some(0.0)) > 0
+    );
+    let half_odd: Vec<_> = j.samples.iter().filter(|s| !s.coarse_whole).collect();
+    assert!(!half_odd.is_empty(), "no odd vertex on a coarse half piece");
+    assert!(
+        half_odd.iter().any(|s| s.gap > 0.0),
+        "control: coarse half pieces must show a gap that the skirt covers"
+    );
+}
+
+/// The superseded full closure on the same views: no coarse half pieces, still 0 violations.
+#[test]
+fn hex_superseded_full_closure_informational() {
+    let j = junctions_full();
+    assert_eq!(j.structure_errors, 0);
+    assert_eq!(j.even_mismatches, 0);
+    assert_eq!(violations(j, None), 0, "gap exceeds skirt depth");
+    eprintln!(
+        "superseded full closure: {} junctions (coarse whole {} / half {})",
+        j.count, j.whole, j.half
     );
 }
 
