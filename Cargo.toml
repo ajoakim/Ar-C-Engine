@@ -16,6 +16,8 @@ members = [
     "crates/engine-sdk",
     "extensions/conventional-3d",
     "extensions/planetary/planetary-core",
+    "extensions/planetary/planetary-terrain",
+    "extensions/planetary/planetary-app",
     "xtask",
 ]
 exclude = ["xtask/fixtures"]

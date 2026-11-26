@@ -1,0 +1,16 @@
+[package]
+name = "planetary-app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Planetary reference app (orbit-to-surface flight) on the public SDK. Nothing in the engine depends on it."
+
+[dependencies]
+engine-sdk.workspace = true
+planetary-core = { path = "../planetary-core" }
+planetary-terrain = { path = "../planetary-terrain" }
+
+[lints]
+workspace = true

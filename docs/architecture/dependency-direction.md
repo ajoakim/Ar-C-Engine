@@ -19,6 +19,8 @@ Dependencies flow downward only: a crate may depend only on crates of a strictly
 | `engine-sdk` | crates/engine-sdk | 5 | all engine-* crates above |
 | `conventional-3d` | extensions/conventional-3d | 6 | `engine-sdk` |
 | `planetary-core` | extensions/planetary/planetary-core | 6 | `engine-sdk` |
+| `planetary-terrain` | extensions/planetary/planetary-terrain | 7 | `engine-sdk`, `planetary-core` |
+| `planetary-app` | extensions/planetary/planetary-app | 8 | `engine-sdk`, `planetary-core`, `planetary-terrain` |
 | `xtask` | xtask | tooling (exempt from tiers) | none (uses cargo_metadata) |
 
 ## Checked rules
@@ -39,6 +41,8 @@ Enforced by `cargo xtask check-deps`; the IDs below are the exact rule IDs it re
 ## Canary (PLAN-01)
 
 `cargo xtask check-canary` resolves the full (transitive) dependency graph of `conventional-3d` (normal, dev and build edges) and reports rule `canary-planetary-reachable` if any package named `planetary-*` or located under `extensions/planetary/` is reachable. The negative fixture `xtask/fixtures/canary-leak` (a transitive-only leak via `engine-sdk`) must fail. CI additionally deletes `extensions/planetary` and builds, tests and runs the app headless (ADR-0007).
+
+Planetary crates depend on each other only inside the `extensions/planetary` family via path dependencies declared in their own manifests (never in root `[workspace.dependencies]`), so deleting the directory removes every reference.
 
 `engine-streaming` and `engine-procedural` are general-purpose core crates (Phase 6, ADR-0008); planetary key and generator implementations live in `extensions/planetary` and reach them only through `engine-sdk`.
 
@@ -80,4 +84,9 @@ graph TD
     engine-sdk --> engine-render-wgpu
     conventional-3d --> engine-sdk
     planetary-core --> engine-sdk
+    planetary-terrain --> engine-sdk
+    planetary-terrain --> planetary-core
+    planetary-app --> engine-sdk
+    planetary-app --> planetary-core
+    planetary-app --> planetary-terrain
 ```

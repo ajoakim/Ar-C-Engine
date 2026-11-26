@@ -69,6 +69,14 @@ pub const LAYERS: &[Layer] = &[
         name: "planetary-core",
         tier: 6,
     },
+    Layer {
+        name: "planetary-terrain",
+        tier: 7,
+    },
+    Layer {
+        name: "planetary-app",
+        tier: 8,
+    },
 ];
 
 /// Tooling packages, exempt from tiers and R5/R6.

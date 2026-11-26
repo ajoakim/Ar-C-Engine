@@ -1,0 +1,5 @@
+//! Planetary terrain streaming, GPU mesh lifecycle, effective LOD cut and planetary camera.
+//!
+//! Extension crate (tier 7). Allowed dependencies and layering rules are documented in
+//! `docs/architecture/dependency-direction.md`.
+//! Engine crates under crates/ must never depend on this crate.

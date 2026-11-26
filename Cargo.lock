@@ -1621,10 +1621,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
 
 [[package]]
+name = "planetary-app"
+version = "0.1.0"
+dependencies = [
+ "engine-sdk",
+ "planetary-core",
+ "planetary-terrain",
+]
+
+[[package]]
 name = "planetary-core"
 version = "0.1.0"
 dependencies = [
  "engine-sdk",
+]
+
+[[package]]
+name = "planetary-terrain"
+version = "0.1.0"
+dependencies = [
+ "engine-sdk",
+ "planetary-core",
 ]
 
 [[package]]

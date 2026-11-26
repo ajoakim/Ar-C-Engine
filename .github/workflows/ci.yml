@@ -51,8 +51,8 @@ jobs:
         run: "! cargo run --locked -p xtask -- check-deps --manifest-path xtask/fixtures/wgpu-winit-misplaced/Cargo.toml"
       - name: Build basic_scene example
         run: cargo build --locked -p conventional-3d --example basic_scene
-      - name: Test without planetary-core (fast canary)
-        run: cargo test --workspace --exclude planetary-core --locked
+      - name: Test without planetary crates (fast canary)
+        run: cargo test --workspace --exclude planetary-core --exclude planetary-terrain --exclude planetary-app --locked
       - name: Canary - no planetary crate reachable from conventional-3d (must pass)
         run: cargo run --locked -p xtask -- check-canary
       - name: Negative - transitive planetary leak fixture (must fail)
