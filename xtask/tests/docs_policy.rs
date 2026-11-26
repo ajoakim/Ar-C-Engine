@@ -218,3 +218,19 @@ fn adr_0013_index_range_present() {
         require(f, &t, lit);
     }
 }
+
+#[test]
+fn adr_0014_vertex_morph_present() {
+    let f = "docs/architecture/adr/0014-vertex-morph-attribute-geomorphing.md";
+    let t = read(f);
+    for lit in [
+        "Status: accepted",
+        "morph_position",
+        "morph_uv",
+        "parent",
+        "skirt",
+        "## Evidence",
+    ] {
+        require(f, &t, lit);
+    }
+}
