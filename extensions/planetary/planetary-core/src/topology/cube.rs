@@ -9,7 +9,7 @@ use crate::adjacency::neighbor;
 use crate::face::{Edge, Face};
 use crate::lod::{Footprint, LodModel, leaves_of, patch_footprint};
 use crate::mapping::{locate, vertex_dir};
-use crate::mesh::{PatchData, build_patch_data, grid_indices, uv_of};
+use crate::mesh::{PatchData, build_patch_data, grid_indices, uv_at_level, uv_sampled};
 use crate::morph::{
     EDGE_SNAP_M, MorphHit, MorphStats, MorphTargets, blend_uv, chord_target, identity_morph,
     project_to_triangle,
@@ -191,14 +191,24 @@ fn parent_vertex(
     let cj = i64::from(2 * pj) - i64::from(y & 1) * i64::from(n);
     if (0..=i64::from(n)).contains(&ci) && (0..=i64::from(n)).contains(&cj) {
         let k = (cj as usize) * (n as usize + 1) + ci as usize;
-        return (data.pos[k], data.uvs[k]);
+        // The v2 ramp depends on the mesh normal: carry the parent level's value.
+        let uv = uv_at_level(
+            terrain,
+            data.uvs[k],
+            c.level().saturating_sub(1),
+            data.dirs[k],
+        );
+        return (data.pos[k], uv);
     }
     stats.parent_samples += 1;
     let p = c.parent().unwrap_or(c);
     let d = vertex_dir(p, n, pi, pj);
     let smp = terrain.sample(d);
     let r = terrain.params().radius + smp.height;
-    (DVec3::new(d.x * r, d.y * r, d.z * r), uv_of(terrain, smp))
+    (
+        DVec3::new(d.x * r, d.y * r, d.z * r),
+        uv_sampled(terrain, smp, p.level(), d),
+    )
 }
 
 /// Morph targets (f64, planet space) of every vertex of cube cell `c`, parallel to its mesh
@@ -239,7 +249,8 @@ pub(crate) fn cube_morph_targets(
             let target: Option<PosUv> = match (ni & 1, nj & 1) {
                 (0, 0) => {
                     stats.copied += 1;
-                    Some(own)
+                    let uv = uv_at_level(terrain, own.1, c.level() - 1, d);
+                    Some((own.0, uv))
                 }
                 (1, 0) | (0, 1) => {
                     let (qi2, qj2) = if ni & 1 == 1 {

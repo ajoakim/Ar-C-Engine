@@ -26,8 +26,9 @@ pub use cell_payload::{
     decode_cell_payload, encode_cell_payload, encode_cell_payload_v3,
 };
 pub use mesh::{
-    PatchMesh, SKIRT_MARGIN, border_positions_f64, build_patch, build_patch_cancellable,
-    grid_indices, index_count, skirt_depth, vertex_count, vertex_position_f64,
+    PatchMesh, ROCK_SLOPE_HI, ROCK_SLOPE_LO, SKIRT_MARGIN, border_positions_f64, build_patch,
+    build_patch_cancellable, grid_indices, index_count, ramp_row, ramp_value, skirt_depth,
+    vertex_count, vertex_position_f64,
 };
 pub mod topology;
 pub use hex::HexSphere;

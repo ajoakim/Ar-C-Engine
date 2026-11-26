@@ -24,7 +24,7 @@ use super::mapping::{CellFrame, MAX_SECTOR_N, cell_sample_point, sample_dir};
 use super::morph::{HexOwn, hex_morph_targets};
 use super::pieces::{VARIANT_FULL_HEX, VARIANT_FULL_PENTAGON, half_variant, variant_sectors};
 use crate::lod::LodModel;
-use crate::mesh::{SKIRT_MARGIN, border_normal_f64, uv_of};
+use crate::mesh::{SKIRT_MARGIN, apply_surface_v2, border_normal_f64, uv_of};
 use crate::morph::identity_morph;
 use crate::terrain::PlanetTerrain;
 use crate::topology::{CellMesh, IndexVariant};
@@ -301,6 +301,8 @@ fn build_hex_parts(
             return None;
         }
     }
+
+    apply_surface_v2(terrain, &mut uvs, &normals, &dirs);
 
     let total = if pentagon {
         vertex_count_pentagon(n)

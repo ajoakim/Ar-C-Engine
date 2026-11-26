@@ -173,6 +173,85 @@ pub(crate) fn uv_of(terrain: &PlanetTerrain, s: TerrainSample) -> [f32; 2] {
     [h as f32, s.mask.clamp(0.0, 1.0) as f32]
 }
 
+/// Slope below which a vertex is not rock (`slope = 1 - n . d`, quadratic in the inclination
+/// angle). Calibrated on the measured v2 land slopes (p50 about 1.2e-5, p90 about 5e-5, p99 about
+/// 1.1e-4 for levels 8..20, see ADR-0015); the plan's 0.05 (about 18 degrees) never occurs on this
+/// terrain, so the ramp would have been inert.
+pub const ROCK_SLOPE_LO: f64 = 1.0e-5;
+/// Slope at and above which a vertex is fully rock.
+pub const ROCK_SLOPE_HI: f64 = 1.0e-4;
+/// Rows of the v2 palette (the ramp texel rows).
+pub const RAMP_ROWS: f64 = 8.0;
+
+/// Surface attribute v2 ramp value `q = 0.4 * (1 - mask) + 0.6 * rock_t` in `[0, 1]`.
+///
+/// `normal` and `dir` are unit vectors; `slope = 1 - normal . dir` and
+/// `rock_t = clamp((slope - ROCK_SLOPE_LO) / (ROCK_SLOPE_HI - ROCK_SLOPE_LO), 0, 1)`.
+/// Only `+ - * /` (ADR-0008 exact-op).
+#[must_use]
+pub fn ramp_value(mask: f64, normal: DVec3, dir: DVec3) -> f64 {
+    let slope = 1.0 - (normal.x * dir.x + normal.y * dir.y + normal.z * dir.z);
+    let t = (slope - ROCK_SLOPE_LO) / (ROCK_SLOPE_HI - ROCK_SLOPE_LO);
+    let rock_t = t.clamp(0.0, 1.0);
+    let m = mask.clamp(0.0, 1.0);
+    0.4 * (1.0 - m) + 0.6 * rock_t
+}
+
+/// Texel-centre row coordinate of ramp value `q`: `(0.5 + 7 q) / 8`.
+#[must_use]
+pub fn ramp_row(q: f64) -> f64 {
+    (0.5 + 7.0 * q) / RAMP_ROWS
+}
+
+/// Surface attribute v2: keeps `uv.x` (normalised height) and replaces `uv.y` (the mask in v1)
+/// by the dry-to-rock ramp row. `uv` is the v1 attribute of the vertex.
+#[must_use]
+pub(crate) fn uv_v2(uv: [f32; 2], normal: DVec3, dir: DVec3) -> [f32; 2] {
+    let q = ramp_value(f64::from(uv[1]), normal, dir);
+    [uv[0], ramp_row(q) as f32]
+}
+
+/// Applies [`uv_v2`] to every vertex of a builder when the generator is v2 or newer.
+pub(crate) fn apply_surface_v2(
+    terrain: &PlanetTerrain,
+    uvs: &mut [[f32; 2]],
+    normals: &[DVec3],
+    dirs: &[DVec3],
+) {
+    if terrain.params().generator_version < 2 {
+        return;
+    }
+    for ((uv, n), d) in uvs.iter_mut().zip(normals).zip(dirs) {
+        *uv = uv_v2(*uv, *n, *d);
+    }
+}
+
+/// Attribute of a vertex that exists in no built mesh (morph parent samples): v1 attribute, or for
+/// generator v2 the ramp from the face-independent stencil normal of a level-`level` patch.
+pub(crate) fn uv_sampled(
+    terrain: &PlanetTerrain,
+    s: TerrainSample,
+    level: u8,
+    dir: DVec3,
+) -> [f32; 2] {
+    uv_at_level(terrain, uv_of(terrain, s), level, dir)
+}
+
+/// Re-expresses the v1 attribute `uv` of the vertex at `dir` at the slope of a level-`level`
+/// patch (identity for generator v1). The v2 ramp depends on the mesh normal and therefore on the
+/// level, so a morph target must carry the parent level's ramp, not the child's.
+pub(crate) fn uv_at_level(
+    terrain: &PlanetTerrain,
+    uv: [f32; 2],
+    level: u8,
+    dir: DVec3,
+) -> [f32; 2] {
+    if terrain.params().generator_version < 2 {
+        return uv;
+    }
+    uv_v2(uv, border_normal_f64(terrain, level, dir), dir)
+}
+
 /// Builds the mesh of `id`; identical to `build_patch_cancellable` that is never cancelled.
 #[must_use]
 pub fn build_patch(terrain: &PlanetTerrain, model: &LodModel, id: PatchId) -> PatchMesh {
@@ -273,6 +352,7 @@ pub(crate) fn build_patch_data(
             return None;
         }
     }
+    apply_surface_v2(terrain, &mut uvs, &normals, &dirs);
 
     let mut vertices = Vec::with_capacity(vertex_count(n));
     let mut max_len2 = 0.0f64;

@@ -20,7 +20,7 @@ use engine_sdk::DVec3;
 use super::cell_id::CellId;
 use super::mapping::{CellFrame, LatticePoint, sample_dir};
 use super::mesh::{diag_grid, grid_index, outer_skirt_index, sector_vertices};
-use crate::mesh::uv_of;
+use crate::mesh::{uv_at_level, uv_sampled};
 use crate::morph::{
     EDGE_SNAP_M, MorphHit, MorphStats, MorphTargets, project_to_triangle, resolve_hit,
 };
@@ -50,6 +50,7 @@ type BestTri = (f64, [(u32, u32); 3], u32, u32);
 
 struct ParentGrid<'a> {
     terrain: &'a PlanetTerrain,
+    level: u8,
     frame: CellFrame,
     n: u32,
     sectors: u32,
@@ -85,6 +86,7 @@ impl<'a> ParentGrid<'a> {
             .collect();
         ParentGrid {
             terrain,
+            level: parent.level(),
             frame,
             n,
             sectors,
@@ -120,7 +122,8 @@ impl<'a> ParentGrid<'a> {
             .ok()
             .map(|x| self.own_lookup[x].1 as usize);
         let v = if let Some(g) = found {
-            (self.own.pos[g], self.own.uvs[g], self.own.dirs[g])
+            let uv = uv_at_level(self.terrain, self.own.uvs[g], self.level, self.own.dirs[g]);
+            (self.own.pos[g], uv, self.own.dirs[g])
         } else {
             stats.parent_samples += 1;
             let d = sample_dir(lp);
@@ -128,7 +131,7 @@ impl<'a> ParentGrid<'a> {
             let r = self.terrain.params().radius + smp.height;
             (
                 DVec3::new(d.x * r, d.y * r, d.z * r),
-                uv_of(self.terrain, smp),
+                uv_sampled(self.terrain, smp, self.level, d),
                 d,
             )
         };
