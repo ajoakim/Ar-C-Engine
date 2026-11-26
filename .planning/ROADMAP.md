@@ -179,10 +179,28 @@ Plans:
   4. Sphere spikes (cell nesting/coverage, pentagons, IDs/adjacency, skirt gap bound) pass, or the documented fallback is chosen, at an explicit go/no-go with the user before the full hex build
   5. A `Topology` trait has cube-sphere and half-cell hex implementations; the hex cut covers the sphere exactly once with balanced neighbors, and its seam/coverage proofs (with negative controls) pass
   6. The hex planet runs the full scripted orbit-to-surface descent at real defaults in the planetary app (SDK only), and the user's window flight confirms detail rendering in on descent and aggregating on ascent
-**Plans:** 0 plans
+**Plans:** 18 plans (13 waves; 07.1-07 and 07.1-18 are checkpoints)
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 07.1 to break down)
+- [ ] 07.1-01-PLAN.md — Telemetry (Clock/SimClock/WallClock, CSV, --bench-descent at real defaults) + evidence-based crash/stutter diagnosis on the baseline (G3, G2 diagnosis)
+- [ ] 07.1-02-PLAN.md — planetary-core selection fixes: extruded-footprint distance, resident-ancestor ranges + residual, horizon/frustum culling, node/leaf budgets, no tau reruns, max_level 16 (G1)
+- [ ] 07.1-03-PLAN.md — planetary-terrain: measured ranges into selection, explicit 1024-draw budget, frustum planes, telemetry columns, crash root-cause fixes (G1/G2)
+- [ ] 07.1-04-PLAN.md — Spikes S1 (diamond IDs, 12 pentagons, adjacency) + S2 (exact-op projection bit identity), test-only
+- [ ] 07.1-05-PLAN.md — App frustum wiring, descent + ascent suite at REAL defaults, debug/release bench evidence, ADR-0012, ADR-0010 amendment (closes G1/G2 for the cube-sphere)
+- [ ] 07.1-06-PLAN.md — Spikes S3 (half-cell coverage on the sphere) + S4 (skirt gap on edges and half diagonals), test-only
+- [ ] 07.1-07-PLAN.md — CHECKPOINT: go/no-go on the half-cell hex topology (GO / FALLBACK triangles / STOP), ADR-0011 proposed
+- [ ] 07.1-08-PLAN.md — Topology trait + CubeSphere + generic select/balance + v3 cell payload (go-dependent)
+- [ ] 07.1-09-PLAN.md — Generic shared index buffers + index-range draws in engine-render/wgpu/sdk, ADR-0013 (go-dependent)
+- [ ] 07.1-10-PLAN.md — Hex CellId + icosahedron/diamond tables + parents/children/neighbours (go-dependent)
+- [ ] 07.1-11-PLAN.md — planetary-terrain generic keys/requests/effective cut (go-dependent)
+- [ ] 07.1-12-PLAN.md — Hex exact-op projection, sample lattice, locate, footprints, goldens (go-dependent)
+- [ ] 07.1-13-PLAN.md — Generic TerrainSystem<T>, v3 payloads, index-range draws, debug-cells palette (go-dependent)
+- [ ] 07.1-14-PLAN.md — Hex balance closure, half-cell pieces, coverage proof with negative controls (go-dependent)
+- [ ] 07.1-15-PLAN.md — Hex sector meshes, 8 index variants, skirts incl. diagonals, seam proofs with negative control (go-dependent)
+- [ ] 07.1-16-PLAN.md — HexSphere: Topology, hex selection at real parameters, legacy cube paths removed (go-dependent)
+- [ ] 07.1-17-PLAN.md — App on hex (default) + cube fallback, hex descent/ascent at real defaults, benches, ADR-0011 accepted, docs (go-dependent)
+- [ ] 07.1-18-PLAN.md — CHECKPOINT: full gate + human window flight with telemetry
+
 
 ### Phase 8: Hardening & Decisions
 **Goal**: The prototype is observable, regression-tested, documented, and its open technical decisions are recorded
