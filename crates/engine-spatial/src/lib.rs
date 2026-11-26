@@ -4,7 +4,11 @@
 //! `docs/architecture/dependency-direction.md`.
 
 mod error;
+mod index;
+mod linear;
 mod volume;
 
 pub use error::SpatialError;
+pub use index::SpatialIndex;
+pub use linear::LinearIndex;
 pub use volume::{Aabb, Frustum, Plane, Sphere};
