@@ -68,4 +68,15 @@ pub struct FrameReport {
     pub deferred_completions: usize,
     /// Applied completions awaiting upload.
     pub awaiting_upload: usize,
+    /// Residents evicted to make room this frame.
+    pub evicted: u32,
+}
+
+/// Result of [`crate::StreamManager::resolve`]: the best drawable key.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Resolved<K> {
+    /// The resident key to draw (the request itself or a coarser ancestor).
+    pub key: K,
+    /// Whether `key` is the requested key rather than an ancestor fallback.
+    pub exact: bool,
 }

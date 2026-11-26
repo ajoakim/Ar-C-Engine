@@ -10,10 +10,11 @@ mod config;
 mod error;
 mod key;
 mod manager;
+mod pins;
 mod request;
 mod source;
 
-pub use config::{FrameReport, StreamConfig};
+pub use config::{FrameReport, Resolved, StreamConfig};
 pub use engine_assets::{
     AssetClass, AssetError, AssetId, ClassBudget, MemoryPool, ResidencyManager, ResidencyState,
 };

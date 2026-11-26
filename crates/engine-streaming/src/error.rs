@@ -14,6 +14,9 @@ pub enum StreamError {
     /// The key is already pending, in flight or resident.
     #[error("key {0} is already pending, in flight or resident")]
     Duplicate(AssetId),
+    /// The key is the pinned fallback of an in-flight request.
+    #[error("key {0} is pinned by an in-flight request")]
+    Pinned(AssetId),
     /// A configuration field is invalid.
     #[error("invalid stream config: {0}")]
     InvalidConfig(&'static str),
