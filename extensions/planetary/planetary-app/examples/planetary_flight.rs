@@ -5,8 +5,13 @@
 //!
 //! Recommended: `cargo run --release -p planetary-app --example planetary_flight -- --descent --perf-log flight.csv`
 //!
-//! Usage: `planetary_flight [--headless <frames>] [--descent] [--ascent] [--frames <n>]
+//! Usage: `planetary_flight [--topology <hex|cube>] [--debug-cells] [--headless <frames>] [--descent] [--ascent] [--frames <n>]
 //! [--perf-log <file.csv>] [--no-console] [--bench-descent] [--budget-ms <ms>] [--strict]`
+//!
+//! `--topology` selects the planet: `hex` (default, icosahedral hexagonal cells, 16 cells per
+//! cell edge) or `cube` (cube-sphere reference, 32 cells per edge); any other value is a usage
+//! error. `--debug-cells` colours every cell by level and id so hexes visibly give way to their
+//! parts while descending.
 //!
 //! `--headless` runs on the null backend with `settle_each_frame` enabled so the smoke run
 //! is deterministic (workers are awaited every frame); the windowed run never blocks.
@@ -32,11 +37,11 @@ use engine_sdk::{
 };
 use planetary_app::stream_bench::{analyze, csv, report_text, run_stream};
 use planetary_app::{
-    ALTITUDE_BANDS, AppSettings, DescentScript, PlanetaryApp, WallClock, band_of, spin_for_ms,
-    summarize,
+    ALTITUDE_BANDS, AppSettings, DescentScript, PlanetaryApp, TopologyKind, WallClock, band_of,
+    spin_for_ms, summarize,
 };
 
-const USAGE: &str = "usage: planetary_flight [--headless <frames>] [--descent] [--ascent] [--frames <n>] [--perf-log <file.csv>] [--no-console] [--bench-descent] [--budget-ms <ms>] [--strict] [--bench-stream] [--fast] [--settle] [--no-adaptive] [--frame-ms <ms>] [--out <file.csv>]";
+const USAGE: &str = "usage: planetary_flight [--topology <hex|cube>] [--debug-cells] [--headless <frames>] [--descent] [--ascent] [--frames <n>] [--perf-log <file.csv>] [--no-console] [--bench-descent] [--budget-ms <ms>] [--strict] [--bench-stream] [--fast] [--settle] [--no-adaptive] [--frame-ms <ms>] [--out <file.csv>]";
 
 #[derive(Default, Clone, Copy)]
 struct BandMax {
@@ -47,7 +52,13 @@ struct BandMax {
     pending: usize,
 }
 
-fn bench(mut settings: AppSettings, n: u64, budget: f64, strict: bool) -> Result<(), SdkError> {
+fn bench(
+    mut settings: AppSettings,
+    topology: TopologyKind,
+    n: u64,
+    budget: f64,
+    strict: bool,
+) -> Result<(), SdkError> {
     settings.script = Some(DescentScript::orbit_to_surface(
         settings.terrain.terrain.radius,
     ));
@@ -71,12 +82,13 @@ fn bench(mut settings: AppSettings, n: u64, budget: f64, strict: bool) -> Result
         }
     }
     println!(
-        "build: {}",
+        "build: {}, topology: {}",
         if cfg!(debug_assertions) {
             "debug"
         } else {
             "release"
-        }
+        },
+        topology.name()
     );
     println!(
         "band | frames | avg ms | p95 ms | max ms | fps | stalls(>100 ms) | max nodes | max wanted | max drawn | max held | max pending"
@@ -132,6 +144,7 @@ struct StreamOpts {
 
 fn bench_stream(
     mut settings: AppSettings,
+    topology: TopologyKind,
     frames: Option<u64>,
     o: &StreamOpts,
 ) -> Result<(), SdkError> {
@@ -155,12 +168,13 @@ fn bench_stream(
     run.descent_frames = (script.descent_seconds / DT).ceil() as usize;
     let m = analyze(&run);
     println!(
-        "build: {}",
+        "build: {}, topology: {}",
         if cfg!(debug_assertions) {
             "debug"
         } else {
             "release"
-        }
+        },
+        topology.name()
     );
     let label = format!(
         "{} descent, {}, {} ms/frame paced, {} frames",
@@ -196,6 +210,8 @@ fn main() -> Result<(), SdkError> {
     let mut strict = false;
     let mut bench_stream_flag = false;
     let mut adaptive = true;
+    let mut topology = TopologyKind::Hex;
+    let mut debug_cells = false;
     let mut so = StreamOpts {
         fast: false,
         settle: false,
@@ -213,6 +229,13 @@ fn main() -> Result<(), SdkError> {
                     .ok_or_else(usage)?;
                 headless = Some(n);
             }
+            "--topology" => {
+                topology = args
+                    .next()
+                    .and_then(|v| TopologyKind::parse(&v))
+                    .ok_or_else(usage)?;
+            }
+            "--debug-cells" => debug_cells = true,
             "--descent" => descent = true,
             "--ascent" => ascent = true,
             "--frames" => {
@@ -250,7 +273,11 @@ fn main() -> Result<(), SdkError> {
         }
     }
 
-    let mut settings = AppSettings::default();
+    let mut settings = match topology {
+        TopologyKind::Hex => AppSettings::default(),
+        TopologyKind::Cube => AppSettings::cube_default(),
+    };
+    settings.terrain.debug_cells = debug_cells;
     settings.perf.exit_after_frames = frames;
     settings.perf.csv_path = perf_log;
     if descent {
@@ -271,14 +298,14 @@ fn main() -> Result<(), SdkError> {
     settings.adaptive_streaming = adaptive && headless.is_none();
 
     if bench_stream_flag {
-        return bench_stream(settings, frames, &so);
+        return bench_stream(settings, topology, frames, &so);
     }
 
     if bench_descent {
         settings.perf.console_summary = console;
         // Bench runs to its own frame count; the app must not exit early.
         settings.perf.exit_after_frames = None;
-        return bench(settings, frames.unwrap_or(600), budget, strict);
+        return bench(settings, topology, frames.unwrap_or(600), budget, strict);
     }
 
     if let Some(n) = headless {
@@ -295,7 +322,8 @@ fn main() -> Result<(), SdkError> {
             .map_or(0, |f| f.passes.iter().map(|p| p.draws.len()).sum::<usize>());
         let held = app.report().held_meshes;
         println!(
-            "planetary_flight headless: {n} frames, {draws} draws in last frame, {held} meshes"
+            "planetary_flight headless ({}): {n} frames, {draws} draws in last frame, {held} meshes",
+            topology.name()
         );
         app.shutdown();
         rt.shutdown()?;

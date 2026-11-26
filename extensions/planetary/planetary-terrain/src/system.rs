@@ -263,6 +263,8 @@ pub struct TerrainSystem<T: Topology> {
     closure: BTreeSet<T::Cell>,
     drawn: Vec<T::Cell>,
     drawn_set: BTreeSet<T::Cell>,
+    /// Split cells of the last drawn cut (see [`TerrainSystem::drawn_split`]).
+    drawn_split: BTreeSet<T::Cell>,
     material: MaterialId,
     frame: u64,
     report: TerrainReport,
@@ -422,6 +424,7 @@ impl<T: Topology> TerrainSystem<T> {
             closure: BTreeSet::new(),
             drawn: Vec::new(),
             drawn_set: BTreeSet::new(),
+            drawn_split: BTreeSet::new(),
             material: MaterialId::DEFAULT,
             frame: 0,
             report: TerrainReport::default(),
@@ -667,10 +670,12 @@ impl<T: Topology> TerrainSystem<T> {
                 vertex_counts: &self.vertex_counts,
                 rejected: Vec::new(),
             },
+            // The byte cap alone admits more small cells (hex pentagons and half cells are
+            // smaller than the estimate), so the count cap is always enforced here.
             left: if self.cfg.adaptive {
                 self.budget.uploads
             } else {
-                u32::MAX
+                self.cfg.uploads_per_frame
             },
         };
         let stream = self
@@ -703,9 +708,10 @@ impl<T: Topology> TerrainSystem<T> {
         }
 
         let held = &self.held;
-        let eff = effective_cut(&*self.topo, &self.wanted_split, &|id| {
+        let mut eff = effective_cut(&*self.topo, &self.wanted_split, &|id| {
             held.contains_key(&id)
         });
+        self.drawn_split = std::mem::take(&mut eff.split);
         // Keep every wanted piece and its ancestors fresh in the residency LRU: an ancestor of a
         // drawn leaf is not drawn itself, so without this it would be the first eviction victim
         // and the fallback chain under the camera would be lost (holes back to the base level).
@@ -802,6 +808,13 @@ impl<T: Topology> TerrainSystem<T> {
     #[must_use]
     pub fn drawn(&self) -> &[T::Cell] {
         &self.drawn
+    }
+
+    /// Split cells of the drawn cut of the last `gpu_frame` (the pieces are
+    /// `Topology::pieces` of this set, restricted to resident cells).
+    #[must_use]
+    pub fn drawn_split(&self) -> &BTreeSet<T::Cell> {
+        &self.drawn_split
     }
 
     /// Leaves wanted by the last `prepare`, ascending.

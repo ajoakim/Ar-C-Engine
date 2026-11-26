@@ -1,6 +1,6 @@
 # planetary-app
 
-Planetary reference app: an orbit-to-surface flight over streamed cube-sphere terrain, built only on the public engine SDK. It lives in the planetary extension; engine crates never depend on it.
+Planetary reference app: an orbit-to-surface flight over streamed terrain, built only on the public engine SDK. The planet is the hexagonal icosahedral hierarchy by default (`--topology hex`, ADR-0011); the cube-sphere stays as the reference and fallback (`--topology cube`). It lives in the planetary extension; engine crates never depend on it.
 
 ## Running
 
@@ -20,6 +20,8 @@ WASD/arrows move, E/Space up, Q/Ctrl down, Shift boost, hold right mouse button 
 
 | Flag | Meaning |
 |---|---|
+| `--topology <hex\|cube>` | Planet topology. `hex` is the default (16 cells per edge); `cube` is the reference / fallback (32 cells per edge). Other values are a usage error |
+| `--debug-cells` | Colour every cell by level and id so hexes visibly give way to their parts (and the cube patches to their children) while descending |
 | `--headless <frames>` | Run on the null backend (deterministic, workers awaited each frame) and print draw/mesh counts |
 | `--descent` | Scripted orbit-to-surface descent (8 s simulated path) instead of the interactive camera |
 | `--ascent` | Scripted surface-to-orbit ascent starting where the descent ends |

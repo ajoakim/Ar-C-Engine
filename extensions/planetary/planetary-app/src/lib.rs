@@ -8,12 +8,15 @@ pub mod descent;
 pub mod stream_bench;
 pub mod telemetry;
 
+use std::collections::BTreeSet;
+
 use engine_sdk::tracing;
 use engine_sdk::{App, AppControl, DVec3, InputEvent, Resources, SceneState, SdkError};
 use planetary_core::lod::View;
-use planetary_core::{CubeSphere, TerrainParams};
+use planetary_core::{CubeSphere, HexSphere, TerrainParams, Topology};
 use planetary_terrain::{
-    CameraParams, PlanetaryCamera, TAN_HALF_FOV_Y, TerrainConfig, TerrainReport, TerrainSystem,
+    CameraParams, PlanetaryCamera, StreamBudget, TAN_HALF_FOV_Y, TerrainConfig, TerrainReport,
+    TerrainSystem,
 };
 
 pub use descent::DescentScript;
@@ -22,9 +25,42 @@ pub use telemetry::{
     band_of, spin_for_ms, summarize,
 };
 
+/// Planet topology flown by the app.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TopologyKind {
+    /// Icosahedral hexagonal cell hierarchy (default, ADR-0011).
+    #[default]
+    Hex,
+    /// Cube-sphere quadtree (reference / fallback).
+    Cube,
+}
+
+impl TopologyKind {
+    /// Flag value (`hex` or `cube`).
+    #[must_use]
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Hex => "hex",
+            Self::Cube => "cube",
+        }
+    }
+
+    /// Parses a flag value; anything but `hex` or `cube` is `None`.
+    #[must_use]
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "hex" => Some(Self::Hex),
+            "cube" => Some(Self::Cube),
+            _ => None,
+        }
+    }
+}
+
 /// Planetary app settings.
 #[derive(Clone, Debug, PartialEq)]
 pub struct AppSettings {
+    /// Topology of the planet (default hex).
+    pub topology: TopologyKind,
     pub terrain: TerrainConfig,
     pub camera: CameraParams,
     /// Initial altitude above the nominal radius for the interactive camera.
@@ -43,10 +79,29 @@ pub struct AppSettings {
     pub adaptive_streaming: bool,
 }
 
+impl AppSettings {
+    /// Cube-sphere settings (32 cells per edge), the reference topology.
+    #[must_use]
+    pub fn cube_default() -> Self {
+        Self {
+            topology: TopologyKind::Cube,
+            terrain: TerrainConfig {
+                cells_per_edge: 32,
+                ..TerrainConfig::default()
+            },
+            ..Self::default()
+        }
+    }
+}
+
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
-            terrain: TerrainConfig::default(),
+            topology: TopologyKind::Hex,
+            terrain: TerrainConfig {
+                cells_per_edge: 16,
+                ..TerrainConfig::default()
+            },
             camera: CameraParams::default(),
             start_altitude: TerrainParams::default().radius,
             viewport_height: 720,
@@ -59,10 +114,117 @@ impl Default for AppSettings {
     }
 }
 
+/// Level of the cell in `set` (ascending) containing `dir`, searching all levels.
+fn level_in<T: Topology>(topo: &T, set: &[T::Cell], dir: DVec3, max_level: u8) -> Option<u8> {
+    (0..=max_level).find(|&l| set.binary_search(&topo.locate(dir, l)).is_ok())
+}
+
+/// Cut validity: every split cell has its required splits split, every root is split or
+/// drawn, and every drawn cell is a piece cell of the split set.
+fn cut_closed<T: Topology>(topo: &T, split: &BTreeSet<T::Cell>, drawn: &[T::Cell]) -> bool {
+    let mut buf = Vec::new();
+    for &c in split {
+        buf.clear();
+        topo.required_splits(c, &mut buf);
+        if buf.iter().any(|r| !split.contains(r)) {
+            return false;
+        }
+    }
+    let drawn_set: BTreeSet<T::Cell> = drawn.iter().copied().collect();
+    if !topo
+        .roots()
+        .iter()
+        .all(|r| split.contains(r) || drawn_set.contains(r))
+    {
+        return false;
+    }
+    let mut pieces = Vec::new();
+    topo.pieces(split, &mut pieces);
+    // Pieces of cells that are not resident are skipped by the effective cut, so the drawn
+    // cells must be a subset of the pieces' cells and every drawn cell must belong to a piece.
+    let piece_cells: BTreeSet<T::Cell> = pieces.iter().map(|p| p.cell).collect();
+    drawn_set.is_subset(&piece_cells)
+}
+
+/// Topology dispatch over the two terrain systems.
+enum AnyTerrain {
+    Hex(TerrainSystem<HexSphere>),
+    Cube(TerrainSystem<CubeSphere>),
+}
+
+macro_rules! each {
+    ($self:expr, $t:ident => $e:expr) => {
+        match $self {
+            AnyTerrain::Hex($t) => $e,
+            AnyTerrain::Cube($t) => $e,
+        }
+    };
+}
+
+#[allow(clippy::result_large_err)] // SdkError is the SDK-wide error type.
+impl AnyTerrain {
+    fn report(&self) -> &TerrainReport {
+        each!(self, t => t.report())
+    }
+    fn surface_radius_at(&self, d: DVec3) -> f64 {
+        each!(self, t => t.surface_radius_at(d))
+    }
+    fn drawn_error_at(&self, d: DVec3) -> f64 {
+        each!(self, t => t.drawn_error_at(d))
+    }
+    fn setup(&mut self, r: &mut Resources<'_>, s: &mut SceneState) -> Result<(), SdkError> {
+        each!(self, t => t.setup(r, s))
+    }
+    fn prepare(&mut self, v: &View) {
+        each!(self, t => t.prepare(v));
+    }
+    fn gpu_frame(&mut self, r: &mut Resources<'_>, s: &mut SceneState) -> Result<(), SdkError> {
+        each!(self, t => t.gpu_frame(r, s))
+    }
+    fn held(&self) -> usize {
+        each!(self, t => t.held_mesh_count())
+    }
+    fn set_frame_cost(&mut self, ms: f64) {
+        each!(self, t => t.set_frame_cost(ms));
+    }
+    fn wait_for_workers(&mut self) {
+        each!(self, t => t.wait_for_workers());
+    }
+    fn stream_budget(&self) -> StreamBudget {
+        each!(self, t => t.stream_budget())
+    }
+    fn shutdown(self) {
+        each!(self, t => t.shutdown());
+    }
+    fn drawn_raw(&self) -> Vec<u64> {
+        each!(self, t => t.drawn().iter().map(|&c| t.topology().raw(c)).collect())
+    }
+    fn wanted_raw(&self) -> Vec<u64> {
+        each!(self, t => t.wanted_leaves().iter().map(|&c| t.topology().raw(c)).collect())
+    }
+    fn drawn_levels(&self) -> Vec<u8> {
+        each!(self, t => t.drawn().iter().map(|&c| t.topology().level(c)).collect())
+    }
+    fn wanted_levels(&self) -> Vec<u8> {
+        each!(self, t => t.wanted_leaves().iter().map(|&c| t.topology().level(c)).collect())
+    }
+    fn level_at(&self, d: DVec3, wanted: bool) -> Option<u8> {
+        each!(self, t => {
+            let max = t.config().lod.max_level;
+            let set = if wanted { t.wanted_leaves() } else { t.drawn() };
+            level_in(&**t.topology(), set, d, max)
+        })
+    }
+    fn cut_closed(&self) -> bool {
+        each!(self, t => cut_closed(&**t.topology(), t.drawn_split(), t.drawn()))
+    }
+}
+
 /// Flies the planetary camera over streamed terrain.
 pub struct PlanetaryApp {
+    kind: TopologyKind,
     script: Option<DescentScript>,
-    terrain: TerrainSystem<CubeSphere>,
+    terrain: AnyTerrain,
     camera: PlanetaryCamera,
     viewport_h: u32,
     viewport_w: u32,
@@ -95,10 +257,18 @@ impl PlanetaryApp {
     pub fn with_clock(settings: AppSettings, clock: Box<dyn Clock>) -> Result<Self, SdkError> {
         let mut terrain_cfg = settings.terrain.clone();
         terrain_cfg.adaptive |= settings.adaptive_streaming;
-        let terrain = TerrainSystem::new(
-            terrain_cfg,
-            CubeSphere::new(settings.terrain.cells_per_edge),
-        )?;
+        let n = settings.terrain.cells_per_edge;
+        let terrain = match settings.topology {
+            TopologyKind::Hex => {
+                let topo = HexSphere::new(n).ok_or_else(|| {
+                    SdkError::App(format!("invalid hex cells_per_edge {n} (even, 2..=64)"))
+                })?;
+                AnyTerrain::Hex(TerrainSystem::new(terrain_cfg, topo)?)
+            }
+            TopologyKind::Cube => {
+                AnyTerrain::Cube(TerrainSystem::new(terrain_cfg, CubeSphere::new(n))?)
+            }
+        };
         let radius = settings.terrain.terrain.radius;
         let surface = |d: DVec3| terrain.surface_radius_at(d);
         let (pos, orient) = match settings.script {
@@ -117,6 +287,7 @@ impl PlanetaryApp {
         let telemetry = Telemetry::new(clock, &settings.perf)
             .map_err(|e| SdkError::App(format!("perf log: {e}")))?;
         Ok(Self {
+            kind: settings.topology,
             nominal_radius: radius,
             telemetry,
             frames: 0,
@@ -134,9 +305,81 @@ impl PlanetaryApp {
         })
     }
 
+    /// Topology in use.
     #[must_use]
-    pub fn terrain(&self) -> &TerrainSystem<CubeSphere> {
-        &self.terrain
+    pub fn topology_kind(&self) -> TopologyKind {
+        self.kind
+    }
+
+    /// Planet radius plus terrain height in direction `dir`.
+    #[must_use]
+    pub fn surface_radius_at(&self, dir: DVec3) -> f64 {
+        self.terrain.surface_radius_at(dir)
+    }
+
+    /// Raw ids of the drawn cells, ascending.
+    #[must_use]
+    pub fn drawn_raw(&self) -> Vec<u64> {
+        self.terrain.drawn_raw()
+    }
+
+    /// Levels of the drawn cells (same order as [`PlanetaryApp::drawn_raw`]).
+    #[must_use]
+    pub fn drawn_levels(&self) -> Vec<u8> {
+        self.terrain.drawn_levels()
+    }
+
+    /// Raw ids of the wanted leaves, ascending.
+    #[must_use]
+    pub fn wanted_raw(&self) -> Vec<u64> {
+        self.terrain.wanted_raw()
+    }
+
+    /// Levels of the wanted leaves (same order as [`PlanetaryApp::wanted_raw`]).
+    #[must_use]
+    pub fn wanted_levels(&self) -> Vec<u8> {
+        self.terrain.wanted_levels()
+    }
+
+    /// Level of the drawn cell containing `dir`.
+    #[must_use]
+    pub fn piece_level_at(&self, dir: DVec3) -> Option<u8> {
+        self.terrain.level_at(dir, false)
+    }
+
+    /// Level of the wanted leaf containing `dir`.
+    #[must_use]
+    pub fn wanted_level_at(&self, dir: DVec3) -> Option<u8> {
+        self.terrain.level_at(dir, true)
+    }
+
+    /// True when the drawn cut is closed: no drawn cell under another, every split cell has its
+    /// required splits split, every root covered.
+    #[must_use]
+    pub fn cut_closed(&self) -> bool {
+        self.terrain.cut_closed()
+    }
+
+    /// Drawn cells form an exact partition (cube: leaf partition; hex: closed cut, see
+    /// [`PlanetaryApp::cut_closed`]; hex exact coverage is proven in planetary-core).
+    #[must_use]
+    pub fn drawn_is_partition(&self) -> bool {
+        match &self.terrain {
+            AnyTerrain::Cube(t) => planetary_core::lod::is_partition(t.drawn()),
+            AnyTerrain::Hex(_) => self.terrain.cut_closed(),
+        }
+    }
+
+    /// Vertex buffers held by the terrain.
+    #[must_use]
+    pub fn held_mesh_count(&self) -> usize {
+        self.terrain.held()
+    }
+
+    /// Current adaptive streaming caps.
+    #[must_use]
+    pub fn stream_budget(&self) -> StreamBudget {
+        self.terrain.stream_budget()
     }
 
     #[must_use]

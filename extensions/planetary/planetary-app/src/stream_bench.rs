@@ -8,14 +8,9 @@
 
 use std::collections::BTreeSet;
 
-use engine_sdk::{
-    DVec3, Engine, EngineConfig, MAX_DRAWS_PER_FRAME, NullBackend, Runtime, SdkError,
-};
-use planetary_core::lod::is_partition;
-use planetary_core::{PatchId, locate};
-
 use crate::telemetry::{ALTITUDE_BANDS, band_of};
 use crate::{AppSettings, Clock, PlanetaryApp};
+use engine_sdk::{Engine, EngineConfig, MAX_DRAWS_PER_FRAME, NullBackend, Runtime, SdkError};
 
 /// One recorded frame.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -66,18 +61,6 @@ pub struct StreamRun {
     pub descent_frames: usize,
 }
 
-fn level_at(set: &[PatchId], d: DVec3) -> i32 {
-    set.iter()
-        .find(|p| locate(d, p.level()) == **p)
-        .map_or(-1, |p| i32::from(p.level()))
-}
-
-fn sorted_raw(v: &[PatchId]) -> Vec<u64> {
-    let mut r: Vec<u64> = v.iter().map(|p| p.raw()).collect();
-    r.sort_unstable();
-    r
-}
-
 /// Runs `frames` frames with a simulated step `dt` seconds each; `pace` is called after every
 /// frame (it may spin so workers progress, or call [`PlanetaryApp::wait_for_workers`]).
 ///
@@ -99,10 +82,10 @@ pub fn run_stream(
     for _ in 0..frames {
         rt.frame(&mut app, dt)?;
         let rep = app.report().clone();
-        let drawn: Vec<PatchId> = app.terrain().drawn().to_vec();
-        let wanted: Vec<PatchId> = app.terrain().wanted_leaves().to_vec();
+        let drawn = app.drawn_raw();
+        let wanted = app.wanted_raw();
         for p in &wanted {
-            seen.insert(p.raw());
+            seen.insert(*p);
         }
         let pos = app.camera().position();
         let nadir = pos.normalize();
@@ -111,20 +94,23 @@ pub fn run_stream(
             .backend()
             .last_frame()
             .map_or(0, |f| f.passes.iter().map(|p| p.draws.len()).sum());
-        let altitude_m = app
-            .camera()
-            .altitude(&|d| app.terrain().surface_radius_at(d));
-        let converged = !drawn.is_empty() && sorted_raw(&drawn) == sorted_raw(&wanted);
+        let altitude_m = app.camera().altitude(&|d| app.surface_radius_at(d));
+        let converged = !drawn.is_empty() && {
+            let (mut a, mut b) = (drawn.clone(), wanted.clone());
+            a.sort_unstable();
+            b.sort_unstable();
+            a == b
+        };
         out.push(StreamFrame {
             frame: rep.frame,
             sim_time_s: app.simulated_time(),
             altitude_m,
             wanted_leaves: wanted.len(),
             drawn_leaves: drawn.len(),
-            wanted_level: level_at(&wanted, nadir),
-            drawn_level: level_at(&drawn, nadir),
-            look_wanted_level: level_at(&wanted, ahead),
-            look_drawn_level: level_at(&drawn, ahead),
+            wanted_level: app.wanted_level_at(nadir).map_or(-1, i32::from),
+            drawn_level: app.piece_level_at(nadir).map_or(-1, i32::from),
+            look_wanted_level: app.wanted_level_at(ahead).map_or(-1, i32::from),
+            look_drawn_level: app.piece_level_at(ahead).map_or(-1, i32::from),
             held_meshes: rep.held_meshes,
             pending_requests: rep.pending_requests,
             queued: rep.stream.pending,
@@ -139,13 +125,13 @@ pub fn run_stream(
             closure_resident: rep.closure_resident,
             draws,
             draw_items: rep.draw_items,
-            partition: drawn.is_empty() || is_partition(&drawn),
+            partition: drawn.is_empty() || app.drawn_is_partition(),
             cost_ms: app
                 .telemetry()
                 .last()
                 .map_or(0.0, |t| t.prepare_ms + t.gpu_frame_ms),
             caps: {
-                let b = app.terrain().stream_budget();
+                let b = app.stream_budget();
                 (b.uploads, b.starts, b.requests)
             },
             converged,

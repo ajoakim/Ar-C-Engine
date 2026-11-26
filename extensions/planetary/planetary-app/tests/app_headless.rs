@@ -3,12 +3,15 @@
 use engine_sdk::{
     AppControl, DVec3, Engine, EngineConfig, InputEvent, KeyCode, NullBackend, Runtime,
 };
-use planetary_app::{AppSettings, DescentScript, PlanetaryApp};
+use planetary_app::{AppSettings, DescentScript, PlanetaryApp, TopologyKind};
 
 const DT: f64 = 1.0 / 60.0;
 
-fn settings(scripted: bool) -> AppSettings {
-    let mut s = AppSettings::default();
+fn settings(kind: TopologyKind, scripted: bool) -> AppSettings {
+    let mut s = AppSettings {
+        topology: kind,
+        ..AppSettings::default()
+    };
     s.terrain.cells_per_edge = 8;
     s.terrain.lod.max_level = 10;
     s.terrain.settle_each_frame = true;
@@ -29,13 +32,11 @@ fn draws(rt: &Runtime<NullBackend>) -> usize {
 }
 
 fn altitude(app: &PlanetaryApp) -> f64 {
-    app.camera()
-        .altitude(&|d| app.terrain().surface_radius_at(d))
+    app.camera().altitude(&|d| app.surface_radius_at(d))
 }
 
-#[test]
-fn scripted_descent_draws_terrain() {
-    let mut app = PlanetaryApp::new(settings(true)).expect("app");
+fn scripted_descent_draws_terrain(kind: TopologyKind) {
+    let mut app = PlanetaryApp::new(settings(kind, true)).expect("app");
     let mut rt = runtime();
     rt.setup(&mut app).expect("setup");
     for _ in 0..60 {
@@ -46,9 +47,8 @@ fn scripted_descent_draws_terrain() {
     app.shutdown();
 }
 
-#[test]
-fn scripted_descent_loses_altitude() {
-    let mut app = PlanetaryApp::new(settings(true)).expect("app");
+fn scripted_descent_loses_altitude(kind: TopologyKind) {
+    let mut app = PlanetaryApp::new(settings(kind, true)).expect("app");
     let mut rt = runtime();
     rt.setup(&mut app).expect("setup");
     rt.frame(&mut app, DT).expect("frame");
@@ -62,9 +62,8 @@ fn scripted_descent_loses_altitude() {
     app.shutdown();
 }
 
-#[test]
-fn resize_is_accepted() {
-    let mut app = PlanetaryApp::new(settings(true)).expect("app");
+fn resize_is_accepted(kind: TopologyKind) {
+    let mut app = PlanetaryApp::new(settings(kind, true)).expect("app");
     let mut rt = runtime();
     rt.setup(&mut app).expect("setup");
     rt.handle_input(
@@ -78,9 +77,8 @@ fn resize_is_accepted() {
     app.shutdown();
 }
 
-#[test]
-fn escape_exits_unscripted_app() {
-    let mut app = PlanetaryApp::new(settings(false)).expect("app");
+fn escape_exits_unscripted_app(kind: TopologyKind) {
+    let mut app = PlanetaryApp::new(settings(kind, false)).expect("app");
     let mut rt = runtime();
     rt.setup(&mut app).expect("setup");
     assert_eq!(rt.frame(&mut app, DT).expect("frame"), AppControl::Continue);
@@ -95,9 +93,8 @@ fn escape_exits_unscripted_app() {
     app.shutdown();
 }
 
-#[test]
-fn holding_w_moves_the_camera() {
-    let mut app = PlanetaryApp::new(settings(false)).expect("app");
+fn holding_w_moves_the_camera(kind: TopologyKind) {
+    let mut app = PlanetaryApp::new(settings(kind, false)).expect("app");
     let mut rt = runtime();
     rt.setup(&mut app).expect("setup");
     let before: DVec3 = app.camera().position();
@@ -114,3 +111,33 @@ fn holding_w_moves_the_camera() {
     assert_ne!(app.camera().position(), before);
     app.shutdown();
 }
+
+#[test]
+fn invalid_hex_cells_per_edge_is_an_error() {
+    for n in [0, 1, 3, 66] {
+        let mut s = AppSettings::default();
+        s.terrain.cells_per_edge = n;
+        assert!(PlanetaryApp::new(s).is_err(), "n = {n}");
+    }
+}
+
+macro_rules! both {
+    ($($name:ident),*) => {
+        mod hex {
+            use super::*;
+            $(#[test] fn $name() { super::$name(TopologyKind::Hex); })*
+        }
+        mod cube {
+            use super::*;
+            $(#[test] fn $name() { super::$name(TopologyKind::Cube); })*
+        }
+    };
+}
+
+both!(
+    scripted_descent_draws_terrain,
+    scripted_descent_loses_altitude,
+    resize_is_accepted,
+    escape_exits_unscripted_app,
+    holding_w_moves_the_camera
+);
