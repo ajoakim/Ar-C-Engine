@@ -9,8 +9,8 @@ pub mod telemetry;
 
 use engine_sdk::tracing;
 use engine_sdk::{App, AppControl, DVec3, InputEvent, Resources, SceneState, SdkError};
-use planetary_core::TerrainParams;
 use planetary_core::lod::View;
+use planetary_core::{CubeSphere, TerrainParams};
 use planetary_terrain::{
     CameraParams, PlanetaryCamera, TAN_HALF_FOV_Y, TerrainConfig, TerrainReport, TerrainSystem,
 };
@@ -57,7 +57,7 @@ impl Default for AppSettings {
 /// Flies the planetary camera over streamed terrain.
 pub struct PlanetaryApp {
     script: Option<DescentScript>,
-    terrain: TerrainSystem,
+    terrain: TerrainSystem<CubeSphere>,
     camera: PlanetaryCamera,
     viewport_h: u32,
     viewport_w: u32,
@@ -87,7 +87,10 @@ impl PlanetaryApp {
     /// `SdkError::App` for an invalid configuration, camera start or perf log.
     #[allow(clippy::result_large_err)]
     pub fn with_clock(settings: AppSettings, clock: Box<dyn Clock>) -> Result<Self, SdkError> {
-        let terrain = TerrainSystem::new(settings.terrain.clone())?;
+        let terrain = TerrainSystem::new(
+            settings.terrain.clone(),
+            CubeSphere::new(settings.terrain.cells_per_edge),
+        )?;
         let radius = settings.terrain.terrain.radius;
         let surface = |d: DVec3| terrain.surface_radius_at(d);
         let (pos, orient) = match settings.script {
@@ -123,7 +126,7 @@ impl PlanetaryApp {
     }
 
     #[must_use]
-    pub fn terrain(&self) -> &TerrainSystem {
+    pub fn terrain(&self) -> &TerrainSystem<CubeSphere> {
         &self.terrain
     }
 

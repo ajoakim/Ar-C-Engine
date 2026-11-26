@@ -10,8 +10,8 @@ use std::sync::OnceLock;
 use engine_sdk::{DVec3, Engine, EngineConfig, MAX_DRAWS_PER_FRAME, NullBackend, Runtime};
 use planetary_app::{AppSettings, DescentScript, PlanetaryApp};
 use planetary_core::lod::{is_partition, max_level_jump};
-use planetary_core::{Face, PatchId, locate, payload_len};
-use planetary_terrain::{DRAW_MARGIN, TerrainConfig, TerrainReport};
+use planetary_core::{Face, PatchId, locate};
+use planetary_terrain::{DRAW_MARGIN, TerrainConfig, TerrainReport, cell_payload_estimate};
 
 /// Frames of a standard run: 8 s scripted path + 4 s hover at 60 Hz.
 const FRAMES: u32 = 720;
@@ -21,6 +21,11 @@ const DESCENT_END_FRAME: u32 = 480;
 const WARM_UP: usize = 10;
 /// Frames after the descent ends within which drawn must equal wanted.
 const CONVERGE_WITHIN: u32 = 240;
+
+/// Vertices of a cube patch: the (n+1)^2 grid plus four skirt rows of n+1.
+fn cube_vertex_count(n: u32) -> u32 {
+    (n + 1) * (n + 1) + 4 * (n + 1)
+}
 
 struct FrameRecord {
     report: TerrainReport,
@@ -134,7 +139,8 @@ fn assert_caps(r: &FrameRecord, cfg: &TerrainConfig, i: usize) {
     assert!(rep.stream.uploads <= cfg.uploads_per_frame, "f{i} uploads");
     assert!(
         rep.stream.uploaded_bytes
-            <= u64::from(cfg.uploads_per_frame) * payload_len(cfg.cells_per_edge) as u64,
+            <= u64::from(cfg.uploads_per_frame)
+                * cell_payload_estimate(cube_vertex_count(cfg.cells_per_edge)),
         "f{i} uploaded_bytes"
     );
     assert!(
@@ -321,7 +327,8 @@ fn descent_no_gpu_leak() {
     let base_patches = 6 * ((1usize << (2 * (3 + 1))) - 1) / 3 + 16;
     let cfg = real_terrain();
     for (i, r) in shared_descent().iter().enumerate() {
-        assert_eq!(r.buffer_count, 2 * r.held, "f{i} buffers");
+        // One vertex buffer per held cell plus one shared index buffer (one cube vertex class).
+        assert_eq!(r.buffer_count, r.held + 1, "f{i} buffers");
         assert!(
             r.held <= base_patches + cfg.detail_budget_patches as usize,
             "f{i} held {}",
@@ -331,7 +338,7 @@ fn descent_no_gpu_leak() {
     let recs = run(|s| s.terrain.detail_budget_patches = 60, FRAMES);
     let mut evicted = 0u64;
     for (i, r) in recs.iter().enumerate() {
-        assert_eq!(r.buffer_count, 2 * r.held, "f{i} buffers (small budget)");
+        assert_eq!(r.buffer_count, r.held + 1, "f{i} buffers (small budget)");
         assert!(r.held <= base_patches + 60, "f{i} held {}", r.held);
         evicted += r.report.stream.evicted as u64;
     }

@@ -9,7 +9,7 @@ use engine_sdk::{
     Runtime, SceneState, SdkError,
 };
 use planetary_core::lod::{LodParams, View, is_partition, select};
-use planetary_core::{Face, PatchId};
+use planetary_core::{CubeSphere, Face, PatchId};
 use planetary_terrain::{
     CameraParams, DRAW_MARGIN, GpuUploader, PatchKey, PlanetaryCamera, TAN_HALF_FOV_Y,
     TerrainConfig, TerrainReport, TerrainSystem,
@@ -18,7 +18,7 @@ use planetary_terrain::{
 const RADIUS: f64 = 6_371_000.0;
 
 struct Harness {
-    sys: TerrainSystem,
+    sys: TerrainSystem<CubeSphere>,
     eyes: Vec<DVec3>,
     frame: usize,
     frustum: bool,
@@ -67,7 +67,8 @@ fn start(cfg: TerrainConfig, eyes: Vec<DVec3>) -> (Runtime<NullBackend>, Harness
     let mut rt =
         Runtime::new(Engine::new(EngineConfig::default()), NullBackend::new()).expect("runtime");
     let mut app = Harness {
-        sys: TerrainSystem::new(cfg).expect("terrain system"),
+        sys: TerrainSystem::new(cfg.clone(), CubeSphere::new(cfg.cells_per_edge))
+            .expect("terrain system"),
         eyes,
         frame: 0,
         frustum: false,
@@ -154,7 +155,7 @@ fn eviction_reconciles_without_leak() {
         evicted += u64::from(app.sys.report().stream.evicted);
         assert_eq!(
             rt.backend().buffer_count(),
-            2 * app.sys.held_mesh_count(),
+            app.sys.held_mesh_count() + 1,
             "buffer leak or dangling mesh"
         );
     }
@@ -245,10 +246,11 @@ impl App for Corrupt {
             1,
             PatchId::root(Face::PosX),
         )?;
+        let counts = [Some(self.cells)];
         let mut up = GpuUploader {
             resources: r,
             held: &mut held,
-            cells_per_edge: self.cells,
+            vertex_counts: &counts,
             rejected: Vec::new(),
         };
         self.accepted = up.upload(&key, &[1, 2, 3]);
@@ -290,12 +292,17 @@ fn config_rejects_draw_budget_overflow() {
     ] {
         let mut cfg = test_cfg();
         cfg.lod.max_leaves = max_leaves;
-        assert!(TerrainSystem::new(cfg).is_err(), "max_leaves {max_leaves}");
+        assert!(
+            TerrainSystem::new(cfg.clone(), CubeSphere::new(cfg.cells_per_edge)).is_err(),
+            "max_leaves {max_leaves}"
+        );
     }
     for max_leaves in [6usize, MAX_DRAWS_PER_FRAME - DRAW_MARGIN] {
         let mut cfg = test_cfg();
         cfg.lod.max_leaves = max_leaves;
-        TerrainSystem::new(cfg).expect("valid").shutdown();
+        TerrainSystem::new(cfg.clone(), CubeSphere::new(cfg.cells_per_edge))
+            .expect("valid")
+            .shutdown();
     }
 }
 
@@ -381,4 +388,77 @@ fn held_meshes_bounded_while_hovering() {
     }
     assert!(max_held > 0);
     app.sys.shutdown();
+}
+
+#[test]
+fn shared_index_buffers_created_once() {
+    let (mut rt, mut app) = start(test_cfg(), above_pos_x());
+    // setup created exactly one shared index buffer (one cube vertex class), no meshes yet.
+    assert_eq!(rt.backend().buffer_count(), 1, "after setup");
+    for f in 0..2 {
+        step(&mut rt, &mut app);
+        assert_eq!(
+            rt.backend().buffer_count(),
+            app.sys.held_mesh_count() + 1,
+            "frame {f}: held + classes"
+        );
+    }
+    assert!(
+        app.sys.held_mesh_count() > 0,
+        "nothing uploaded in 2 frames"
+    );
+    app.sys.shutdown();
+}
+
+#[test]
+fn debug_cells_uses_debug_material() {
+    use engine_sdk::MaterialId;
+    use engine_sdk::streaming::StreamSource;
+    use planetary_core::lod::LodModel;
+    use planetary_core::{PlanetTerrain, Topology, decode_cell_payload};
+    use planetary_terrain::CellSource;
+    use std::sync::Arc;
+
+    let cfg = TerrainConfig {
+        debug_cells: true,
+        ..test_cfg()
+    };
+    let (mut rt, mut app) = start(cfg.clone(), above_pos_x());
+    for _ in 0..30 {
+        step(&mut rt, &mut app);
+    }
+    assert_ne!(app.sys.material(), MaterialId::DEFAULT);
+    assert!(app.sys.report().draw_items > 0);
+    app.sys.shutdown();
+
+    // Per-cell row selector in uv[1] for debug cells, the terrain attribute otherwise.
+    let topo = Arc::new(CubeSphere::new(cfg.cells_per_edge));
+    let terrain = Arc::new(
+        PlanetTerrain::new(cfg.world_seed, cfg.terrain, cfg.cells_per_edge).expect("terrain"),
+    );
+    let model = LodModel::for_topology(&terrain, cfg.kappa, topo.sample_angle0());
+    let vc = topo.index_variants()[0]
+        .indices
+        .iter()
+        .max()
+        .copied()
+        .expect("indices")
+        + 1;
+    let cell = PatchId::root(Face::PosX);
+    let key = PatchKey::new(&topo, 1, cell).expect("key");
+    let token = engine_sdk::CancelToken::new();
+    let uv1 = |debug: bool| {
+        let src = CellSource::new(topo.clone(), terrain.clone(), model, debug, vc);
+        let bytes = src.produce(&key, &token).expect("payload");
+        let m = decode_cell_payload(&bytes, key.raw(), &|c| (c == 0).then_some(vc)).expect("v3");
+        m.vertices.iter().map(|v| v.uv[1]).collect::<Vec<f32>>()
+    };
+    let dbg = uv1(true);
+    let row = ((u32::from(cell.level()) * 7).wrapping_add((cell.raw() >> 7) as u32) % 16) as f32;
+    let want = (row + 0.5) / 16.0;
+    assert!(
+        dbg.iter().all(|v| (*v - want).abs() < 1e-6),
+        "row selector {want}"
+    );
+    assert_ne!(dbg, uv1(false), "debug uv must differ from terrain uv");
 }
