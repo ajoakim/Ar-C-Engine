@@ -159,3 +159,22 @@ fn max_level_jump_detects_negative_control() {
     assert!(max_level_jump(&leaves) >= 2);
     assert!(!is_balanced(&leaves));
 }
+
+#[test]
+fn reference_views_balanced() {
+    use planetary_core::lod::{LodParams, View, reference_views, select};
+    let m = model();
+    let p = LodParams::default();
+    let views = reference_views(R, m.max_relief);
+    assert_eq!(views.len(), 8 + 8 + 12 + 2);
+    for (name, eye) in views {
+        let v = View::new(eye, 720, 1.0 / 3.0f64.sqrt()).unwrap();
+        let sel = select(&m, &p, &v, &BTreeSet::new());
+        assert!(is_partition(&sel.leaves), "{name}");
+        assert!(max_level_jump(&sel.leaves) <= 1, "{name}");
+        assert!(
+            sel.leaves.len() <= p.max_leaves || sel.stats.tau_steps == p.max_tau_steps,
+            "{name}"
+        );
+    }
+}
