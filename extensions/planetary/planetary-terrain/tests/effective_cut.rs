@@ -163,3 +163,69 @@ fn missing_root_leaves_five_faces() {
         assert!(max_level_jump(&cut.leaves) <= 1);
     }
 }
+
+#[test]
+fn nothing_resident_requests_the_six_roots() {
+    let wanted = wanted_sets().remove(0);
+    let leaves = leaves_of(&wanted);
+    let reqs = planetary_terrain::plan_requests(&leaves, &|_| false, &|_| false, 100);
+    let mut roots: Vec<PatchId> = Face::ALL.iter().map(|f| PatchId::root(*f)).collect();
+    roots.sort();
+    assert_eq!(reqs, roots);
+}
+
+#[test]
+fn requests_are_ancestors_first_unique_sorted_capped() {
+    let sets = wanted_sets();
+    for seed in 0..20u64 {
+        let res = closed_random(seed);
+        let pending = move |p: PatchId| splitmix64(seed ^ p.raw() ^ 0xABCD).is_multiple_of(5);
+        for wanted in &sets {
+            let leaves = leaves_of(wanted);
+            let all = planetary_terrain::plan_requests(&leaves, &res, &pending, usize::MAX);
+            let capped = planetary_terrain::plan_requests(&leaves, &res, &pending, 7);
+            assert!(capped.len() <= 7);
+            assert_eq!(capped[..], all[..capped.len()]);
+            let uniq: BTreeSet<_> = all.iter().collect();
+            assert_eq!(uniq.len(), all.len());
+            assert!(
+                all.windows(2)
+                    .all(|w| (w[0].level(), w[0].raw()) < (w[1].level(), w[1].raw()))
+            );
+            for p in &all {
+                assert!(!res(*p) && !pending(*p));
+                assert!(p.parent().is_none_or(&res));
+            }
+        }
+    }
+}
+
+#[test]
+fn closure_and_stale_requests() {
+    let wanted = wanted_sets().remove(5);
+    let leaves = leaves_of(&wanted);
+    let closure = planetary_terrain::wanted_closure(&leaves);
+    for l in &leaves {
+        let mut cur = Some(*l);
+        while let Some(c) = cur {
+            assert!(closure.contains(&c));
+            cur = c.parent();
+        }
+    }
+    let outside = PatchId::new(Face::NegZ, MAX_LEVEL, 3, 5).unwrap();
+    assert!(!closure.contains(&outside));
+    let inside = leaves[0];
+    let requested: BTreeSet<PatchId> = [outside, inside].into_iter().collect();
+    assert_eq!(
+        planetary_terrain::stale_requests(&requested, &closure),
+        vec![outside]
+    );
+}
+
+#[test]
+fn priority_by_level() {
+    use engine_sdk::Priority;
+    assert_eq!(planetary_terrain::priority_for_level(0), Priority::High);
+    assert_eq!(planetary_terrain::priority_for_level(3), Priority::High);
+    assert_eq!(planetary_terrain::priority_for_level(4), Priority::Normal);
+}

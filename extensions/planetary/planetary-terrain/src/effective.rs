@@ -95,10 +95,10 @@ fn violating_parents(leaves: &[PatchId]) -> BTreeSet<PatchId> {
             let mut cur = Some(neighbor(p, e).patch);
             while let Some(q) = cur {
                 if let Some(&ql) = level_of.get(&q) {
-                    if ql + 2 <= level {
-                        if let Some(par) = p.parent() {
-                            parents.insert(par);
-                        }
+                    if ql + 2 <= level
+                        && let Some(par) = p.parent()
+                    {
+                        parents.insert(par);
                     }
                     break;
                 }
