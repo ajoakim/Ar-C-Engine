@@ -53,13 +53,18 @@
 ### Planetary Extension
 
 - [x] **PLAN-01**: Planetary code lives only in extension crates; the conventional app builds and runs with those crates absent
-- [ ] **PLAN-02**: Planet surface is represented as a cube-sphere with stable packed patch IDs and a tested face-adjacency table
-- [ ] **PLAN-03**: Planet patches form a quadtree with 2:1 balance and screen-space-error LOD selection with hysteresis
+- [ ] **PLAN-02**: Planet surface is represented as a cube-sphere with stable packed patch IDs and a tested face-adjacency table (cube-sphere implementation built in Phase 7; generalized behind the `Topology` trait in Phase 7.1)
+- [ ] **PLAN-03**: Planet patches form a quadtree with 2:1 balance and screen-space-error LOD selection with hysteresis (quadtree implementation built in Phase 7; Phase 7.1 adds tight bounds, culling and a node budget)
 - [ ] **PLAN-04**: Terrain LOD transitions are crack-free, including across cube-face edges and corners
 - [ ] **PLAN-05**: Terrain is generated from layered planet-space generators so patch borders agree
 - [ ] **PLAN-06**: User can navigate with a planetary camera from orbit to surface
 - [ ] **PLAN-07**: A scripted orbit-to-surface descent holds the target frame-time budget without stalls
 - [ ] **PLAN-08**: Planet shows a minimal atmosphere (first item to cut if schedule slips)
+- [ ] **HEX-01**: Planet can use an H3-inspired hex-grid topology on an icosahedron (half-cell scheme: each hex gives way to a centre hex plus six half-covered edge hexes, 12 pentagons) with stable packed cell IDs and tested parent/child/neighbor derivation, built with exact arithmetic only (ADR-0008)
+- [ ] **HEX-02**: The hex drawn cut covers the sphere exactly once with balanced neighbors, and terrain is crack-free at cell borders, pentagons and mixed levels (seam and coverage proofs with negative controls)
+- [ ] **HEX-03**: A `Topology` trait has the cube-sphere quadtree and the hex grid as implementations; the cube-sphere stays as test oracle and fallback until hex passes the full descent
+- [ ] **PERF-01**: Telemetry reports frame time (avg/p95/max), FPS, altitude, distance to surface and selection/streaming stats, with a CSV log and a headless descent benchmark at the real default parameters
+- [ ] **PERF-02**: The scripted orbit-to-surface descent at the real default LOD parameters streams detail in as the camera descends, aggregates on ascent, holds the frame budget and completes without a crash in debug and release
 
 ### Reference Apps & Quality
 
@@ -143,6 +148,11 @@
 | PLAN-05 | Phase 7 | Pending |
 | PLAN-06 | Phase 7 | Pending |
 | PLAN-07 | Phase 7 | Pending |
+| HEX-01 | Phase 7.1 | Pending |
+| HEX-02 | Phase 7.1 | Pending |
+| HEX-03 | Phase 7.1 | Pending |
+| PERF-01 | Phase 7.1 | Pending |
+| PERF-02 | Phase 7.1 | Pending |
 | PLAN-08 | Phase 8 | Pending |
 | APP-01 | Phase 5 | Complete |
 | APP-02 | Phase 7 | Pending |
@@ -151,8 +161,8 @@
 | QA-03 | Phase 8 | Pending |
 
 **Coverage:**
-- v1 requirements: 40 total (the earlier count of 35 was a miscount)
-- Mapped to phases: 40
+- v1 requirements: 45 total (40 original + HEX-01..03 and PERF-01..02 added in Phase 7.1 on 2026-11-25)
+- Mapped to phases: 45
 - Unmapped: 0
 
 ---

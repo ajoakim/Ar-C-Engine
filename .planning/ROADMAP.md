@@ -166,6 +166,24 @@ Plans:
 - [ ] 07-10-PLAN.md — scripted descent test (PLAN-07), ADR-0010 accepted, validation sign-off, human window-flight checkpoint
 **UI hint**: yes
 
+### Phase 07.1: Hex-Grid Planet Topology & Descent Performance (INSERTED)
+
+**Goal**: Descent works at real parameters (detail streams in, frames hold budget, no crash, measurable) on a hex-grid planet in the spirit of H3: each hex gives way to its constituent parts as you descend and aggregates on ascent
+**Why inserted**: Phase 7 human flight (2026-11-25) found detail not streaming in during descent, a stuttering/crashing scripted descent and no frame-rate-vs-altitude measurement; the user chose an H3-inspired hex topology. See `.planning/research/HEX-TOPOLOGY.md` and `07-VERIFICATION.md` (gaps G1-G3).
+**Depends on:** Phase 7
+**Requirements**: HEX-01, HEX-02, HEX-03, PERF-01, PERF-02 (closes Phase 7 gaps G1-G3; PLAN-02/03 are re-scoped from cube-sphere/quadtree to the `Topology` trait with both implementations)
+**Success Criteria** (what must be TRUE):
+  1. Telemetry reports frame time (avg/p95/max), FPS, altitude, distance to surface and selection/streaming stats per frame, with a CSV log and a headless descent benchmark at the real default parameters (no reduced level)
+  2. The cause of the descent crash/stutter is diagnosed from evidence and fixed; the scripted descent completes in debug and release without a crash
+  3. Selection uses tight per-cell height bounds, horizon and frustum culling and a node-visit budget, so detail converges as the camera descends at the real default max level, within the 1024-draw cap
+  4. Sphere spikes (cell nesting/coverage, pentagons, IDs/adjacency, skirt gap bound) pass, or the documented fallback is chosen, at an explicit go/no-go with the user before the full hex build
+  5. A `Topology` trait has cube-sphere and half-cell hex implementations; the hex cut covers the sphere exactly once with balanced neighbors, and its seam/coverage proofs (with negative controls) pass
+  6. The hex planet runs the full scripted orbit-to-surface descent at real defaults in the planetary app (SDK only), and the user's window flight confirms detail rendering in on descent and aggregating on ascent
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 07.1 to break down)
+
 ### Phase 8: Hardening & Decisions
 **Goal**: The prototype is observable, regression-tested, documented, and its open technical decisions are recorded
 **Depends on**: Phase 7
