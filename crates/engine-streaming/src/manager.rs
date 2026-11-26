@@ -197,7 +197,15 @@ impl<K: StreamKey, S: StreamSource<K>> StreamManager<K, S> {
             }) = result
             {
                 let need = needed.saturating_sub(available);
-                let freed = self.make_room(class, MemoryPool::Cpu, need)?;
+                let freed = match self.make_room(class, MemoryPool::Cpu, need) {
+                    Ok(f) => f,
+                    Err(e) => {
+                        if let Some(a) = anc {
+                            self.pins.unpin(a);
+                        }
+                        return Err(e);
+                    }
+                };
                 if freed >= need {
                     result = self.start_job(jobs, &req, id, est);
                 }
