@@ -1,13 +1,18 @@
-//! Pure request planning: ancestors-first, coarse-first, deduplicated, capped; stale detection.
+//! Pure request planning: ancestors-first, nearest and largest error first, deduplicated,
+//! capped; stale detection.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use engine_sdk::Priority;
 use planetary_core::Topology;
+use planetary_core::lod::{Footprint, HeightRange, LodModel, View, cell_distance};
 
 /// For each wanted piece, the coarsest non-resident ancestor-or-self along the primary-parent
 /// chain whose parent is resident (or which is a root). Pending cells are skipped. Sorted by
 /// (level, raw id), truncated to `max`.
+///
+/// Order-neutral wrapper of [`plan_requests_scored`] (every piece scores equally, so the
+/// (level, raw id) tie-break decides).
 #[must_use]
 pub fn plan_requests<T: Topology>(
     topo: &T,
@@ -16,9 +21,32 @@ pub fn plan_requests<T: Topology>(
     is_pending: &dyn Fn(T::Cell) -> bool,
     max: usize,
 ) -> Vec<T::Cell> {
-    let mut out: BTreeSet<(u8, u64)> = BTreeSet::new();
+    let scored: Vec<(T::Cell, f64)> = wanted_pieces.iter().map(|&c| (c, 0.0)).collect();
+    plan_requests_scored(topo, &scored, is_resident, is_pending, max)
+}
+
+/// Priority-ordered request planning.
+///
+/// `wanted` pairs each wanted piece with an urgency score (larger first; see
+/// [`request_score`]). For each piece the same cell as [`plan_requests`] is chosen (the coarsest
+/// non-resident ancestor-or-self whose parent is resident, so a leaf is never requested before
+/// the parent that serves as its fallback) and it inherits the BEST score of every piece that
+/// needs it, so a parent needed by an urgent leaf is urgent. Output order: level-0 roots first
+/// (coverage), then score descending, then (level, raw id) ascending as the deterministic
+/// tie-break; truncated to `max`. Non-finite
+/// scores count as 0. Pure: no clock, no hashed containers.
+#[must_use]
+pub fn plan_requests_scored<T: Topology>(
+    topo: &T,
+    wanted: &[(T::Cell, f64)],
+    is_resident: &dyn Fn(T::Cell) -> bool,
+    is_pending: &dyn Fn(T::Cell) -> bool,
+    max: usize,
+) -> Vec<T::Cell> {
+    let mut best: BTreeMap<(u8, u64), f64> = BTreeMap::new();
     let mut chain: Vec<T::Cell> = Vec::new();
-    for &piece in wanted_pieces {
+    for &(piece, score) in wanted {
+        let score = if score.is_finite() { score } else { 0.0 };
         chain.clear();
         let mut cur = Some(piece);
         while let Some(c) = cur {
@@ -31,15 +59,43 @@ pub fn plan_requests<T: Topology>(
                 continue;
             }
             if !is_pending(a) {
-                out.insert((topo.level(a), topo.raw(a)));
+                let e = best.entry((topo.level(a), topo.raw(a))).or_insert(score);
+                if score > *e {
+                    *e = score;
+                }
             }
             break;
         }
     }
-    out.into_iter()
+    let mut order: Vec<((u8, u64), f64)> = best.into_iter().collect();
+    // BTreeMap iteration is (level, raw) ascending and the sort is stable. Roots (level 0) sort
+    // first: until every root is resident a hole is unavoidable, so coverage beats detail.
+    order.sort_by(|a, b| {
+        (a.0.0 != 0)
+            .cmp(&(b.0.0 != 0))
+            .then_with(|| b.1.total_cmp(&a.1))
+    });
+    order
+        .into_iter()
         .take(max)
-        .filter_map(|(_, raw)| topo.from_raw(raw))
+        .filter_map(|((_, raw), _)| topo.from_raw(raw))
         .collect()
+}
+
+/// Urgency of a wanted piece: its screen-space error, `geometric_error(level) * proj_scale /
+/// max(distance, 1 m)` with the distance from the eye to the footprint extruded over `range`.
+/// Nearer and coarser-error pieces score higher. Exact operations only (ADR-0008).
+#[must_use]
+pub fn request_score(
+    model: &LodModel,
+    view: &View,
+    fp: &Footprint,
+    range: HeightRange,
+    level: u8,
+) -> f64 {
+    let d = cell_distance(model.radius, view.eye, fp, range);
+    let d = if d > 1.0 { d } else { 1.0 };
+    model.geometric_error(level) * view.proj_scale / d
 }
 
 /// The wanted pieces plus all their ancestors (every parent of a two-parent cell).

@@ -11,8 +11,8 @@ use engine_sdk::{
 use planetary_core::lod::{LodParams, View, is_partition, select};
 use planetary_core::{CubeSphere, Face, PatchId};
 use planetary_terrain::{
-    CameraParams, DRAW_MARGIN, GpuUploader, PatchKey, PlanetaryCamera, TAN_HALF_FOV_Y,
-    TerrainConfig, TerrainReport, TerrainSystem,
+    BudgetLimits, CameraParams, DRAW_MARGIN, GpuUploader, PatchKey, PlanetaryCamera, StreamBudget,
+    TAN_HALF_FOV_Y, TerrainConfig, TerrainReport, TerrainSystem,
 };
 
 const RADIUS: f64 = 6_371_000.0;
@@ -461,4 +461,165 @@ fn debug_cells_uses_debug_material() {
         "row selector {want}"
     );
     assert_ne!(dbg, uv1(false), "debug uv must differ from terrain uv");
+}
+
+fn adaptive_cfg() -> TerrainConfig {
+    TerrainConfig {
+        adaptive: true,
+        ..test_cfg()
+    }
+}
+
+#[test]
+fn budget_grows_with_fast_frames_shrinks_with_slow_and_respects_hard_max() {
+    let cfg = adaptive_cfg();
+    let b = cfg.budget;
+    let base = StreamBudget::base(&cfg);
+    assert_eq!((base.uploads, base.starts, base.requests), (4, 8, 16));
+    // Iterate the controller at a constant cost until it settles.
+    let settle = |ms: f64| {
+        let mut cur = base;
+        for _ in 0..40 {
+            cur = StreamBudget::next(&cfg, cur.scale, Some(ms));
+        }
+        cur
+    };
+    let fast = settle(0.01);
+    assert_eq!(
+        (fast.uploads, fast.starts, fast.requests),
+        (b.max_uploads, b.max_starts, b.max_requests),
+        "a very fast frame must reach the hard maxima and never exceed them"
+    );
+    let mid = settle(b.target_ms);
+    assert_eq!(
+        (mid.uploads, mid.starts, mid.requests),
+        (base.uploads, base.starts, base.requests),
+        "cost at target keeps the base caps"
+    );
+    let slow = settle(10_000.0);
+    assert_eq!((slow.uploads, slow.starts, slow.requests), (1, 2, 4));
+    assert!(slow.uploads < base.uploads && base.uploads < fast.uploads);
+    // One step moves only part of the way (damped).
+    let one = StreamBudget::next(&cfg, 1.0, Some(4.0));
+    assert!(one.uploads > base.uploads && one.uploads < fast.uploads);
+}
+
+#[test]
+fn budget_absent_invalid_or_disabled_gives_the_base_caps() {
+    let cfg = adaptive_cfg();
+    let base = StreamBudget::base(&cfg);
+    for ms in [None, Some(f64::NAN), Some(-1.0), Some(f64::INFINITY)] {
+        assert_eq!(StreamBudget::next(&cfg, 3.0, ms), base, "{ms:?}");
+    }
+    let off = TerrainConfig {
+        adaptive: false,
+        ..cfg.clone()
+    };
+    assert_eq!(StreamBudget::next(&off, 1.0, Some(0.01)), base);
+    // Invalid limits fall back to the base caps instead of dividing by zero.
+    let bad = TerrainConfig {
+        budget: BudgetLimits {
+            target_ms: 0.0,
+            ..cfg.budget
+        },
+        ..cfg
+    };
+    assert_eq!(StreamBudget::next(&bad, 1.0, Some(1.0)), base);
+    assert!(
+        TerrainSystem::new(
+            TerrainConfig {
+                budget: BudgetLimits {
+                    max_uploads: 0,
+                    ..BudgetLimits::default()
+                },
+                ..adaptive_cfg()
+            },
+            CubeSphere::new(8)
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn absent_measurement_keeps_the_default_caps_in_the_system() {
+    let cfg = adaptive_cfg();
+    let (mut rt, mut app) = start(cfg.clone(), orbit(120, 2000.0));
+    for _ in 0..120 {
+        step(&mut rt, &mut app);
+        let r = app.sys.report();
+        assert_eq!(app.sys.stream_budget(), StreamBudget::base(&cfg));
+        assert!(r.stream.uploads <= cfg.uploads_per_frame);
+        assert!(r.requests_issued <= cfg.max_requests_per_frame);
+    }
+    app.sys.shutdown();
+}
+
+#[test]
+fn adaptive_budget_respects_hard_max_and_throttles_when_slow() {
+    let cfg = adaptive_cfg();
+    let hard = cfg.budget;
+    let (mut rt, mut app) = start(cfg.clone(), orbit(300, 2000.0));
+    let mut max_up = 0u32;
+    for _ in 0..100 {
+        app.sys.set_frame_cost(0.01);
+        step(&mut rt, &mut app);
+        let r = app.sys.report();
+        let b = app.sys.stream_budget();
+        assert!(b.uploads <= hard.max_uploads && b.starts <= hard.max_starts);
+        assert!(b.requests <= hard.max_requests);
+        assert!(r.stream.uploads <= b.uploads, "uploads over the cap");
+        assert!(r.stream.started <= hard.max_starts, "started over hard max");
+        assert!(r.stream.completions_applied <= hard.max_starts);
+        assert!(r.requests_issued <= b.requests);
+        assert!(is_partition(app.sys.drawn()) || r.drawn_leaves == 0);
+        max_up = max_up.max(r.stream.uploads);
+    }
+    assert!(
+        max_up > cfg.uploads_per_frame,
+        "fast frames never raised the upload rate above the base ({max_up})"
+    );
+    for f in 0..100 {
+        app.sys.set_frame_cost(10_000.0);
+        step(&mut rt, &mut app);
+        let r = app.sys.report();
+        let b = app.sys.stream_budget();
+        assert!(r.stream.uploads <= b.uploads, "uploads over the cap");
+        assert!(r.requests_issued <= b.requests);
+        if f >= 20 {
+            assert_eq!((b.uploads, b.starts, b.requests), (1, 2, 4));
+            assert!(
+                r.stream.uploads <= 1,
+                "slow frame uploaded {}",
+                r.stream.uploads
+            );
+            assert!(r.stream.started <= 2 * b.starts, "queue bound");
+        }
+        assert!(is_partition(app.sys.drawn()) || r.drawn_leaves == 0);
+    }
+    app.sys.shutdown();
+}
+
+#[test]
+fn partition_holds_under_throttling_and_eviction() {
+    let cfg = TerrainConfig {
+        detail_budget_patches: 60,
+        ..adaptive_cfg()
+    };
+    let (mut rt, mut app) = start(cfg, orbit(400, 800.0));
+    let mut evicted = 0u64;
+    for f in 0..400 {
+        // Alternate fast and slow measurements so the caps keep changing.
+        app.sys
+            .set_frame_cost(if (f / 25) % 2 == 0 { 0.01 } else { 1.0e4 });
+        step(&mut rt, &mut app);
+        let r = app.sys.report();
+        evicted += u64::from(r.stream.evicted);
+        if f >= 10 {
+            assert!(!app.sys.drawn().is_empty(), "f{f} empty drawn set");
+            assert!(is_partition(app.sys.drawn()), "f{f} not a partition");
+            assert!(r.drawn_max_jump <= 1, "f{f} jump");
+        }
+    }
+    assert!(evicted > 0, "eviction never happened");
+    app.sys.shutdown();
 }

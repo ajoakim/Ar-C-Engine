@@ -42,9 +42,15 @@ pub struct StreamFrame {
     pub evicted: u32,
     pub cancelled: u32,
     pub requests_issued: u32,
+    pub closure_cells: usize,
+    pub closure_resident: usize,
     pub draws: usize,
     pub draw_items: usize,
     pub partition: bool,
+    /// Measured prepare plus gpu_frame cost (ms) of the frame (telemetry clock).
+    pub cost_ms: f64,
+    /// Adaptive budget caps in force (uploads, starts, requests).
+    pub caps: (u32, u32, u32),
     /// True when drawn equals wanted exactly (converged).
     pub converged: bool,
 }
@@ -127,9 +133,19 @@ pub fn run_stream(
             evicted: rep.stream.evicted,
             cancelled: rep.stream.cancelled,
             requests_issued: rep.requests_issued,
+            closure_cells: rep.closure_cells,
+            closure_resident: rep.closure_resident,
             draws,
             draw_items: rep.draw_items,
             partition: drawn.is_empty() || is_partition(&drawn),
+            cost_ms: app
+                .telemetry()
+                .last()
+                .map_or(0.0, |t| t.prepare_ms + t.gpu_frame_ms),
+            caps: {
+                let b = app.terrain().stream_budget();
+                (b.uploads, b.starts, b.requests)
+            },
             converged,
         });
         pace();
@@ -278,7 +294,7 @@ pub fn analyze(run: &StreamRun) -> StreamMetrics {
 }
 
 /// CSV header of [`csv`].
-pub const CSV_HEADER: &str = "frame,sim_time_s,altitude_m,wanted_leaves,drawn_leaves,wanted_level,drawn_level,look_wanted_level,look_drawn_level,held,pending_requests,queued,started,uploads,in_flight,awaiting_upload,evicted,cancelled,requests_issued,draws,partition,converged";
+pub const CSV_HEADER: &str = "frame,sim_time_s,altitude_m,wanted_leaves,drawn_leaves,wanted_level,drawn_level,look_wanted_level,look_drawn_level,held,pending_requests,queued,started,uploads,in_flight,awaiting_upload,evicted,cancelled,requests_issued,closure_cells,closure_resident,draws,partition,cost_ms,cap_uploads,cap_starts,cap_requests,converged";
 
 /// CSV text of a run (header plus one row per frame).
 #[must_use]
@@ -286,31 +302,38 @@ pub fn csv(run: &StreamRun) -> String {
     let mut s = String::from(CSV_HEADER);
     s.push('\n');
     for r in &run.frames {
-        s.push_str(&format!(
-            "{},{:.4},{:.3},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n",
-            r.frame,
-            r.sim_time_s,
-            r.altitude_m,
-            r.wanted_leaves,
-            r.drawn_leaves,
-            r.wanted_level,
-            r.drawn_level,
-            r.look_wanted_level,
-            r.look_drawn_level,
-            r.held_meshes,
-            r.pending_requests,
-            r.queued,
-            r.started,
-            r.uploads,
-            r.in_flight,
-            r.awaiting_upload,
-            r.evicted,
-            r.cancelled,
-            r.requests_issued,
-            r.draws,
-            u8::from(r.partition),
-            u8::from(r.converged),
-        ));
+        let cols: Vec<String> = vec![
+            r.frame.to_string(),
+            format!("{:.4}", r.sim_time_s),
+            format!("{:.3}", r.altitude_m),
+            r.wanted_leaves.to_string(),
+            r.drawn_leaves.to_string(),
+            r.wanted_level.to_string(),
+            r.drawn_level.to_string(),
+            r.look_wanted_level.to_string(),
+            r.look_drawn_level.to_string(),
+            r.held_meshes.to_string(),
+            r.pending_requests.to_string(),
+            r.queued.to_string(),
+            r.started.to_string(),
+            r.uploads.to_string(),
+            r.in_flight.to_string(),
+            r.awaiting_upload.to_string(),
+            r.evicted.to_string(),
+            r.cancelled.to_string(),
+            r.requests_issued.to_string(),
+            r.closure_cells.to_string(),
+            r.closure_resident.to_string(),
+            r.draws.to_string(),
+            u8::from(r.partition).to_string(),
+            format!("{:.3}", r.cost_ms),
+            r.caps.0.to_string(),
+            r.caps.1.to_string(),
+            r.caps.2.to_string(),
+            u8::from(r.converged).to_string(),
+        ];
+        s.push_str(&cols.join(","));
+        s.push('\n');
     }
     s
 }

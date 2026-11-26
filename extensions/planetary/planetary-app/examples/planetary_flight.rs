@@ -19,7 +19,8 @@
 //! frame is paced by `--frame-ms` (default 33) of real time spent spinning so workers get the
 //! time a window frame would give them. `--fast` uses the fast free-flight descent instead of
 //! the scripted one. `--frames <n>` bounds the run (default descent frames plus 300 hover);
-//! `--out` writes the per-frame CSV. It prints lag at the camera, frames-to-detail and the
+//! `--out` writes the per-frame CSV. Streaming caps adapt to the measured frame cost by default;
+//! `--no-adaptive` keeps the fixed caps (ordering stays nearest-first). It prints lag at the camera, frames-to-detail and the
 //! upload-versus-demand throughput ratio.
 //!
 //! Use `cargo run --release -p planetary-app --example planetary_flight -- --descent` for
@@ -35,7 +36,7 @@ use planetary_app::{
     summarize,
 };
 
-const USAGE: &str = "usage: planetary_flight [--headless <frames>] [--descent] [--ascent] [--frames <n>] [--perf-log <file.csv>] [--no-console] [--bench-descent] [--budget-ms <ms>] [--strict] [--bench-stream] [--fast] [--settle] [--frame-ms <ms>] [--out <file.csv>]";
+const USAGE: &str = "usage: planetary_flight [--headless <frames>] [--descent] [--ascent] [--frames <n>] [--perf-log <file.csv>] [--no-console] [--bench-descent] [--budget-ms <ms>] [--strict] [--bench-stream] [--fast] [--settle] [--no-adaptive] [--frame-ms <ms>] [--out <file.csv>]";
 
 #[derive(Default, Clone, Copy)]
 struct BandMax {
@@ -193,6 +194,7 @@ fn main() -> Result<(), SdkError> {
     let mut budget = 16.7_f64;
     let mut strict = false;
     let mut bench_stream_flag = false;
+    let mut adaptive = true;
     let mut so = StreamOpts {
         fast: false,
         settle: false,
@@ -233,6 +235,7 @@ fn main() -> Result<(), SdkError> {
             "--strict" => strict = true,
             "--bench-stream" => bench_stream_flag = true,
             "--fast" => so.fast = true,
+            "--no-adaptive" => adaptive = false,
             "--settle" => so.settle = true,
             "--frame-ms" => {
                 so.frame_ms = args
@@ -259,6 +262,9 @@ fn main() -> Result<(), SdkError> {
             settings.terrain.terrain.radius,
         ));
     }
+
+    // Adaptive streaming caps for every wall-clock run (headless smoke keeps the fixed caps).
+    settings.adaptive_streaming = adaptive && headless.is_none();
 
     if bench_stream_flag {
         return bench_stream(settings, frames, &so);

@@ -12,7 +12,10 @@ pub use camera::{CameraParams, PlanetaryCamera, TAN_HALF_FOV_Y};
 pub mod effective;
 pub use effective::{EffectiveCut, effective_cut, naive_cut};
 pub mod requests;
-pub use requests::{plan_requests, priority_for_level, stale_requests, wanted_closure};
+pub use requests::{
+    plan_requests, plan_requests_scored, priority_for_level, request_score, stale_requests,
+    wanted_closure,
+};
 pub mod key;
 pub use key::{CellKey, PatchKey};
 pub mod palette;
@@ -22,7 +25,9 @@ pub use source::{CellSource, cell_payload_estimate};
 pub mod uploader;
 pub use uploader::{GpuUploader, HeldCell};
 pub mod system;
-pub use system::{DRAW_MARGIN, TerrainConfig, TerrainReport, TerrainSystem};
+pub use system::{
+    BudgetLimits, DRAW_MARGIN, StreamBudget, TerrainConfig, TerrainReport, TerrainSystem,
+};
 
 use engine_sdk::streaming::AssetClass;
 

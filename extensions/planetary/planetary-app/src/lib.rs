@@ -38,6 +38,9 @@ pub struct AppSettings {
     pub script: Option<DescentScript>,
     /// Frame telemetry options (all off by default).
     pub perf: PerfSettings,
+    /// Adapt the per-frame streaming caps to the measured prepare plus gpu_frame cost
+    /// (default off; the flight example turns it on). Needs a real [`Clock`].
+    pub adaptive_streaming: bool,
 }
 
 impl Default for AppSettings {
@@ -51,6 +54,7 @@ impl Default for AppSettings {
             frustum_culling: true,
             script: None,
             perf: PerfSettings::default(),
+            adaptive_streaming: false,
         }
     }
 }
@@ -70,6 +74,7 @@ pub struct PlanetaryApp {
     telemetry: Telemetry,
     frames: u64,
     exit_after_frames: Option<u64>,
+    adaptive_streaming: bool,
 }
 
 impl PlanetaryApp {
@@ -88,8 +93,10 @@ impl PlanetaryApp {
     /// `SdkError::App` for an invalid configuration, camera start or perf log.
     #[allow(clippy::result_large_err)]
     pub fn with_clock(settings: AppSettings, clock: Box<dyn Clock>) -> Result<Self, SdkError> {
+        let mut terrain_cfg = settings.terrain.clone();
+        terrain_cfg.adaptive |= settings.adaptive_streaming;
         let terrain = TerrainSystem::new(
-            settings.terrain.clone(),
+            terrain_cfg,
             CubeSphere::new(settings.terrain.cells_per_edge),
         )?;
         let radius = settings.terrain.terrain.radius;
@@ -114,6 +121,7 @@ impl PlanetaryApp {
             telemetry,
             frames: 0,
             exit_after_frames: settings.perf.exit_after_frames,
+            adaptive_streaming: settings.adaptive_streaming,
             script: settings.script,
             terrain,
             camera,
@@ -302,6 +310,13 @@ impl App for PlanetaryApp {
             ..FrameSample::default()
         };
         self.telemetry.record(sample);
+        if self.adaptive_streaming
+            && let Some(last) = self.telemetry.last()
+        {
+            // The measured cost of this frame sets the caps of the next one.
+            self.terrain
+                .set_frame_cost(last.prepare_ms + last.gpu_frame_ms);
+        }
         self.frames += 1;
         result
     }
