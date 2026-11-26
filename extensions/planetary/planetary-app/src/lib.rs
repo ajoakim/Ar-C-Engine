@@ -11,7 +11,10 @@ pub mod telemetry;
 use std::collections::BTreeSet;
 
 use engine_sdk::tracing;
-use engine_sdk::{App, AppControl, DVec3, InputEvent, Resources, SceneState, SdkError};
+use engine_sdk::{
+    App, AppControl, DVec3, DirectionalLight, DistanceFog, InputEvent, Resources, SceneState,
+    SdkError, Vec3,
+};
 use planetary_core::lod::View;
 use planetary_core::{CubeSphere, HexSphere, TerrainParams, Topology};
 use planetary_terrain::{
@@ -24,6 +27,92 @@ pub use telemetry::{
     ALTITUDE_BANDS, Clock, FrameSample, PerfSettings, PerfSummary, SimClock, Telemetry, WallClock,
     band_of, spin_for_ms, summarize,
 };
+
+/// Altitude (m) below which the haze is at full density.
+pub const HAZE_FULL_ALTITUDE: f64 = 20_000.0;
+/// Altitude (m) at and above which the haze is gone (space).
+pub const HAZE_NONE_ALTITUDE: f64 = 200_000.0;
+/// Full haze density per metre (half haze at 100 km, see `engine_render::fog_factor`).
+pub const HAZE_DENSITY: f32 = 1.0e-5;
+/// Sky colour (linear RGB); the fog colour and the clear colour at full haze.
+pub const SKY_COLOR: [f32; 3] = [0.30, 0.45, 0.70];
+/// Clear colour of space (the scene default).
+pub const SPACE_COLOR: [f32; 4] = [0.02, 0.02, 0.05, 1.0];
+/// Sun elevation above the local horizon at the descent target (degrees).
+pub const SUN_ELEVATION_DEG: f64 = 35.0;
+/// Light intensity multiplier of the relief light.
+pub const LIGHT_INTENSITY: f32 = 1.8;
+/// Ambient light level (all channels).
+pub const LIGHT_AMBIENT: f32 = 0.025;
+
+/// Distance haze and sky colour for one altitude.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Haze {
+    pub fog: DistanceFog,
+    pub clear_color: [f32; 4],
+}
+
+/// Haze for the camera altitude (metres above the surface): full density up to
+/// [`HAZE_FULL_ALTITUDE`], fading linearly to zero at [`HAZE_NONE_ALTITUDE`]. The clear colour
+/// blends the sky colour (full haze) with space (no haze) by the same factor, so the horizon
+/// fog colour equals the sky behind it. A non-finite altitude gives no haze.
+#[must_use]
+pub fn haze_for_altitude(altitude: f64) -> Haze {
+    let fade = if altitude.is_finite() {
+        let t = (HAZE_NONE_ALTITUDE - altitude) / (HAZE_NONE_ALTITUDE - HAZE_FULL_ALTITUDE);
+        t.clamp(0.0, 1.0) as f32
+    } else {
+        0.0
+    };
+    let mix = |sky: f32, space: f32| sky * fade + space * (1.0 - fade);
+    Haze {
+        fog: DistanceFog {
+            color: SKY_COLOR,
+            density: HAZE_DENSITY * fade,
+        },
+        clear_color: [
+            mix(SKY_COLOR[0], SPACE_COLOR[0]),
+            mix(SKY_COLOR[1], SPACE_COLOR[1]),
+            mix(SKY_COLOR[2], SPACE_COLOR[2]),
+            1.0,
+        ],
+    }
+}
+
+/// Light travel direction (unit, from the sun towards the planet) such that the sun stands
+/// [`SUN_ELEVATION_DEG`] above the local horizon at `target_dir`. The sun's azimuth is fixed by
+/// the world `Y` axis (`Z` when the target is near it). Deterministic; a degenerate target gives
+/// the default light direction.
+#[must_use]
+pub fn sun_direction_for_target(target_dir: DVec3) -> Vec3 {
+    let len = target_dir.length();
+    if !(len.is_finite() && len > 0.0) {
+        return DirectionalLight::default().direction;
+    }
+    let up = target_dir / len;
+    let reference = if up.y.abs() > 0.99 {
+        DVec3::Z
+    } else {
+        DVec3::Y
+    };
+    let east = reference.cross(up).normalize();
+    let north = up.cross(east);
+    let e = SUN_ELEVATION_DEG.to_radians();
+    let to_sun = up * e.sin() + north * e.cos();
+    let travel = -to_sun;
+    Vec3::new(travel.x as f32, travel.y as f32, travel.z as f32)
+}
+
+/// The relief light for the scripted descent target direction.
+#[must_use]
+pub fn relief_light(target_dir: DVec3) -> DirectionalLight {
+    DirectionalLight {
+        direction: sun_direction_for_target(target_dir),
+        color: [1.0, 0.97, 0.9],
+        intensity: LIGHT_INTENSITY,
+        ambient: [LIGHT_AMBIENT; 3],
+    }
+}
 
 /// Planet topology flown by the app.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -80,6 +169,9 @@ pub struct AppSettings {
     /// Compute the terrain churn counters (flicker diagnosis; default off, see
     /// `TerrainConfig::diagnostics`).
     pub diagnostics: bool,
+    /// Altitude-faded distance haze and sky colour (default on). Off keeps the scene fog and
+    /// clear colour at their defaults; the relief light is always set.
+    pub haze: bool,
 }
 
 impl AppSettings {
@@ -114,6 +206,7 @@ impl Default for AppSettings {
             perf: PerfSettings::default(),
             adaptive_streaming: false,
             diagnostics: false,
+            haze: true,
         }
     }
 }
@@ -244,6 +337,18 @@ pub struct PlanetaryApp {
     frames: u64,
     exit_after_frames: Option<u64>,
     adaptive_streaming: bool,
+    haze: bool,
+    light: DirectionalLight,
+}
+
+/// Direction of the point the sun is anchored to: the end of the descent script, or the end of
+/// the default descent when flying interactively.
+fn sun_target(script: Option<&DescentScript>, radius: f64) -> DVec3 {
+    let s = script
+        .copied()
+        .unwrap_or_else(|| DescentScript::orbit_to_surface(radius));
+    let (pos, _) = s.pose_at(s.descent_seconds, &|_| radius);
+    pos
 }
 
 impl PlanetaryApp {
@@ -301,6 +406,8 @@ impl PlanetaryApp {
             frames: 0,
             exit_after_frames: settings.perf.exit_after_frames,
             adaptive_streaming: settings.adaptive_streaming,
+            haze: settings.haze,
+            light: relief_light(sun_target(settings.script.as_ref(), radius)),
             script: settings.script,
             terrain,
             camera,
@@ -441,6 +548,12 @@ impl PlanetaryApp {
             .apply_to(&mut scene.camera, scene.frames.root(), alt)
         {
             tracing::warn!(error = %e, "camera pose rejected, keeping previous camera");
+        }
+        scene.light = self.light;
+        if self.haze {
+            let haze = haze_for_altitude(alt);
+            scene.fog = haze.fog;
+            scene.clear_color = haze.clear_color;
         }
     }
 }
@@ -593,5 +706,113 @@ impl App for PlanetaryApp {
         }
         self.frames += 1;
         result
+    }
+}
+
+#[cfg(test)]
+mod look_tests {
+    use super::*;
+
+    #[test]
+    fn haze_density_endpoints_and_monotone() {
+        assert_eq!(haze_for_altitude(HAZE_NONE_ALTITUDE).fog.density, 0.0);
+        assert_eq!(haze_for_altitude(1.0e9).fog.density, 0.0);
+        assert_eq!(
+            haze_for_altitude(HAZE_FULL_ALTITUDE).fog.density,
+            HAZE_DENSITY
+        );
+        assert_eq!(haze_for_altitude(0.0).fog.density, HAZE_DENSITY);
+        assert_eq!(haze_for_altitude(-50.0).fog.density, HAZE_DENSITY);
+        let mut last = f32::INFINITY;
+        let mut alt = -100.0;
+        while alt < 400_000.0 {
+            let d = haze_for_altitude(alt).fog.density;
+            assert!(
+                d.is_finite() && d >= 0.0 && d <= last,
+                "alt {alt}: {d} after {last}"
+            );
+            assert!(haze_for_altitude(alt).fog.validate().is_ok());
+            last = d;
+            alt += 997.0;
+        }
+        // Linear in between: halfway density is half.
+        let mid = 0.5 * (HAZE_FULL_ALTITUDE + HAZE_NONE_ALTITUDE);
+        let d = haze_for_altitude(mid).fog.density;
+        assert!((d - 0.5 * HAZE_DENSITY).abs() < 1e-9, "{d}");
+    }
+
+    #[test]
+    fn haze_is_nan_safe() {
+        for a in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let h = haze_for_altitude(a);
+            assert_eq!(h.fog.density, 0.0, "{a}");
+            assert_eq!(h.clear_color, SPACE_COLOR);
+            assert!(h.fog.validate().is_ok());
+        }
+    }
+
+    #[test]
+    fn clear_colour_is_sky_at_full_haze_and_space_at_none() {
+        let full = haze_for_altitude(0.0);
+        assert_eq!(full.clear_color[..3], SKY_COLOR);
+        assert_eq!(full.fog.color, SKY_COLOR);
+        let none = haze_for_altitude(HAZE_NONE_ALTITUDE);
+        assert_eq!(none.clear_color, SPACE_COLOR);
+        // The horizon fog colour equals the sky behind it at every altitude with haze.
+        for alt in [0.0, 30_000.0, 100_000.0, 190_000.0] {
+            let h = haze_for_altitude(alt);
+            let fade = h.fog.density / HAZE_DENSITY;
+            for k in 0..3 {
+                let want = SKY_COLOR[k] * fade + SPACE_COLOR[k] * (1.0 - fade);
+                assert!((h.clear_color[k] - want).abs() < 1e-6);
+            }
+        }
+    }
+
+    fn elevation_deg(target: DVec3) -> f64 {
+        let travel = sun_direction_for_target(target);
+        let to_sun = DVec3::new(
+            -f64::from(travel.x),
+            -f64::from(travel.y),
+            -f64::from(travel.z),
+        );
+        assert!((to_sun.length() - 1.0).abs() < 1e-6);
+        to_sun.dot(target.normalize()).asin().to_degrees()
+    }
+
+    #[test]
+    fn sun_stands_35_degrees_above_the_target_horizon() {
+        let script = DescentScript::orbit_to_surface(6_371_000.0);
+        let (end, _) = script.pose_at(script.descent_seconds, &|_| 6_371_000.0);
+        for t in [
+            end,
+            DVec3::new(1.0, 0.8, 0.6),
+            DVec3::new(-0.3, 0.9, 0.1),
+            DVec3::Y,
+            DVec3::NEG_Y,
+            DVec3::new(0.0, 0.0, -2.0),
+        ] {
+            let e = elevation_deg(t);
+            assert!((e - SUN_ELEVATION_DEG).abs() < 0.5, "{t:?}: {e}");
+            assert_eq!(sun_direction_for_target(t), sun_direction_for_target(t));
+        }
+    }
+
+    #[test]
+    fn degenerate_target_gives_the_default_direction() {
+        for t in [DVec3::ZERO, DVec3::new(f64::NAN, 0.0, 0.0)] {
+            assert_eq!(
+                sun_direction_for_target(t),
+                DirectionalLight::default().direction
+            );
+        }
+    }
+
+    #[test]
+    fn relief_light_is_valid() {
+        let l = relief_light(DVec3::new(1.0, 0.8, 0.6));
+        assert!(l.validate().is_ok());
+        assert_eq!(l.intensity, LIGHT_INTENSITY);
+        assert_eq!(l.ambient, [LIGHT_AMBIENT; 3]);
     }
 }

@@ -3,7 +3,11 @@
 use engine_sdk::{
     AppControl, DVec3, Engine, EngineConfig, InputEvent, KeyCode, NullBackend, Runtime,
 };
-use planetary_app::{AppSettings, DescentScript, PlanetaryApp, TopologyKind};
+use planetary_app::{
+    AppSettings, DescentScript, PlanetaryApp, TopologyKind, haze_for_altitude,
+    sun_direction_for_target,
+};
+use planetary_core::TerrainParams;
 
 const DT: f64 = 1.0 / 60.0;
 
@@ -121,6 +125,52 @@ fn invalid_hex_cells_per_edge_is_an_error() {
     }
 }
 
+fn frame_sets_light_fog_and_clear_colour(kind: TopologyKind) {
+    let mut app = PlanetaryApp::new(settings(kind, true)).expect("app");
+    let mut rt = runtime();
+    rt.setup(&mut app).expect("setup");
+    for _ in 0..3 {
+        rt.frame(&mut app, DT).expect("frame");
+    }
+    let alt = altitude(&app);
+    let want = haze_for_altitude(alt);
+    let scene = rt.scene();
+    assert_eq!(scene.fog, want.fog);
+    assert_eq!(scene.clear_color, want.clear_color);
+    let radius = TerrainParams::default().radius;
+    let target = DescentScript::orbit_to_surface(radius);
+    assert_eq!(
+        scene.light.direction,
+        sun_direction_for_target(
+            target
+                .pose_at(target.descent_seconds, &|_| radius)
+                .0
+                .normalize()
+        )
+    );
+    assert!(scene.light.validate().is_ok());
+    assert!(scene.fog.validate().is_ok());
+    app.shutdown();
+}
+
+fn haze_off_keeps_default_fog(kind: TopologyKind) {
+    let mut s = settings(kind, true);
+    s.haze = false;
+    let mut app = PlanetaryApp::new(s).expect("app");
+    let mut rt = runtime();
+    rt.setup(&mut app).expect("setup");
+    for _ in 0..3 {
+        rt.frame(&mut app, DT).expect("frame");
+    }
+    assert_eq!(rt.scene().fog, engine_sdk::DistanceFog::default());
+    assert_eq!(
+        rt.scene().clear_color,
+        engine_sdk::SceneState::new().clear_color
+    );
+    assert!(rt.scene().light.validate().is_ok());
+    app.shutdown();
+}
+
 macro_rules! both {
     ($($name:ident),*) => {
         mod hex {
@@ -139,5 +189,7 @@ both!(
     scripted_descent_loses_altitude,
     resize_is_accepted,
     escape_exits_unscripted_app,
-    holding_w_moves_the_camera
+    holding_w_moves_the_camera,
+    frame_sets_light_fog_and_clear_colour,
+    haze_off_keeps_default_fog
 );

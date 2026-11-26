@@ -21,7 +21,10 @@ pub use requests::{
 pub mod key;
 pub use key::{CellKey, PatchKey};
 pub mod palette;
-pub use palette::{DEBUG_PALETTE_H, PALETTE_H, PALETTE_W, debug_palette_rgba8, palette_rgba8};
+pub use palette::{
+    DEBUG_PALETTE_H, PALETTE_H, PALETTE_H_V2, PALETTE_W, debug_palette_rgba8, palette_rgba8,
+    palette_rgba8_v2,
+};
 pub mod source;
 pub use source::{CellSource, cell_payload_estimate};
 pub mod uploader;

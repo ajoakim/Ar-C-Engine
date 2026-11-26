@@ -234,3 +234,18 @@ fn adr_0014_vertex_morph_present() {
         require(f, &t, lit);
     }
 }
+
+#[test]
+fn adr_0015_scale_contrast_present() {
+    let f = "docs/architecture/adr/0015-scale-contrast-and-distance-haze.md";
+    let t = read(f);
+    for lit in [
+        "Status: accepted",
+        "generator_version",
+        "DistanceFog",
+        "PLAN-08",
+        "## Evidence",
+    ] {
+        require(f, &t, lit);
+    }
+}

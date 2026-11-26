@@ -22,7 +22,10 @@ use planetary_core::{MAX_LEVEL, PlanetTerrain, TerrainParams, Topology};
 use crate::churn::{ChurnFlags, ChurnTracker};
 use crate::effective::effective_cut;
 use crate::key::CellKey;
-use crate::palette::{DEBUG_PALETTE_H, PALETTE_H, PALETTE_W, debug_palette_rgba8, palette_rgba8};
+use crate::palette::{
+    DEBUG_PALETTE_H, PALETTE_H, PALETTE_H_V2, PALETTE_W, debug_palette_rgba8, palette_rgba8,
+    palette_rgba8_v2,
+};
 use crate::requests::{
     plan_requests_scored, priority_for_level, request_score, stale_requests, wanted_closure,
 };
@@ -206,12 +209,31 @@ impl<K, U: Uploader<K>> Uploader<K> for Budgeted<U> {
     }
 }
 
+/// Palette texture for a configuration: label, rows and RGBA8 bytes. The debug palette wins;
+/// otherwise generator v2 uses the 8-row dry-to-rock ramp palette, v1 the 4-row mask palette.
+pub(crate) fn palette_for(
+    terrain: &TerrainParams,
+    debug_cells: bool,
+) -> (&'static str, u32, Vec<u8>) {
+    if debug_cells {
+        (
+            "planet-debug-palette",
+            DEBUG_PALETTE_H,
+            debug_palette_rgba8(),
+        )
+    } else if terrain.generator_version >= 2 {
+        ("planet-palette-v2", PALETTE_H_V2, palette_rgba8_v2())
+    } else {
+        ("planet-palette", PALETTE_H, palette_rgba8())
+    }
+}
+
 impl Default for TerrainConfig {
     fn default() -> Self {
         Self {
             planet: 1,
             world_seed: DEMO_SEED,
-            terrain: TerrainParams::default(),
+            terrain: TerrainParams::demo_v2(),
             cells_per_edge: 32,
             lod: LodParams::default(),
             kappa: DEFAULT_KAPPA,
@@ -568,16 +590,8 @@ impl<T: Topology> TerrainSystem<T> {
         resources: &mut Resources<'_>,
         scene: &mut SceneState,
     ) -> Result<(), SdkError> {
-        let tex = if self.cfg.debug_cells {
-            resources.create_texture(
-                "planet-debug-palette",
-                PALETTE_W,
-                DEBUG_PALETTE_H,
-                &debug_palette_rgba8(),
-            )?
-        } else {
-            resources.create_texture("planet-palette", PALETTE_W, PALETTE_H, &palette_rgba8())?
-        };
+        let (label, rows, data) = palette_for(&self.cfg.terrain, self.cfg.debug_cells);
+        let tex = resources.create_texture(label, PALETTE_W, rows, &data)?;
         let mut lists: Vec<Vec<u32>> = vec![Vec::new(); self.shared.len()];
         for v in self.topo.index_variants() {
             lists[usize::from(v.vertex_class)].extend_from_slice(&v.indices);
@@ -1144,5 +1158,30 @@ impl<T: Topology> TerrainSystem<T> {
     /// Stops the worker pool.
     pub fn shutdown(self) {
         self.jobs.shutdown();
+    }
+}
+
+#[cfg(test)]
+mod palette_tests {
+    use super::*;
+
+    #[test]
+    fn default_config_is_generator_v2() {
+        assert_eq!(TerrainConfig::default().terrain.generator_version, 2);
+    }
+
+    #[test]
+    fn palette_follows_the_generator_version() {
+        let v2 = TerrainParams::demo_v2();
+        let v1 = TerrainParams::default();
+        let (_, rows, data) = palette_for(&v2, false);
+        assert_eq!((rows, data.len()), (8, (PALETTE_W * 8 * 4) as usize));
+        let (_, rows, data) = palette_for(&v1, false);
+        assert_eq!((rows, data.len()), (4, (PALETTE_W * 4 * 4) as usize));
+        // The debug palette wins for both versions.
+        for p in [&v1, &v2] {
+            let (_, rows, data) = palette_for(p, true);
+            assert_eq!((rows, data.len()), (16, (PALETTE_W * 16 * 4) as usize));
+        }
     }
 }
