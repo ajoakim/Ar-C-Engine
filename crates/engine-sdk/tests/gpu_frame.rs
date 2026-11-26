@@ -83,7 +83,10 @@ fn default_hook_is_noop() {
     let mut app = Plain;
     rt.setup(&mut app).unwrap();
     for _ in 0..3 {
-        assert_eq!(rt.frame(&mut app, 1.0 / 60.0).unwrap(), AppControl::Continue);
+        assert_eq!(
+            rt.frame(&mut app, 1.0 / 60.0).unwrap(),
+            AppControl::Continue
+        );
     }
     assert_eq!(rt.backend().buffer_count(), 0);
 }
