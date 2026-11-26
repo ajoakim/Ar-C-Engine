@@ -6,3 +6,5 @@
 
 pub mod camera;
 pub use camera::{CameraParams, PlanetaryCamera, TAN_HALF_FOV_Y};
+pub mod effective;
+pub use effective::{EffectiveCut, effective_cut, naive_cut};
