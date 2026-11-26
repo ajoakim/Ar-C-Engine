@@ -6,5 +6,18 @@
 //! `docs/architecture/dependency-direction.md`. Contains no planetary concepts:
 //! keys are opaque and only expose a stable asset id and an optional parent.
 
-pub use engine_assets::{AssetClass, AssetId, ClassBudget, ResidencyManager, ResidencyState};
+mod config;
+mod error;
+mod key;
+mod request;
+mod source;
+
+pub use config::{FrameReport, StreamConfig};
+pub use engine_assets::{
+    AssetClass, AssetError, AssetId, ClassBudget, MemoryPool, ResidencyManager, ResidencyState,
+};
 pub use engine_jobs::{CancelToken, JobSystem, Priority};
+pub use error::StreamError;
+pub use key::StreamKey;
+pub use request::StreamRequest;
+pub use source::{StreamSource, Uploader};
