@@ -47,3 +47,16 @@ fn facade_example_uses_only_sdk() {
         assert!(!ex.contains(bad), "example names {bad}");
     }
 }
+
+#[test]
+fn facade_reexports_building_blocks() {
+    let lib = read("src/lib.rs");
+    for needed in [
+        "pub use engine_world::",
+        "pub use engine_assets::",
+        "pub use engine_jobs::",
+    ] {
+        assert!(lib.contains(needed), "lib.rs missing {needed}");
+    }
+    assert!(read("src/app.rs").contains("create_lit_mesh"));
+}
