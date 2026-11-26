@@ -9,6 +9,7 @@
 mod config;
 mod error;
 mod key;
+mod manager;
 mod request;
 mod source;
 
@@ -19,5 +20,6 @@ pub use engine_assets::{
 pub use engine_jobs::{CancelToken, JobSystem, Priority};
 pub use error::StreamError;
 pub use key::StreamKey;
+pub use manager::StreamManager;
 pub use request::StreamRequest;
 pub use source::{StreamSource, Uploader};
