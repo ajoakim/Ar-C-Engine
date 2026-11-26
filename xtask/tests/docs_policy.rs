@@ -122,3 +122,21 @@ fn layer_table_matches_workspace() {
         }
     }
 }
+
+#[test]
+fn adr_0008_determinism_present() {
+    let f = "docs/architecture/adr/0008-deterministic-streaming-and-procedural-generation.md";
+    let t = read(f);
+    for lit in [
+        "Status: accepted",
+        "splitmix64",
+        "fnv1a64",
+        "HASH_VERSION",
+        "bit-exact",
+        "mul_add",
+        "QueueFull",
+        "not for security",
+    ] {
+        require(f, &t, lit);
+    }
+}

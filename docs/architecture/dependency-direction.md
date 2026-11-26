@@ -8,11 +8,13 @@ Dependencies flow downward only: a crate may depend only on crates of a strictly
 | `engine-diagnostics` | crates/engine-diagnostics | 0 | none |
 | `engine-core` | crates/engine-core | 1 | `engine-math`, `engine-diagnostics` |
 | `engine-jobs` | crates/engine-jobs | 1 | `engine-diagnostics` |
+| `engine-procedural` | crates/engine-procedural | 1 | `engine-math`, `engine-diagnostics` (currently none) |
 | `engine-platform` | crates/engine-platform | 2 | `engine-core` |
 | `engine-assets` | crates/engine-assets | 2 | `engine-core`, `engine-jobs` |
 | `engine-world` | crates/engine-world | 2 | `engine-core`, `engine-math` |
 | `engine-spatial` | crates/engine-spatial | 3 | `engine-math`, `engine-world` |
 | `engine-render` | crates/engine-render | 3 | `engine-core`, `engine-math`, `engine-world`, `engine-assets` |
+| `engine-streaming` | crates/engine-streaming | 3 | `engine-jobs`, `engine-assets`; dev-only: `engine-procedural` |
 | `engine-render-wgpu` | crates/engine-render-wgpu | 4 | `engine-render`, `engine-core` |
 | `engine-sdk` | crates/engine-sdk | 5 | all engine-* crates above |
 | `conventional-3d` | extensions/conventional-3d | 6 | `engine-sdk` |
@@ -37,6 +39,8 @@ Enforced by `cargo xtask check-deps`; the IDs below are the exact rule IDs it re
 ## Canary (PLAN-01)
 
 `cargo xtask check-canary` resolves the full (transitive) dependency graph of `conventional-3d` (normal, dev and build edges) and reports rule `canary-planetary-reachable` if any package named `planetary-*` or located under `extensions/planetary/` is reachable. The negative fixture `xtask/fixtures/canary-leak` (a transitive-only leak via `engine-sdk`) must fail. CI additionally deletes `extensions/planetary` and builds, tests and runs the app headless (ADR-0007).
+
+`engine-streaming` and `engine-procedural` are general-purpose core crates (Phase 6, ADR-0008); planetary key and generator implementations live in `extensions/planetary` and reach them only through `engine-sdk`.
 
 ## How to add a crate
 
@@ -65,6 +69,11 @@ graph TD
     engine-render --> engine-assets
     engine-render-wgpu --> engine-render
     engine-render-wgpu --> engine-core
+    engine-streaming --> engine-jobs
+    engine-streaming --> engine-assets
+    engine-streaming -.-> engine-procedural
+    engine-sdk --> engine-streaming
+    engine-sdk --> engine-procedural
     engine-sdk --> engine-platform
     engine-sdk --> engine-spatial
     engine-sdk --> engine-render

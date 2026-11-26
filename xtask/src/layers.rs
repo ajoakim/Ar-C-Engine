@@ -26,6 +26,10 @@ pub const LAYERS: &[Layer] = &[
         tier: 1,
     },
     Layer {
+        name: "engine-procedural",
+        tier: 1,
+    },
+    Layer {
         name: "engine-platform",
         tier: 2,
     },
@@ -43,6 +47,10 @@ pub const LAYERS: &[Layer] = &[
     },
     Layer {
         name: "engine-render",
+        tier: 3,
+    },
+    Layer {
+        name: "engine-streaming",
         tier: 3,
     },
     Layer {
