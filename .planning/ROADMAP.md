@@ -11,7 +11,8 @@ Build a small, stable Rust engine core and validate it with two reference apps. 
 - [x] **Phase 1: Workspace, Toolchain & Guardrails** - Pinned toolchain, coarse crate layout, CI boundary checks, ADR template and conventions (completed 2026-11-25)
 - [x] **Phase 2: Foundation (Core, Jobs, Diagnostics, Precision)** - Lifecycle, modules, job scheduler, diagnostics, WorldPos and origin rebasing (completed 2026-11-25)
 - [x] **Phase 3: Platform, Render Backend & Vertical Slice** - Window/input, engine-owned render boundary with wgpu and null backends, RenderScene extraction, triangle via SDK (completed 2026-11-26)
-- [x] **Phase 4: World, Spatial & Assets** - Entities and transforms, spatial queries, typed handles and residency state machine (completed 2026-11-26)
+- [x] **Phase 4: World, Spatial & Assets** - Entities and transforms, spatial queries, typed handles and residency state machine
+ (completed 2026-11-26)
 - [ ] **Phase 5: Conventional Reference App (Canary)** - Lit meshes, glTF, basic-scene app on SDK only, building without planetary crates
 - [ ] **Phase 6: Streaming & Procedural Framework** - Generic streaming with fallback, deterministic seeded generator layers
 - [ ] **Phase 7: Planetary Extension & Terrain LOD** - Cube-sphere, quadtree SSE LOD, crack-free transitions, planetary camera, planetary app
@@ -104,7 +105,19 @@ Plans:
   2. The app loads glTF meshes and textures from disk
   3. A user can fly a camera through the scene using only SDK APIs
   4. A CI job builds and runs the app with all planetary crates absent
-**Plans**: TBD
+**Plans**: 10 plans
+
+Plans:
+- [ ] 05-01-PLAN.md — Pin gltf/image, conventional-3d manifest, cargo-deny wrappers, ADR-0007
+- [ ] 05-02-PLAN.md — xtask check-canary (transitive closure) + canary-leak negative fixture + docs
+- [ ] 05-03-PLAN.md — engine-render contract: Material/MaterialTable/DirectionalLight/TextureDesc, PosNormalUv, index buffers, texture table, NullBackend
+- [ ] 05-04-PLAN.md — engine-render frame flow: material/light-aware extract with normal matrix, PipelineSet, lit packet validation
+- [ ] 05-05-PLAN.md — engine-render-wgpu lit textured pipeline, textures, index draws, readback, GPU tests (Arc B580)
+- [ ] 05-06-PLAN.md — engine-sdk surface: re-exports, create_lit_mesh/create_texture, materials/light, two-pipeline Runtime
+- [ ] 05-07-PLAN.md — conventional-3d bounded glTF/image import, procedural fallback, textured_cube.glb fixture
+- [ ] 05-08-PLAN.md — conventional-3d ModelLoader on JobSystem + AssetRegistry, FlyCamera
+- [ ] 05-09-PLAN.md — conventional-3d SceneBuilder, basic_scene example (windowed + --headless), SDK-only policy test
+- [ ] 05-10-PLAN.md — CI canary job + steps, full local CI run, GPU tests, human window check
 **UI hint**: yes
 
 ### Phase 6: Streaming & Procedural Framework
