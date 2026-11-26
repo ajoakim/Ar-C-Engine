@@ -14,7 +14,7 @@ pub use effective::{EffectiveCut, effective_cut, naive_cut};
 pub mod requests;
 pub use requests::{plan_requests, priority_for_level, stale_requests, wanted_closure};
 pub mod key;
-pub use key::PatchKey;
+pub use key::{CellKey, PatchKey};
 pub mod palette;
 pub use palette::{PALETTE_H, PALETTE_W, palette_rgba8};
 pub mod source;

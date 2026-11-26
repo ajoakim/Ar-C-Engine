@@ -29,7 +29,7 @@ pub struct GpuUploader<'r, 'a> {
 
 impl Uploader<PatchKey> for GpuUploader<'_, '_> {
     fn upload(&mut self, key: &PatchKey, data: &[u8]) -> bool {
-        let Ok(mesh) = decode_payload(data, key.id, self.cells_per_edge) else {
+        let Ok(mesh) = decode_payload(data, key.cell, self.cells_per_edge) else {
             // A corrupt payload must not retry forever; the system evicts it afterwards.
             self.rejected.push(key.clone());
             return true;
@@ -49,7 +49,7 @@ impl Uploader<PatchKey> for GpuUploader<'_, '_> {
                         max: mesh.height_max,
                     },
                 };
-                if let Some(old) = self.held.insert(key.id, held) {
+                if let Some(old) = self.held.insert(key.cell, held) {
                     let _ = self.resources.destroy_mesh(old.mesh);
                 }
                 true

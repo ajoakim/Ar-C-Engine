@@ -31,7 +31,7 @@ impl StreamSource<PatchKey> for PatchSource {
         if cancel.is_cancelled() {
             return None;
         }
-        build_patch_cancellable(&self.terrain, &self.model, key.id, &|| {
+        build_patch_cancellable(&self.terrain, &self.model, key.cell, &|| {
             cancel.is_cancelled()
         })
         .map(|m| encode_payload(&m))
