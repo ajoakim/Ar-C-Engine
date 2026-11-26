@@ -6,7 +6,8 @@ use planetary_core::lod::{
     patch_footprint,
 };
 use planetary_core::{
-    Face, PatchId, PlanetTerrain, TerrainParams, locate, patch_center_dir, vertex_dir,
+    CubeSphere, Face, HexSphere, PatchId, PlanetTerrain, TerrainParams, Topology, locate,
+    patch_center_dir, vertex_dir,
 };
 
 const SEED: u64 = 0x0007_5EED_2026_0002;
@@ -240,4 +241,104 @@ fn frustum_cases() {
     let mut bad = toward;
     bad[2][3] = f64::NAN;
     assert_eq!(view(eye).with_frustum(bad), view(eye));
+}
+
+// ---- generator v2 (ridge layer): the selection bounds must include the ridge term ----
+
+fn terrain_v2() -> PlanetTerrain {
+    PlanetTerrain::new(SEED, TerrainParams::demo_v2(), N).expect("terrain v2")
+}
+
+#[test]
+fn v2_global_range_contains_samples() {
+    let t = terrain_v2();
+    let m = LodModel::from_terrain(&t, DEFAULT_KAPPA);
+    assert!(m.height.max >= TerrainParams::demo_v2().max_relief() - 1e-9);
+    let mut rng = Rng(11);
+    let mut top = f64::NEG_INFINITY;
+    for _ in 0..20_000 {
+        let h = t.height_at_dir(rng.dir());
+        top = top.max(h);
+        assert!(h >= m.height.min && h <= m.height.max, "{h} {:?}", m.height);
+    }
+    // The ridge layer lifts terrain above the v1 ceiling somewhere on the sample.
+    assert!(top > 0.0);
+}
+
+#[test]
+fn v2_residual_bound_contains_fine_samples() {
+    let t = terrain_v2();
+    let m = LodModel::from_terrain(&t, DEFAULT_KAPPA);
+    let mut rng = Rng(12);
+    let fine = 4 * N;
+    for _ in 0..300 {
+        let id = rng.patch(2, 16);
+        let r = measured(&t, id);
+        let res = m.residual(id.level());
+        for j in (0..=fine).step_by(3) {
+            for i in (0..=fine).step_by(3) {
+                let h = t.height_at_dir(vertex_dir(id, fine, i, j));
+                assert!(
+                    h >= r.min - res && h <= r.max + res,
+                    "{id:?} h {h} range {r:?} res {res}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn v2_ranges_and_error_are_monotone() {
+    let t = terrain_v2();
+    let m = LodModel::from_terrain(&t, DEFAULT_KAPPA);
+    for l in 0..24u8 {
+        assert!(m.residual(l + 1) <= m.residual(l), "level {l}");
+    }
+    let v1 = LodModel::from_terrain(&terrain(), DEFAULT_KAPPA);
+    for l in 0..=24u8 {
+        assert!(m.residual(l) > v1.residual(l), "level {l}");
+    }
+}
+
+fn relief_bound_pairs(m: &LodModel, t: &PlanetTerrain, seed: u64) {
+    let mut rng = Rng(seed);
+    for level in 1..=12u8 {
+        let theta = m.sample_angle0 / f64::from(1u32 << level);
+        for _ in 0..2000 {
+            let p = rng.dir();
+            // A perpendicular unit vector, then rotate p by exactly theta towards it.
+            let mut u = rng.dir();
+            let dot = u.x * p.x + u.y * p.y + u.z * p.z;
+            u = DVec3::new(u.x - dot * p.x, u.y - dot * p.y, u.z - dot * p.z);
+            let l = (u.x * u.x + u.y * u.y + u.z * u.z).sqrt();
+            if l < 1e-6 {
+                continue;
+            }
+            let (s, c) = theta.sin_cos();
+            let q = DVec3::new(
+                p.x * c + u.x / l * s,
+                p.y * c + u.y / l * s,
+                p.z * c + u.z / l * s,
+            );
+            let dh = (t.height_at_dir(p) - t.height_at_dir(q)).abs();
+            assert!(
+                dh <= m.residual(level) + 1e-9,
+                "level {level}: |dh| {dh} > residual {}",
+                m.residual(level)
+            );
+        }
+    }
+}
+
+#[test]
+fn v2_relief_bound_over_direction_pairs_cube_and_hex() {
+    let t = terrain_v2();
+    let cube = LodModel::for_topology(&t, DEFAULT_KAPPA, CubeSphere::new(N).sample_angle0());
+    relief_bound_pairs(&cube, &t, 21);
+    let hex = LodModel::for_topology(
+        &t,
+        DEFAULT_KAPPA,
+        HexSphere::new(N).unwrap().sample_angle0(),
+    );
+    relief_bound_pairs(&hex, &t, 22);
 }

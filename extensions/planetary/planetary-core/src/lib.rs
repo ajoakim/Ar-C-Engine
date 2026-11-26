@@ -35,6 +35,6 @@ pub use topology::{CellMesh, IndexVariant, Piece, Topology, cube::CubeSphere};
 pub mod terrain;
 pub use terrain::{
     BASE_LAYER, BaseLayer, DETAIL_LAYER, DetailLayer, LAYER_VERSION, LayerSeeds, MASK_LAYER,
-    MaskLayer, PlanetTerrain, TerrainError, TerrainParams, TerrainSample, base_at, compose,
-    detail_at, mask_at,
+    MaskLayer, PlanetTerrain, RIDGE_LAYER, RIDGE_LAYER_VERSION, RidgeLayer, TerrainError,
+    TerrainParams, TerrainSample, base_at, compose, compose_v2, detail_at, mask_at, ridge_at,
 };

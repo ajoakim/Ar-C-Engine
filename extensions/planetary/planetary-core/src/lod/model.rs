@@ -89,7 +89,7 @@ impl LodModel {
     #[must_use]
     pub fn for_topology(t: &PlanetTerrain, kappa: f64, sample_angle0: f64) -> LodModel {
         let p = t.params();
-        let top = p.base_amplitude + p.detail_amplitude;
+        let top = p.max_relief();
         let height = HeightRange {
             min: p.sea_level,
             max: if top > p.sea_level { top } else { p.sea_level },
@@ -110,6 +110,15 @@ impl LodModel {
             model.residual[level] = 2.0 * p.base_amplitude * vb
                 + 2.0 * p.detail_amplitude * vd
                 + 0.75 * p.detail_amplitude * vm;
+            if p.generator_version >= 2 {
+                // Generator v2 adds `ridge_amplitude * r * r * w` (`w = 0.25 + 0.75 * mask`) and
+                // the detail term stays `detail * w`. `r = 1 - |2 f - 1|` is 2-Lipschitz in the
+                // fbm value `f`, and `r <= 1` makes `r * r` 4-Lipschitz, so the ridge shape
+                // varies by at most `4 V_r`. `w <= 1` and varies by `0.75 V_m`, with
+                // `r * r <= 1`: the product varies by at most `A_r * (4 V_r + 0.75 V_m)`.
+                let vr = fbm_variation(p.ridge_frequency, p.ridge_octaves, s);
+                model.residual[level] += p.ridge_amplitude * (4.0 * vr + 0.75 * vm);
+            }
         }
         model
     }

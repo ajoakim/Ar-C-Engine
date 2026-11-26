@@ -4,18 +4,26 @@ use engine_sdk::DVec3;
 use engine_sdk::procedural::{Fnv1a64, Generator, Params, StableId, canonical_bits, layer_seed};
 use planetary_core::{
     BASE_LAYER, BaseLayer, DETAIL_LAYER, Edge, Face, MASK_LAYER, PatchId, PlanetTerrain,
-    TerrainError, TerrainParams, base_at, detail_at, locate, mask_at, neighbor, vertex_dir,
+    RIDGE_LAYER, TerrainError, TerrainParams, base_at, compose, compose_v2, detail_at, locate,
+    mask_at, neighbor, ridge_at, vertex_dir,
 };
 
 const WORLD_SEED: u64 = 0x0007_5EED_2026_0001;
 const N: u32 = 8;
 
 // Windows x86_64; Linux/macOS pending hosted CI (ADR-0008). Never loosen; fix the drifting op.
-const GOLDEN_HEIGHTS: u64 = 0xf067_ef3f_b83f_bd54;
-const GOLDEN_DIRS: u64 = 0x3697_d55a_c59d_0aa2;
+const GOLDEN_HEIGHTS_V1: u64 = 0xf067_ef3f_b83f_bd54;
+const GOLDEN_DIRS_V1: u64 = 0x3697_d55a_c59d_0aa2;
+// Generator v2 (`TerrainParams::demo_v2()`), recorded with
+// `cargo test -p planetary-core --test generator golden -- --nocapture` (printed by the test).
+const GOLDEN_HEIGHTS_V2: u64 = 0x3096_1733_51c3_59fb;
 
 fn terrain() -> PlanetTerrain {
     PlanetTerrain::new(WORLD_SEED, TerrainParams::default(), N).unwrap()
+}
+
+fn terrain_v2() -> PlanetTerrain {
+    PlanetTerrain::new(WORLD_SEED, TerrainParams::demo_v2(), N).unwrap()
 }
 
 fn patches() -> [PatchId; 4] {
@@ -53,6 +61,84 @@ fn stack_equals_pure_function() {
             }
         }
     }
+}
+
+#[test]
+fn stack_equals_pure_function_v2() {
+    let t = terrain_v2();
+    let seeds = t.seeds();
+    let p = *t.params();
+    assert_eq!(seeds.ridge, layer_seed(WORLD_SEED, "planet.ridge", 2));
+    for id in patches() {
+        let out = t.stack().generate(StableId(id.raw()), &Params::new());
+        let ridge = out.layer(RIDGE_LAYER).unwrap();
+        let samples = t.patch_samples(id);
+        assert_eq!(samples.len(), ((N + 1) * (N + 1)) as usize);
+        for j in 0..=N {
+            for i in 0..=N {
+                let k = (j * (N + 1) + i) as usize;
+                let d = vertex_dir(id, N, i, j);
+                assert_eq!(ridge[k].to_bits(), ridge_at(seeds.ridge, &p, d).to_bits());
+                // The hex path samples pointwise; the cube path goes through the stack.
+                assert_eq!(samples[k].height.to_bits(), t.height_at_dir(d).to_bits());
+                assert_eq!(samples[k].height.to_bits(), t.sample(d).height.to_bits());
+            }
+        }
+    }
+}
+
+#[test]
+fn v1_has_no_ridge_layer_and_seed_zero() {
+    let t = terrain();
+    assert_eq!(t.seeds().ridge, 0);
+    let out = t
+        .stack()
+        .generate(StableId(patches()[0].raw()), &Params::new());
+    assert!(out.layer(RIDGE_LAYER).is_none());
+}
+
+#[test]
+fn v2_is_deterministic_and_seed_dependent() {
+    let a = terrain_v2();
+    let b = terrain_v2();
+    let other = PlanetTerrain::new(WORLD_SEED + 1, TerrainParams::demo_v2(), N).unwrap();
+    let mut differs = false;
+    for id in patches() {
+        assert_eq!(a.patch_samples(id), b.patch_samples(id));
+        differs |= a.patch_samples(id) != other.patch_samples(id);
+    }
+    assert!(differs);
+}
+
+#[test]
+fn v2_differs_from_v1_only_through_the_ridge_term() {
+    let v1 = terrain();
+    let v2 = terrain_v2();
+    let p = *v2.params();
+    let seeds = v2.seeds();
+    let mut changed = 0;
+    for id in patches() {
+        for j in 0..=N {
+            for i in 0..=N {
+                let d = vertex_dir(id, N, i, j);
+                let (a, b) = (v1.sample(d), v2.sample(d));
+                // Same mask and layer seeds; only the ridge term moves the height.
+                assert_eq!(a.mask.to_bits(), b.mask.to_bits());
+                if a.height.to_bits() != b.height.to_bits() {
+                    changed += 1;
+                }
+                // With the ridge term zero the v2 composition equals v1 bit for bit.
+                let base = base_at(seeds.base, &p, d);
+                let detail = detail_at(seeds.detail, &p, d);
+                let mask = mask_at(seeds.mask, &p, d);
+                assert_eq!(
+                    compose_v2(&p, base, detail, mask, 0.0).to_bits(),
+                    compose(&p, base, detail, mask).to_bits()
+                );
+            }
+        }
+    }
+    assert!(changed > 0, "the ridge layer must change some heights");
 }
 
 #[test]
@@ -179,6 +265,89 @@ fn validation_rejects_bad_input() {
     assert!(d.validate().is_ok());
 }
 
+#[test]
+fn validation_covers_generator_version_and_ridge_fields() {
+    let v2 = TerrainParams::demo_v2();
+    assert!(v2.validate().is_ok());
+    let bad = [
+        TerrainParams {
+            generator_version: 0,
+            ..v2
+        },
+        TerrainParams {
+            generator_version: 3,
+            ..v2
+        },
+        TerrainParams {
+            ridge_amplitude: 0.0,
+            ..v2
+        },
+        TerrainParams {
+            ridge_amplitude: -1.0,
+            ..v2
+        },
+        TerrainParams {
+            ridge_amplitude: f64::NAN,
+            ..v2
+        },
+        TerrainParams {
+            ridge_frequency: 0.0,
+            ..v2
+        },
+        TerrainParams {
+            ridge_octaves: 0,
+            ..v2
+        },
+        TerrainParams {
+            ridge_octaves: 25,
+            ..v2
+        },
+        TerrainParams {
+            ridge_frequency: 1e12,
+            ..v2
+        },
+    ];
+    for p in bad {
+        assert!(
+            matches!(
+                PlanetTerrain::new(1, p, N),
+                Err(TerrainError::InvalidParams(_))
+            ),
+            "{p:?}"
+        );
+    }
+    // Ridge fields are ignored for version 1.
+    let ignored = TerrainParams {
+        ridge_amplitude: -5.0,
+        ridge_frequency: 0.0,
+        ridge_octaves: 99,
+        ..TerrainParams::default()
+    };
+    assert!(ignored.validate().is_ok());
+}
+
+#[test]
+fn v2_heights_stay_within_max_relief() {
+    let t = terrain_v2();
+    let p = *t.params();
+    assert!(p.max_relief() > TerrainParams::default().max_relief());
+    let mut state = 0x1234_5678_9ABC_DEF1u64;
+    let mut next = || {
+        state = state
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        ((state >> 11) as f64) / 9_007_199_254_740_992.0 * 2.0 - 1.0
+    };
+    for _ in 0..10_000 {
+        let v = DVec3::new(next(), next(), next());
+        if v.length() < 1e-3 {
+            continue;
+        }
+        let h = t.sample(v.normalize()).height;
+        assert!(h >= p.sea_level && h <= p.max_relief());
+    }
+}
+
 /// Words hashed for one patch: id, then canonical height bits for all samples.
 fn height_words(t: &PlanetTerrain, id: PatchId) -> Vec<u64> {
     let mut w = vec![id.raw()];
@@ -230,16 +399,25 @@ where
     combine(parts)
 }
 
-#[test]
-fn goldens_match_at_1_and_4_threads() {
-    let t = terrain();
-    let h1 = run(1, |id| height_words(&t, id));
-    let h4 = run(4, |id| height_words(&t, id));
+fn check_goldens(t: &PlanetTerrain, name: &str, gh: u64, gd: u64) {
+    let h1 = run(1, |id| height_words(t, id));
+    let h4 = run(4, |id| height_words(t, id));
     let d1 = run(1, dir_words);
     let d4 = run(4, dir_words);
-    eprintln!("GOLDEN_HEIGHTS = {h1:#018x}; GOLDEN_DIRS = {d1:#018x}");
+    eprintln!("GOLDEN_HEIGHTS_{name} = {h1:#018x}; GOLDEN_DIRS_{name} = {d1:#018x}");
     assert_eq!(h1, h4, "heights differ between 1 and 4 threads");
     assert_eq!(d1, d4, "directions differ between 1 and 4 threads");
-    assert_eq!(h1, GOLDEN_HEIGHTS);
-    assert_eq!(d1, GOLDEN_DIRS);
+    assert_eq!(h1, gh);
+    assert_eq!(d1, gd);
+}
+
+#[test]
+fn goldens_match_at_1_and_4_threads_v1() {
+    check_goldens(&terrain(), "V1", GOLDEN_HEIGHTS_V1, GOLDEN_DIRS_V1);
+}
+
+#[test]
+fn goldens_match_at_1_and_4_threads_v2() {
+    // Directions do not depend on the generator version: the v1 constant applies.
+    check_goldens(&terrain_v2(), "V2", GOLDEN_HEIGHTS_V2, GOLDEN_DIRS_V1);
 }

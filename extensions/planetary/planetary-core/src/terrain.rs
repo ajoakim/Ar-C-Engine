@@ -18,6 +18,9 @@ pub const BASE_LAYER: &str = "planet.base";
 pub const DETAIL_LAYER: &str = "planet.detail";
 pub const MASK_LAYER: &str = "planet.mask";
 pub const LAYER_VERSION: u32 = 1;
+/// Ridged mid-scale mountain-range layer (generator version 2 only).
+pub const RIDGE_LAYER: &str = "planet.ridge";
+pub const RIDGE_LAYER_VERSION: u32 = 2;
 
 /// Terrain configuration (meters). See [`TerrainParams::validate`] for the accepted ranges.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -32,6 +35,12 @@ pub struct TerrainParams {
     pub detail_octaves: u32,
     pub mask_frequency: f64,
     pub mask_octaves: u32,
+    /// Generator version: 1 (base + detail + mask) or 2 (adds the ridge layer and surface v2).
+    pub generator_version: u32,
+    /// Ridge layer (generator version 2 only; ignored for version 1).
+    pub ridge_amplitude: f64,
+    pub ridge_frequency: f64,
+    pub ridge_octaves: u32,
 }
 
 impl Default for TerrainParams {
@@ -47,15 +56,33 @@ impl Default for TerrainParams {
             detail_octaves: 14,
             mask_frequency: 3.0,
             mask_octaves: 3,
+            generator_version: 1,
+            ridge_amplitude: 2500.0,
+            ridge_frequency: 12.0,
+            ridge_octaves: 5,
         }
     }
 }
 
 impl TerrainParams {
+    /// Generator version 2: the default parameters plus the ridge mountain-range layer
+    /// (amplitude 2500 m, frequency 12, 5 octaves: features of about 530 km down to 33 km).
+    #[must_use]
+    pub fn demo_v2() -> Self {
+        Self {
+            generator_version: 2,
+            ..Self::default()
+        }
+    }
+
     /// Upper bound of any height above the reference radius.
     #[must_use]
     pub fn max_relief(&self) -> f64 {
-        self.base_amplitude + self.detail_amplitude
+        if self.generator_version >= 2 {
+            self.base_amplitude + self.detail_amplitude + self.ridge_amplitude
+        } else {
+            self.base_amplitude + self.detail_amplitude
+        }
     }
 
     /// Rejects non-finite values, non-positive radius/frequencies/amplitudes, octave counts
@@ -80,11 +107,27 @@ impl TerrainParams {
         if self.base_amplitude < 0.0 || self.detail_amplitude < 0.0 {
             return Err(TerrainError::InvalidParams("amplitude must be >= 0"));
         }
-        let layers = [
+        if !(1..=2).contains(&self.generator_version) {
+            return Err(TerrainError::InvalidParams(
+                "generator_version must be 1 or 2",
+            ));
+        }
+        let mut layers = vec![
             (self.base_frequency, self.base_octaves),
             (self.detail_frequency, self.detail_octaves),
             (self.mask_frequency, self.mask_octaves),
         ];
+        if self.generator_version >= 2 {
+            if !self.ridge_amplitude.is_finite() || !self.ridge_frequency.is_finite() {
+                return Err(TerrainError::InvalidParams("non-finite parameter"));
+            }
+            if self.ridge_amplitude <= 0.0 {
+                return Err(TerrainError::InvalidParams(
+                    "ridge amplitude must be positive",
+                ));
+            }
+            layers.push((self.ridge_frequency, self.ridge_octaves));
+        }
         for (freq, octaves) in layers {
             if freq <= 0.0 {
                 return Err(TerrainError::InvalidParams("frequency must be positive"));
@@ -108,6 +151,8 @@ pub struct LayerSeeds {
     pub base: u64,
     pub detail: u64,
     pub mask: u64,
+    /// Ridge layer seed (0 for generator version 1).
+    pub ridge: u64,
 }
 
 /// Height (meters above the reference radius) and mask at one direction.
@@ -178,6 +223,29 @@ pub fn mask_at(seed: u64, p: &TerrainParams, d: DVec3) -> f64 {
     fbm_3d(seed, d.x * f, d.y * f, d.z * f, p.mask_octaves)
 }
 
+/// Ridge term before the amplitude: `r * r` with `r = 1 - |2 * fbm - 1|`, in `[0, 1]`.
+#[must_use]
+pub fn ridge_shape(seed: u64, p: &TerrainParams, d: DVec3) -> f64 {
+    let f = p.ridge_frequency;
+    let v = fbm_3d(seed, d.x * f, d.y * f, d.z * f, p.ridge_octaves);
+    let r = 1.0 - (2.0 * v - 1.0).abs();
+    r * r
+}
+
+/// `ridge_amplitude * r * r`; the mask weighting is applied in [`compose_v2`].
+#[must_use]
+pub fn ridge_at(seed: u64, p: &TerrainParams, d: DVec3) -> f64 {
+    p.ridge_amplitude * ridge_shape(seed, p, d)
+}
+
+/// Generator v2 composition: `(base + detail * w + ridge * w)` with `w = 0.25 + 0.75 * mask`,
+/// floored at sea level. `ridge` is the value returned by [`ridge_at`].
+#[must_use]
+pub fn compose_v2(p: &TerrainParams, base: f64, detail: f64, mask: f64, ridge: f64) -> f64 {
+    let w = 0.25 + 0.75 * mask;
+    (base + detail * w + ridge * w).max(p.sea_level)
+}
+
 /// Combines the layers: `(base + detail * (0.25 + 0.75 * mask))`, floored at sea level.
 #[must_use]
 pub fn compose(p: &TerrainParams, base: f64, detail: f64, mask: f64) -> f64 {
@@ -192,10 +260,13 @@ impl PlanetTerrain {
         let base = base_at(self.seeds.base, p, d);
         let detail = detail_at(self.seeds.detail, p, d);
         let mask = mask_at(self.seeds.mask, p, d);
-        TerrainSample {
-            height: compose(p, base, detail, mask),
-            mask,
-        }
+        let height = if p.generator_version >= 2 {
+            let ridge = ridge_at(self.seeds.ridge, p, d);
+            compose_v2(p, base, detail, mask, ridge)
+        } else {
+            compose(p, base, detail, mask)
+        };
+        TerrainSample { height, mask }
     }
 
     /// Pure terrain height at unit direction `d`.
@@ -309,6 +380,31 @@ impl Generator for MaskLayer {
     }
 }
 
+/// Ridged mountain-range layer (generator version 2), one value per patch vertex.
+///
+/// Configured by its immutable fields; the runtime `Params` argument is ignored.
+#[derive(Clone, Copy, Debug)]
+pub struct RidgeLayer {
+    pub params: TerrainParams,
+    pub cells_per_edge: u32,
+}
+
+impl Generator for RidgeLayer {
+    fn name(&self) -> &'static str {
+        RIDGE_LAYER
+    }
+    fn version(&self) -> u32 {
+        RIDGE_LAYER_VERSION
+    }
+    fn output_len(&self) -> usize {
+        layer_len(self.cells_per_edge)
+    }
+    fn generate(&self, id: StableId, seed: u64, _params: &Params, out: &mut [f64]) {
+        let p = self.params;
+        fill_patch(id.0, self.cells_per_edge, out, |d| ridge_at(seed, &p, d));
+    }
+}
+
 /// A configured planet: parameters, derived layer seeds and the generator stack.
 pub struct PlanetTerrain {
     params: TerrainParams,
@@ -327,7 +423,7 @@ impl PlanetTerrain {
         if !is_valid_cells_per_edge(cells_per_edge) {
             return Err(TerrainError::CellsPerEdge(cells_per_edge));
         }
-        let stack = LayerStack::new(world_seed)
+        let mut stack = LayerStack::new(world_seed)
             .with_layer(Box::new(BaseLayer {
                 params,
                 cells_per_edge,
@@ -340,10 +436,22 @@ impl PlanetTerrain {
                 params,
                 cells_per_edge,
             }))?;
+        let v2 = params.generator_version >= 2;
+        if v2 {
+            stack = stack.with_layer(Box::new(RidgeLayer {
+                params,
+                cells_per_edge,
+            }))?;
+        }
         let seeds = LayerSeeds {
             base: layer_seed(world_seed, BASE_LAYER, LAYER_VERSION),
             detail: layer_seed(world_seed, DETAIL_LAYER, LAYER_VERSION),
             mask: layer_seed(world_seed, MASK_LAYER, LAYER_VERSION),
+            ridge: if v2 {
+                layer_seed(world_seed, RIDGE_LAYER, RIDGE_LAYER_VERSION)
+            } else {
+                0
+            },
         };
         Ok(Self {
             params,
@@ -384,6 +492,21 @@ impl PlanetTerrain {
         ) else {
             return Vec::new();
         };
+        if self.params.generator_version >= 2 {
+            let Some(r) = out.layer(RIDGE_LAYER) else {
+                return Vec::new();
+            };
+            return b
+                .iter()
+                .zip(d)
+                .zip(m)
+                .zip(r)
+                .map(|(((&base, &detail), &mask), &ridge)| TerrainSample {
+                    height: compose_v2(&self.params, base, detail, mask, ridge),
+                    mask,
+                })
+                .collect();
+        }
         b.iter()
             .zip(d)
             .zip(m)
