@@ -27,6 +27,21 @@ impl DescentScript {
         }
     }
 
+    /// Fast free-flight descent: from orbit to 10 m above the surface in a third of the time of
+    /// [`DescentScript::orbit_to_surface`], with more lateral travel and a shallower pitch.
+    /// Pure function of time like the other scripts.
+    #[must_use]
+    pub fn fast_free_flight(radius: f64) -> Self {
+        let d = Self::orbit_to_surface(radius);
+        Self {
+            end_altitude: 10.0,
+            descent_seconds: d.descent_seconds / 3.0,
+            lateral_radians: 0.6,
+            pitch_down_radians: 0.35,
+            ..d
+        }
+    }
+
     /// Scripted ascent from the surface back to orbit.
     ///
     /// Starts at the direction where [`DescentScript::orbit_to_surface`] ends (its start
@@ -123,6 +138,18 @@ mod tests {
         assert!(p1.length() < p0.length());
         assert!((p2.length() - 1003.0).abs() < 1e-6);
         assert_eq!(s.pose_at(4.0, &sphere), s.pose_at(4.0, &sphere));
+    }
+
+    #[test]
+    fn fast_free_flight_is_faster_and_pure() {
+        let o = DescentScript::orbit_to_surface(1000.0);
+        let s = DescentScript::fast_free_flight(1000.0);
+        assert!(s.descent_seconds <= o.descent_seconds / 3.0 + 1e-12);
+        let (p0, _) = s.pose_at(0.0, &sphere);
+        let (p2, _) = s.pose_at(100.0, &sphere);
+        assert!((p0.length() - 2000.0).abs() < 1e-6);
+        assert!((p2.length() - 1010.0).abs() < 1e-6);
+        assert_eq!(s.pose_at(1.0, &sphere), s.pose_at(1.0, &sphere));
     }
 
     #[test]

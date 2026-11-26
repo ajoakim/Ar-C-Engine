@@ -14,6 +14,14 @@
 //! `--bench-descent` runs the scripted descent headless at the production defaults and prints
 //! per-altitude-band frame-time statistics with PASS/FAIL against `--budget-ms` (default 16.7).
 //!
+//! `--bench-stream` runs the windowed-realistic streaming harness headless: workers run freely
+//! (no settle unless `--settle`), the script advances by a simulated 1/30 s per frame, and each
+//! frame is paced by `--frame-ms` (default 33) of real time spent spinning so workers get the
+//! time a window frame would give them. `--fast` uses the fast free-flight descent instead of
+//! the scripted one. `--frames <n>` bounds the run (default descent frames plus 300 hover);
+//! `--out` writes the per-frame CSV. It prints lag at the camera, frames-to-detail and the
+//! upload-versus-demand throughput ratio.
+//!
 //! Use `cargo run --release -p planetary-app --example planetary_flight -- --descent` for
 //! flights; debug builds are several times slower.
 #![allow(clippy::result_large_err)]
@@ -21,11 +29,13 @@
 use engine_sdk::{
     AppConfig, Engine, EngineConfig, NullBackend, Runtime, SdkError, WindowConfig, run_app,
 };
+use planetary_app::stream_bench::{analyze, csv, report_text, run_stream};
 use planetary_app::{
-    ALTITUDE_BANDS, AppSettings, DescentScript, PlanetaryApp, WallClock, band_of, summarize,
+    ALTITUDE_BANDS, AppSettings, DescentScript, PlanetaryApp, WallClock, band_of, spin_for_ms,
+    summarize,
 };
 
-const USAGE: &str = "usage: planetary_flight [--headless <frames>] [--descent] [--ascent] [--frames <n>] [--perf-log <file.csv>] [--no-console] [--bench-descent] [--budget-ms <ms>] [--strict]";
+const USAGE: &str = "usage: planetary_flight [--headless <frames>] [--descent] [--ascent] [--frames <n>] [--perf-log <file.csv>] [--no-console] [--bench-descent] [--budget-ms <ms>] [--strict] [--bench-stream] [--fast] [--settle] [--frame-ms <ms>] [--out <file.csv>]";
 
 #[derive(Default, Clone, Copy)]
 struct BandMax {
@@ -112,6 +122,66 @@ fn bench(mut settings: AppSettings, n: u64, budget: f64, strict: bool) -> Result
     Ok(())
 }
 
+struct StreamOpts {
+    fast: bool,
+    settle: bool,
+    frame_ms: f64,
+    out: Option<std::path::PathBuf>,
+}
+
+fn bench_stream(
+    mut settings: AppSettings,
+    frames: Option<u64>,
+    o: &StreamOpts,
+) -> Result<(), SdkError> {
+    const DT: f64 = 1.0 / 30.0;
+    let r = settings.terrain.terrain.radius;
+    let script = if o.fast {
+        DescentScript::fast_free_flight(r)
+    } else {
+        DescentScript::orbit_to_surface(r)
+    };
+    settings.script = Some(script);
+    settings.terrain.settle_each_frame = o.settle;
+    settings.perf.exit_after_frames = None;
+    settings.perf.console_summary = false;
+    settings.perf.csv_path = None;
+    let n = frames.unwrap_or_else(|| (script.descent_seconds / DT).ceil() as u64 + 300);
+    let pace_ms = o.frame_ms;
+    let run = run_stream(settings, Box::new(WallClock::new()), n, DT, &mut || {
+        spin_for_ms(pace_ms)
+    })?;
+    let m = analyze(&run);
+    println!(
+        "build: {}",
+        if cfg!(debug_assertions) {
+            "debug"
+        } else {
+            "release"
+        }
+    );
+    let label = format!(
+        "{} descent, {}, {} ms/frame paced, {} frames",
+        if o.fast {
+            "fast free-flight"
+        } else {
+            "scripted"
+        },
+        if o.settle {
+            "settle (control)"
+        } else {
+            "async workers"
+        },
+        o.frame_ms,
+        n
+    );
+    print!("{}", report_text(&label, &m));
+    if let Some(path) = &o.out {
+        std::fs::write(path, csv(&run)).map_err(|e| SdkError::App(format!("write csv: {e}")))?;
+    }
+    Ok(())
+}
+
 fn main() -> Result<(), SdkError> {
     let mut headless: Option<u32> = None;
     let mut descent = false;
@@ -122,6 +192,13 @@ fn main() -> Result<(), SdkError> {
     let mut bench_descent = false;
     let mut budget = 16.7_f64;
     let mut strict = false;
+    let mut bench_stream_flag = false;
+    let mut so = StreamOpts {
+        fast: false,
+        settle: false,
+        frame_ms: 33.0,
+        out: None,
+    };
     let usage = || SdkError::App(USAGE.into());
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -154,6 +231,17 @@ fn main() -> Result<(), SdkError> {
                 budget = v;
             }
             "--strict" => strict = true,
+            "--bench-stream" => bench_stream_flag = true,
+            "--fast" => so.fast = true,
+            "--settle" => so.settle = true,
+            "--frame-ms" => {
+                so.frame_ms = args
+                    .next()
+                    .and_then(|v| v.parse::<f64>().ok())
+                    .filter(|v| v.is_finite() && *v >= 0.0)
+                    .ok_or_else(usage)?;
+            }
+            "--out" => so.out = Some(args.next().ok_or_else(usage)?.into()),
             _ => return Err(usage()),
         }
     }
@@ -170,6 +258,10 @@ fn main() -> Result<(), SdkError> {
         settings.script = Some(DescentScript::surface_to_orbit(
             settings.terrain.terrain.radius,
         ));
+    }
+
+    if bench_stream_flag {
+        return bench_stream(settings, frames, &so);
     }
 
     if bench_descent {

@@ -5,6 +5,7 @@
 //! Engine crates under crates/ must never depend on this crate.
 
 pub mod descent;
+pub mod stream_bench;
 pub mod telemetry;
 
 use engine_sdk::tracing;
@@ -18,7 +19,7 @@ use planetary_terrain::{
 pub use descent::DescentScript;
 pub use telemetry::{
     ALTITUDE_BANDS, Clock, FrameSample, PerfSettings, PerfSummary, SimClock, Telemetry, WallClock,
-    band_of, summarize,
+    band_of, spin_for_ms, summarize,
 };
 
 /// Planetary app settings.

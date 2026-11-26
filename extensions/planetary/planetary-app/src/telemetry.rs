@@ -41,6 +41,16 @@ impl Clock for WallClock {
     }
 }
 
+/// Spins (yielding the thread, no sleep) until `ms` real milliseconds have passed. Used by the
+/// example to give worker threads a realistic real-time slice per simulated frame (the windowed
+/// run is present-bound at about 31 ms per frame). Wall-clock use stays in this module.
+pub fn spin_for_ms(ms: f64) {
+    let start = std::time::Instant::now();
+    while start.elapsed().as_secs_f64() * 1000.0 < ms {
+        std::thread::yield_now();
+    }
+}
+
 /// Deterministic clock advancing a fixed step per read.
 pub struct SimClock {
     t_ns: u64,
