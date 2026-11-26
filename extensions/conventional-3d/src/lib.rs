@@ -8,11 +8,13 @@
 #![allow(clippy::result_large_err)]
 
 mod error;
+pub mod fly_camera;
 pub mod import;
 pub mod loader;
 pub mod procedural;
 
 pub use error::ImportError;
+pub use fly_camera::FlyCamera;
 pub use import::{
     ImportLimits, ImportedMaterial, ImportedMesh, ImportedModel, ImportedNode, ImportedTexture,
     decode_image, import_gltf_path, import_gltf_path_with, import_gltf_slice,
