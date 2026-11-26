@@ -656,3 +656,371 @@ fn hex_f32_reconstruction_within_tolerance() {
     }
     eprintln!("hex f32 reconstruction: max error / bound = {worst:.6} (bound < skirt depth)");
 }
+
+// ------------------------------------------------------------------------ morph target seams
+
+mod morph_seams {
+    use super::*;
+    use planetary_core::hex::mesh::{hex_morph_targets_f64, hex_morph_targets_with_parents_f64};
+    use planetary_core::morph::MorphTargets;
+
+    /// Same-level border agreement tolerance (1e-9 m, the plan value).
+    const SAME_LEVEL_M: f64 = 1e-9;
+    /// Distance of a fine border target from the coarse border polyline (a few f64 ulps).
+    const ON_COARSE_BORDER_M: f64 = 2e-9;
+
+    fn per(n: u32) -> u32 {
+        (n + 1) * (n + 2) / 2
+    }
+
+    /// Grid index of `(sector, s, t)` (the mesh vertex layout).
+    fn gi(n: u32, k: u32, s: u32, t: u32) -> usize {
+        (k * per(n) + s * (n + 1) - s * s.saturating_sub(1) / 2 + t) as usize
+    }
+
+    fn outer(n: u32, k: u32, j: u32) -> usize {
+        gi(n, k, n - j, j)
+    }
+
+    /// Grid `(sector, s, t)` of diagonal `d`, vertex `j` (`0..=2n`).
+    fn diag_grid(n: u32, d: u32, j: u32) -> (u32, u32, u32) {
+        if j <= n {
+            (d, n - j, 0)
+        } else {
+            (d + 3, j - n, 0)
+        }
+    }
+
+    fn outer_skirt(n: u32, sectors: u32, k: u32, j: u32) -> usize {
+        (sectors * per(n) + k * (n + 1) + j) as usize
+    }
+
+    fn diag_skirt(n: u32, sectors: u32, d: u32, j: u32) -> usize {
+        (sectors * (per(n) + n + 1) + d * (2 * n + 1) + j) as usize
+    }
+
+    fn targets(t: &PlanetTerrain, m: &LodModel, c: CellId) -> MorphTargets {
+        hex_morph_targets_f64(c, t, m).expect("targets")
+    }
+
+    /// Largest position and uv difference between the outer-edge targets of `a` (sector `ka`) and
+    /// `b` (sector `kb`), which run in opposite directions.
+    fn border_diff(n: u32, a: &MorphTargets, ka: u32, b: &MorphTargets, kb: u32) -> (f64, f64) {
+        let (mut dp, mut du) = (0.0f64, 0.0f64);
+        for j in 0..=n {
+            let (ga, gb) = (outer(n, ka, j), outer(n, kb, n - j));
+            dp = dp.max(dist(a.position[ga], b.position[gb]));
+            for q in 0..2 {
+                du = du.max((f64::from(a.uv[ga][q]) - f64::from(b.uv[gb][q])).abs());
+            }
+        }
+        (dp, du)
+    }
+
+    #[test]
+    fn same_level_border_targets_agree() {
+        let n = 4;
+        let t = terrain(n);
+        let m = model(&t);
+        let (mut worst_p, mut worst_u, mut pairs, mut pent) = (0.0f64, 0.0f64, 0u64, 0u64);
+        let mut worst_cell = None;
+        for level in 1..=3u8 {
+            let mut all: BTreeMap<CellId, MorphTargets> = BTreeMap::new();
+            let mut rings: BTreeMap<CellId, Vec<CellId>> = BTreeMap::new();
+            for c in CellId::level_iter(level) {
+                all.insert(c, targets(&t, &m, c));
+                rings.insert(c, ring(c));
+            }
+            for c in CellId::level_iter(level) {
+                for (k, x) in rings[&c].iter().enumerate() {
+                    let mm = rings[x].iter().position(|y| *y == c).expect("reciprocal");
+                    let (dp, du) = border_diff(n, &all[&c], k as u32, &all[x], mm as u32);
+                    if dp > worst_p {
+                        worst_cell = Some((c, *x, dp));
+                    }
+                    worst_p = worst_p.max(dp);
+                    worst_u = worst_u.max(du);
+                    pairs += 1;
+                    if is_pentagon(c) || is_pentagon(*x) {
+                        pent += 1;
+                    }
+                }
+            }
+        }
+        eprintln!(
+            "hex morph same-level border pairs: {pairs} (pentagon-adjacent {pent}), worst position difference {worst_p:.3e} m, worst uv difference {worst_u:.3e}, worst pair {worst_cell:?}"
+        );
+        assert!(
+            worst_p <= SAME_LEVEL_M,
+            "border targets differ by {worst_p} m"
+        );
+        assert!(worst_u <= 1e-9, "border uvs differ by {worst_u}");
+    }
+
+    /// Diagonal `d` of the edge child `c` whose targets all lie on the shared border of its two
+    /// parents, with the worst distance to that border (None when no diagonal does).
+    fn shared_diagonal(
+        t: &PlanetTerrain,
+        c: CellId,
+        n: u32,
+        tg: &MorphTargets,
+    ) -> Option<(u32, f64, Vec<CellId>)> {
+        let mut ps = Vec::new();
+        parents(c, &mut ps);
+        if ps.len() != 2 {
+            return None;
+        }
+        let (p, q) = (ps[0], ps[1]);
+        let rp = ring(p);
+        let k = rp.iter().position(|x| *x == q)? as u8;
+        let poly = outer_edge(t, p, n, k);
+        let mut found: Vec<(u32, f64)> = Vec::new();
+        for d in 0..3u32 {
+            let mut worst = 0.0f64;
+            for j in 0..=2 * n {
+                let (kk, s, tt) = diag_grid(n, d, j);
+                let pos = tg.position[gi(n, kk, s, tt)];
+                let dd = (0..poly.len() - 1)
+                    .map(|i| dist_to_segment(pos, poly[i], poly[i + 1]))
+                    .fold(f64::INFINITY, f64::min);
+                worst = worst.max(dd);
+            }
+            // 1 m: far below the distance of the other two diagonals (kilometres).
+            if worst < 1.0 {
+                found.push((d, worst));
+            }
+        }
+        assert!(
+            found.len() <= 1,
+            "{c:?}: more than one diagonal on the border"
+        );
+        found.first().map(|f| (f.0, f.1, ps))
+    }
+
+    #[test]
+    fn edge_child_diagonal_targets_lie_on_the_shared_parent_border() {
+        let n = 4;
+        let t = terrain(n);
+        let m = model(&t);
+        let (mut worst, mut cells, mut missing) = (0.0f64, 0u32, 0u32);
+        let (mut worst_ratio, mut pent_parent) = (0.0f64, 0u32);
+        for level in 2..=4u8 {
+            let mut s = splitmix64(0xD1A6 ^ u64::from(level));
+            let count = if level == 4 { 60 } else { 40 };
+            for _ in 0..count {
+                let c = seeded_hex_at(level, &mut s);
+                let mut ps = Vec::new();
+                parents(c, &mut ps);
+                if ps.len() != 2 {
+                    continue;
+                }
+                let tg = targets(&t, &m, c);
+                match shared_diagonal(&t, c, n, &tg) {
+                    Some((d, w, ps)) => {
+                        assert!(
+                            w <= ON_COARSE_BORDER_M,
+                            "{c:?}: diagonal {d} target {w} m off the shared border"
+                        );
+                        worst = worst.max(w);
+                        // Displacement of the half-cell border against the skirt depth.
+                        let depth = hex_skirt_depth(&m, level);
+                        let mesh = build_hex_cell(c, &t, &m, false, &|| false).expect("mesh");
+                        let _ = mesh;
+                        for j in 0..=2 * n {
+                            let (kk, ss, tt) = diag_grid(n, d, j);
+                            let pos = hex_vertex_position_f64(&t, c, n, kk as u8, ss, tt);
+                            let disp = dist(tg.position[gi(n, kk, ss, tt)], pos);
+                            assert!(
+                                disp < depth,
+                                "{c:?}: half-border displacement {disp} >= {depth}"
+                            );
+                            worst_ratio = worst_ratio.max(disp / depth);
+                        }
+                        if ps.iter().any(|p| is_pentagon(*p)) {
+                            pent_parent += 1;
+                        }
+                        cells += 1;
+                    }
+                    None => missing += 1,
+                }
+            }
+        }
+        eprintln!(
+            "hex morph half-cell diagonals: {cells} edge children, worst distance to the shared parent border {worst:.3e} m, worst half-border displacement / skirt depth {worst_ratio:.4}, pentagon parents {pent_parent}, no matching diagonal {missing}"
+        );
+        assert!(cells >= 40);
+        assert_eq!(
+            missing, 0,
+            "every edge child has exactly one diagonal on the border"
+        );
+    }
+
+    #[test]
+    fn outer_border_displacement_is_below_the_skirt_depth() {
+        let n = 4;
+        let t = terrain(n);
+        let m = model(&t);
+        let (mut worst_ratio, mut cells) = (0.0f64, 0u32);
+        for level in 1..=4u8 {
+            let mut s = splitmix64(0xB0D4 ^ u64::from(level));
+            for _ in 0..30 {
+                let c = seeded_hex_at(level, &mut s);
+                let tg = targets(&t, &m, c);
+                let depth = hex_skirt_depth(&m, level);
+                let sectors = u32::from(CellFrame::new(c, n).sectors());
+                for k in 0..sectors {
+                    for j in 0..=n {
+                        let pos = hex_vertex_position_f64(&t, c, n, k as u8, n - j, j);
+                        let disp = dist(tg.position[outer(n, k, j)], pos);
+                        assert!(disp < depth, "{c:?}: border displacement {disp} >= {depth}");
+                        worst_ratio = worst_ratio.max(disp / depth);
+                    }
+                }
+                cells += 1;
+            }
+        }
+        eprintln!(
+            "hex morph outer-border displacement / skirt depth: worst {worst_ratio:.4} over {cells} cells"
+        );
+    }
+
+    /// Skirt targets equal the border target minus `dir * depth`; false when any differs.
+    fn skirts_consistent(
+        t: &PlanetTerrain,
+        c: CellId,
+        n: u32,
+        depth: f64,
+        tg: &MorphTargets,
+    ) -> bool {
+        let sectors = u32::from(CellFrame::new(c, n).sectors());
+        let dir = |k: u32, s: u32, tt: u32| {
+            planetary_core::hex::sample_dir(cell_sample_point(c, n, k as u8, s, tt))
+        };
+        let _ = t;
+        let want = |g: usize, d: DVec3| {
+            let b = tg.position[g];
+            DVec3::new(b.x - d.x * depth, b.y - d.y * depth, b.z - d.z * depth)
+        };
+        for k in 0..sectors {
+            for j in 0..=n {
+                let d = dir(k, n - j, j);
+                if tg.position[outer_skirt(n, sectors, k, j)] != want(outer(n, k, j), d) {
+                    return false;
+                }
+            }
+        }
+        if sectors == 6 {
+            for dg in 0..3u32 {
+                for j in 0..=2 * n {
+                    let (k, s, tt) = diag_grid(n, dg, j);
+                    let d = dir(k, s, tt);
+                    if tg.position[diag_skirt(n, sectors, dg, j)] != want(gi(n, k, s, tt), d) {
+                        return false;
+                    }
+                }
+            }
+        }
+        true
+    }
+
+    #[test]
+    fn swapping_the_primary_parent_changes_nothing() {
+        // Shared vertices lie in both parents and take the canonical chord; vertices in one
+        // parent are found only there: the search order must not matter.
+        let n = 4;
+        let t = terrain(n);
+        let m = model(&t);
+        let mut checked = 0u32;
+        let mut s = splitmix64(0x5A7);
+        for _ in 0..40 {
+            let c = seeded_hex_at(3, &mut s);
+            let mut ps = Vec::new();
+            parents(c, &mut ps);
+            if ps.len() != 2 {
+                continue;
+            }
+            let a = targets(&t, &m, c);
+            let rev = [ps[1], ps[0]];
+            let b = hex_morph_targets_with_parents_f64(c, &t, &m, &rev).expect("targets");
+            let worst = a
+                .position
+                .iter()
+                .zip(&b.position)
+                .map(|(x, y)| dist(*x, *y))
+                .fold(0.0f64, f64::max);
+            assert!(
+                worst <= 1e-6,
+                "{c:?}: swapped parent order moves a target by {worst} m"
+            );
+            checked += 1;
+        }
+        eprintln!("hex morph swapped parent order: {checked} edge children identical");
+        assert!(checked >= 10);
+    }
+
+    #[test]
+    fn negative_controls_are_detected() {
+        let n = 4;
+        let t = terrain(n);
+        let m = model(&t);
+        let c = CellId::new(3, 3, 2, 5).expect("cell");
+        let r = ring(c);
+        let x = r[2];
+        let mm = ring(x).iter().position(|y| *y == c).expect("reciprocal") as u32;
+        let a = targets(&t, &m, c);
+        let b = targets(&t, &m, x);
+        // Control 0: the unperturbed pair passes.
+        let (dp, _) = border_diff(n, &a, 2, &b, mm);
+        assert!(dp <= SAME_LEVEL_M, "baseline {dp}");
+        let depth = hex_skirt_depth(&m, c.level());
+        assert!(skirts_consistent(&t, c, n, depth, &a));
+
+        // Control 1: perturb one border morph_position by 1 mm.
+        let mut bad = b.clone();
+        bad.position[outer(n, mm, 2)].x += 1e-3;
+        let (dp, _) = border_diff(n, &a, 2, &bad, mm);
+        assert!(
+            dp > SAME_LEVEL_M,
+            "a 1 mm perturbation must be detected, got {dp}"
+        );
+
+        // Control 2: shift one skirt target by +1 m.
+        let sectors = u32::from(CellFrame::new(c, n).sectors());
+        let mut bad = a.clone();
+        bad.position[outer_skirt(n, sectors, 1, 2)].z += 1.0;
+        assert!(
+            !skirts_consistent(&t, c, n, depth, &bad),
+            "a 1 m skirt shift must be detected"
+        );
+        let mut bad = a.clone();
+        bad.position[diag_skirt(n, sectors, 1, 3)].z += 1.0;
+        assert!(
+            !skirts_consistent(&t, c, n, depth, &bad),
+            "a 1 m diagonal skirt shift must be detected"
+        );
+
+        // Control 3: the half-cell diagonal check fails when a diagonal target is perturbed.
+        let mut s = splitmix64(0xC7);
+        let edge_child = loop {
+            let e = seeded_hex_at(3, &mut s);
+            let mut ps = Vec::new();
+            parents(e, &mut ps);
+            if ps.len() == 2 {
+                break e;
+            }
+        };
+        let tg = targets(&t, &m, edge_child);
+        let (d, w, _) = shared_diagonal(&t, edge_child, n, &tg).expect("diagonal");
+        assert!(w <= ON_COARSE_BORDER_M);
+        let mut bad = tg.clone();
+        let (k, ss, tt) = diag_grid(n, d, 3);
+        bad.position[gi(n, k, ss, tt)].y += 1e-3;
+        let found = shared_diagonal(&t, edge_child, n, &bad);
+        // A 1 mm shift is below the 1 m detection radius of the finder but above the tolerance.
+        let (_, w2, _) = found.expect("still within 1 m");
+        assert!(
+            w2 > ON_COARSE_BORDER_M,
+            "a 1 mm diagonal shift must exceed the tolerance, got {w2}"
+        );
+    }
+}

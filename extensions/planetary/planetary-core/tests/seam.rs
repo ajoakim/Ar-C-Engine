@@ -397,3 +397,227 @@ fn measured_error_below_eps() {
     }
     eprintln!("overall max deviation/cell_size = {overall:.6} (kappa = {DEFAULT_KAPPA})");
 }
+
+// ------------------------------------------------------------------------ morph target seams
+
+mod morph_seams {
+    use super::*;
+    use planetary_core::morph::MorphTargets;
+    use planetary_core::topology::cube::cube_morph_targets_f64;
+
+    /// Same-level border agreement tolerance (1e-9 m, the plan value).
+    const SAME_LEVEL_M: f64 = 1e-9;
+    /// Distance of a fine border target from the coarse border polyline: a few f64 ulps at the
+    /// planet radius (one ulp at 6.4e6 m is 9.3e-10 m; the point is computed from a chord and the
+    /// distance itself from another).
+    const ON_COARSE_BORDER_M: f64 = 2e-9;
+
+    fn lvl_model(t: &PlanetTerrain) -> LodModel {
+        LodModel::from_terrain(t, DEFAULT_KAPPA)
+    }
+
+    /// Largest position and uv difference between the border targets of two cells along their
+    /// shared edge (`flipped`: second list reversed).
+    fn border_diff(
+        n: u32,
+        a: &MorphTargets,
+        ea: Edge,
+        b: &MorphTargets,
+        eb: Edge,
+        flipped: bool,
+    ) -> (f64, f64) {
+        let w = n + 1;
+        let (mut dp, mut du) = (0.0f64, 0.0f64);
+        for k in 0..=n {
+            let kb = if flipped { n - k } else { k };
+            let (ia, ja) = ea.vertex(n, k);
+            let (ib, jb) = eb.vertex(n, kb);
+            let (ga, gb) = ((ja * w + ia) as usize, (jb * w + ib) as usize);
+            dp = dp.max(dist(a.position[ga], b.position[gb]));
+            for q in 0..2 {
+                du = du.max((f64::from(a.uv[ga][q]) - f64::from(b.uv[gb][q])).abs());
+            }
+        }
+        (dp, du)
+    }
+
+    #[test]
+    fn same_level_border_targets_agree() {
+        let n = 8;
+        let t = terrain(n);
+        let model = lvl_model(&t);
+        let (mut worst_p, mut worst_u, mut pairs) = (0.0f64, 0.0f64, 0u64);
+        for level in 0..=3u8 {
+            let mut all: BTreeMap<PatchId, MorphTargets> = BTreeMap::new();
+            for p in PatchId::level_iter(level) {
+                all.insert(p, cube_morph_targets_f64(&t, &model, p).expect("targets"));
+            }
+            for p in PatchId::level_iter(level) {
+                for e in Edge::ALL {
+                    let nb = neighbor(p, e);
+                    let (dp, du) =
+                        border_diff(n, &all[&p], e, &all[&nb.patch], nb.edge, nb.flipped);
+                    worst_p = worst_p.max(dp);
+                    worst_u = worst_u.max(du);
+                    pairs += 1;
+                }
+            }
+        }
+        eprintln!(
+            "cube morph same-level border pairs: {pairs}, worst position difference {worst_p:.3e} m, worst uv difference {worst_u:.3e}"
+        );
+        assert!(
+            worst_p <= SAME_LEVEL_M,
+            "border targets differ by {worst_p} m"
+        );
+        assert!(worst_u <= 1e-9, "border uvs differ by {worst_u}");
+    }
+
+    #[test]
+    fn cross_level_fine_border_targets_lie_on_the_coarse_border() {
+        let n = 8;
+        let t = terrain(n);
+        let model = lvl_model(&t);
+        let (mut worst, mut checked) = (0.0f64, 0u64);
+        for level in 2..=4u8 {
+            for f in PatchId::level_iter(level) {
+                let parent = f.parent().expect("parent");
+                let tg = cube_morph_targets_f64(&t, &model, f).expect("targets");
+                for e in Edge::ALL {
+                    let nb = neighbor(f, e).patch;
+                    let Some(c) = nb.parent() else { continue };
+                    if c == parent {
+                        continue;
+                    }
+                    // The coarse cell's edge facing the fine cell's parent.
+                    let Some(ce) = Edge::ALL
+                        .into_iter()
+                        .find(|x| neighbor(c, *x).patch == parent)
+                    else {
+                        continue;
+                    };
+                    let poly = border_positions_f64(&t, c, ce);
+                    for k in 0..=n {
+                        let (i, j) = e.vertex(n, k);
+                        let p = tg.position[(j * (n + 1) + i) as usize];
+                        let d = (0..poly.len() - 1)
+                            .map(|s| dist_to_segment(p, poly[s], poly[s + 1]))
+                            .fold(f64::INFINITY, f64::min);
+                        worst = worst.max(d);
+                        checked += 1;
+                    }
+                }
+            }
+        }
+        eprintln!(
+            "cube morph cross-level: {checked} fine border targets, worst distance to the coarse border {worst:.3e} m"
+        );
+        assert!(checked > 500);
+        assert!(
+            worst <= ON_COARSE_BORDER_M,
+            "fine target {worst} m off the coarse border"
+        );
+    }
+
+    /// Max `|morph - position|` over the border vertices and the skirt depth of a cell.
+    fn border_displacement(t: &PlanetTerrain, model: &LodModel, p: PatchId) -> (f64, f64) {
+        let n = t.cells_per_edge();
+        let tg = cube_morph_targets_f64(t, model, p).expect("targets");
+        let mut worst = 0.0f64;
+        for e in Edge::ALL {
+            for k in 0..=n {
+                let (i, j) = e.vertex(n, k);
+                let pos = vertex_position_f64(t, p, i, j);
+                worst = worst.max(dist(tg.position[(j * (n + 1) + i) as usize], pos));
+            }
+        }
+        (worst, skirt_depth(model, p.level()))
+    }
+
+    #[test]
+    fn border_displacement_is_below_the_skirt_depth() {
+        let n = 8;
+        let t = terrain(n);
+        let model = lvl_model(&t);
+        let mut worst_ratio = 0.0f64;
+        let mut cells = 0u32;
+        for level in 1..=5u8 {
+            for p in PatchId::level_iter(level).step_by(if level >= 4 { 7 } else { 1 }) {
+                let (disp, depth) = border_displacement(&t, &model, p);
+                assert!(
+                    disp < depth,
+                    "{p:?}: border displacement {disp} >= skirt depth {depth}"
+                );
+                worst_ratio = worst_ratio.max(disp / depth);
+                cells += 1;
+            }
+        }
+        eprintln!(
+            "cube morph border displacement / skirt depth: worst {worst_ratio:.4} over {cells} cells"
+        );
+    }
+
+    /// Skirt targets equal the border target minus `dir * depth`; false when any differs.
+    fn skirts_consistent(n: u32, p: PatchId, depth: f64, tg: &MorphTargets) -> bool {
+        let w = (n + 1) as usize;
+        let mut idx = w * w;
+        for e in Edge::ALL {
+            for k in 0..=n {
+                let (i, j) = e.vertex(n, k);
+                let b = tg.position[(j as usize) * w + i as usize];
+                let d = planetary_core::vertex_dir(p, n, i, j);
+                let want = DVec3::new(b.x - d.x * depth, b.y - d.y * depth, b.z - d.z * depth);
+                if tg.position[idx] != want {
+                    return false;
+                }
+                idx += 1;
+            }
+        }
+        true
+    }
+
+    #[test]
+    fn negative_controls_are_detected() {
+        let n = 8;
+        let t = terrain(n);
+        let model = lvl_model(&t);
+        let p = PatchId::new(Face::PosX, 3, 2, 5).expect("id");
+        let e = Edge::PosU;
+        let nb = neighbor(p, e);
+        let a = cube_morph_targets_f64(&t, &model, p).expect("targets");
+        let b = cube_morph_targets_f64(&t, &model, nb.patch).expect("targets");
+        // Control 0: the unperturbed pair passes.
+        let (dp, _) = border_diff(n, &a, e, &b, nb.edge, nb.flipped);
+        assert!(dp <= SAME_LEVEL_M);
+        let depth = skirt_depth(&model, p.level());
+        assert!(skirts_consistent(n, p, depth, &a));
+
+        // Control 1: perturb one border morph_position by 1 mm.
+        let mut bad = b.clone();
+        let (i, j) = nb.edge.vertex(n, 3);
+        bad.position[(j * (n + 1) + i) as usize].x += 1e-3;
+        let (dp, _) = border_diff(n, &a, e, &bad, nb.edge, nb.flipped);
+        assert!(
+            dp > SAME_LEVEL_M,
+            "a 1 mm perturbation must be detected, got {dp}"
+        );
+
+        // Control 2: shift one skirt target by +1 m.
+        let mut bad = a.clone();
+        let w = (n + 1) as usize;
+        bad.position[w * w + 5].y += 1.0;
+        assert!(
+            !skirts_consistent(n, p, depth, &bad),
+            "a 1 m skirt shift must be detected"
+        );
+
+        // Control 3 (the cube has no second parent): two border targets exchanged.
+        let mut bad = b.clone();
+        let (i1, j1) = nb.edge.vertex(n, 2);
+        let (i2, j2) = nb.edge.vertex(n, 5);
+        let (g1, g2) = ((j1 * (n + 1) + i1) as usize, (j2 * (n + 1) + i2) as usize);
+        bad.position.swap(g1, g2);
+        let (dp, _) = border_diff(n, &a, e, &bad, nb.edge, nb.flipped);
+        assert!(dp > SAME_LEVEL_M, "swapped border targets must be detected");
+    }
+}
