@@ -187,3 +187,18 @@ fn adr_0012_lod_selection_present() {
         require(f, &t, lit);
     }
 }
+
+#[test]
+fn adr_0013_index_range_present() {
+    let f = "docs/architecture/adr/0013-shared-index-buffers-and-index-range-draws.md";
+    let t = read(f);
+    for lit in [
+        "Status: accepted",
+        "with_index_range",
+        "draw_indexed",
+        "shared",
+        "## Evidence",
+    ] {
+        require(f, &t, lit);
+    }
+}

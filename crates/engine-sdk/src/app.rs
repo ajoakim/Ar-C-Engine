@@ -3,10 +3,10 @@
 use engine_math::{FrameRegistry, WorldPos};
 use engine_platform::InputEvent;
 use engine_render::{
-    BufferDesc, BufferUsage, Camera, DirectionalLight, Material, MaterialId, MaterialTable,
-    MeshHandle, RenderBackend, RenderError, RenderItem, TextureDesc, TextureId, VertexLayout,
-    VertexPosColor, VertexPosNormalUv, encode_indices, encode_lit_vertices, encode_vertices,
-    validate_indices,
+    BufferDesc, BufferUsage, Camera, DirectionalLight, IndexBufferHandle, Material, MaterialId,
+    MaterialTable, MeshHandle, RenderBackend, RenderError, RenderItem, TextureDesc, TextureId,
+    VertexLayout, VertexPosColor, VertexPosNormalUv, encode_indices, encode_lit_vertices,
+    encode_vertices, validate_indices,
 };
 
 use crate::error::SdkError;
@@ -148,7 +148,80 @@ impl Resources<'_> {
         )
     }
 
-    /// Destroy the vertex buffer and, if present, the index buffer of `mesh`.
+    /// Upload a static u32 index buffer that several meshes can draw ranges of.
+    ///
+    /// # Errors
+    /// Returns an error when the list is empty, its length is not a multiple of 3, it is
+    /// too large, or the backend rejects the upload.
+    pub fn create_index_buffer(
+        &mut self,
+        label: &'static str,
+        indices: &[u32],
+    ) -> Result<IndexBufferHandle, SdkError> {
+        let Ok(count) = u32::try_from(indices.len()) else {
+            return Err(SdkError::App("index buffer has too many indices".into()));
+        };
+        if indices.is_empty() || !indices.len().is_multiple_of(3) {
+            return Err(RenderError::InvalidIndices(
+                "index count must be a positive multiple of 3",
+            )
+            .into());
+        }
+        let max_index = indices.iter().copied().max().unwrap_or(0);
+        let buffer = self.backend.create_buffer(
+            &BufferDesc {
+                label,
+                usage: BufferUsage::Index,
+            },
+            &encode_indices(indices),
+        )?;
+        Ok(IndexBufferHandle {
+            buffer,
+            count,
+            max_index,
+        })
+    }
+
+    /// Upload a lit vertex buffer without indices (draw it with
+    /// `MeshHandle::with_index_range` and a shared index buffer).
+    ///
+    /// # Errors
+    /// Returns an error when the list is empty, too large, or the backend rejects it.
+    pub fn create_lit_vertices(
+        &mut self,
+        label: &'static str,
+        vertices: &[VertexPosNormalUv],
+    ) -> Result<MeshHandle, SdkError> {
+        let Ok(vertex_count) = u32::try_from(vertices.len()) else {
+            return Err(SdkError::App("mesh has too many vertices".into()));
+        };
+        if vertices.is_empty() {
+            return Err(RenderError::EmptyMesh.into());
+        }
+        let vertex_buffer = self.backend.create_buffer(
+            &BufferDesc {
+                label,
+                usage: BufferUsage::Vertex,
+            },
+            &encode_lit_vertices(vertices),
+        )?;
+        Ok(MeshHandle::new(
+            VertexLayout::PosNormalUv,
+            vertex_buffer,
+            vertex_count,
+        ))
+    }
+
+    /// Destroy a shared index buffer. Meshes still drawing ranges of it become invalid.
+    ///
+    /// # Errors
+    /// Returns an error when the buffer is unknown (e.g. double destroy).
+    pub fn destroy_index_buffer(&mut self, ib: IndexBufferHandle) -> Result<(), SdkError> {
+        Ok(self.backend.destroy_buffer(ib.buffer)?)
+    }
+
+    /// Destroy the vertex buffer and, if present and not shared, the index buffer of `mesh`.
+    /// Shared index buffers are owned by the app (see [`Resources::destroy_index_buffer`]).
     /// Both destroys are attempted; the first error is returned.
     ///
     /// # Errors
@@ -156,8 +229,8 @@ impl Resources<'_> {
     pub fn destroy_mesh(&mut self, mesh: MeshHandle) -> Result<(), SdkError> {
         let first = self.backend.destroy_buffer(mesh.vertex_buffer);
         let second = match mesh.index {
-            Some(ix) => self.backend.destroy_buffer(ix.buffer),
-            None => Ok(()),
+            Some(ix) if !ix.shared => self.backend.destroy_buffer(ix.buffer),
+            _ => Ok(()),
         };
         first?;
         second?;
