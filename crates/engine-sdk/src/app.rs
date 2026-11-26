@@ -68,7 +68,7 @@ impl Default for SceneState {
     }
 }
 
-/// GPU resource creation available during setup.
+/// GPU resource creation and destruction, available during setup and in [`App::gpu_frame`].
 pub struct Resources<'a> {
     pub(crate) backend: &'a mut dyn RenderBackend,
 }
@@ -148,6 +148,22 @@ impl Resources<'_> {
         )
     }
 
+    /// Destroy the vertex buffer and, if present, the index buffer of `mesh`.
+    /// Both destroys are attempted; the first error is returned.
+    ///
+    /// # Errors
+    /// Returns an error when the backend does not know a buffer (e.g. double destroy).
+    pub fn destroy_mesh(&mut self, mesh: MeshHandle) -> Result<(), SdkError> {
+        let first = self.backend.destroy_buffer(mesh.vertex_buffer);
+        let second = match mesh.index {
+            Some(ix) => self.backend.destroy_buffer(ix.buffer),
+            None => Ok(()),
+        };
+        first?;
+        second?;
+        Ok(())
+    }
+
     /// Upload an RGBA8 (sRGB) texture of width*height*4 bytes.
     ///
     /// # Errors
@@ -187,6 +203,20 @@ pub trait App {
 
     /// Advance the app by `dt` seconds.
     fn update(&mut self, dt: f64, scene: &mut SceneState) -> AppControl;
+
+    /// Called once per frame after [`App::update`] (and the engine tick), before extraction,
+    /// with GPU resource access. Use it to upload or free resources produced at runtime
+    /// (e.g. streamed meshes). Default: no-op.
+    ///
+    /// # Errors
+    /// Any error aborts the frame and is returned from `Runtime::frame`.
+    fn gpu_frame(
+        &mut self,
+        _resources: &mut Resources<'_>,
+        _scene: &mut SceneState,
+    ) -> Result<(), SdkError> {
+        Ok(())
+    }
 }
 
 #[cfg(test)]

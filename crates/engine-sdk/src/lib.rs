@@ -25,7 +25,7 @@ pub use engine_platform::{InputEvent, KeyCode, MouseButton, WindowConfig};
 /// Deterministic procedural generation (re-export of `engine-procedural`).
 pub use engine_procedural as procedural;
 pub use engine_render::{
-    Camera, DirectionalLight, MAX_TEXTURE_DIMENSION, Mat3, Mat4, Material, MaterialId,
+    Camera, DirectionalLight, MAX_DRAWS_PER_FRAME, MAX_TEXTURE_DIMENSION, Mat3, Mat4, Material, MaterialId,
     MaterialTable, MeshHandle, NullBackend, Quat, RenderBackend, RenderError, RenderItem,
     TextureId, VertexPosColor, VertexPosNormalUv,
 };

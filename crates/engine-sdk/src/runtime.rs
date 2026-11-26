@@ -83,7 +83,7 @@ impl<B: RenderBackend> Runtime<B> {
         app.input(event, &mut self.scene);
     }
 
-    /// One frame: update -> engine tick -> extract -> graph -> submit.
+    /// One frame: update -> engine tick -> gpu_frame -> extract -> graph -> submit.
     ///
     /// # Errors
     /// Propagates engine, math and render errors.
@@ -93,6 +93,12 @@ impl<B: RenderBackend> Runtime<B> {
             return Ok(AppControl::Exit);
         }
         self.engine.tick(dt)?;
+        app.gpu_frame(
+            &mut Resources {
+                backend: &mut self.backend,
+            },
+            &mut self.scene,
+        )?;
         let (w, h) = self.backend.size();
         if w == 0 || h == 0 {
             return Ok(AppControl::Continue);
