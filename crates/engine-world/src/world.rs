@@ -1,6 +1,6 @@
 //! Entity storage and hierarchy.
 
-use engine_math::{FrameId, FrameRegistry, WorldPos};
+use engine_math::{DVec3, FrameId, FrameRegistry, PositionStore, WorldPos};
 use slotmap::SlotMap;
 
 use crate::{EntityId, Transform, WorldError, WorldTransform};
@@ -327,6 +327,40 @@ impl World {
     ) -> Result<WorldPos, WorldError> {
         let pos = self.world_transform(id)?.position;
         Ok(frames.convert(pos, target)?)
+    }
+
+    /// Rebase `frame` to `new_origin` (see `engine_math::rebase`), shifting
+    /// the local translations of all root entities in that frame so their world
+    /// positions are preserved. Uses a temporary `PositionStore` of roots rather
+    /// than persistent `PosId`s, avoiding reparent bookkeeping. Affected subtrees
+    /// are marked dirty. Nothing is mutated on error.
+    ///
+    /// # Errors
+    /// `Math(RootFrame | NonFinite | ..)` from the math layer.
+    pub fn rebase(
+        &mut self,
+        frames: &mut FrameRegistry,
+        frame: FrameId,
+        new_origin: DVec3,
+    ) -> Result<(), WorldError> {
+        let mut store = PositionStore::new();
+        let mut pairs = Vec::new();
+        for id in self.roots() {
+            if let Some(n) = self.nodes.get(id)
+                && n.frame == frame
+            {
+                let pid = store.insert(WorldPos::new(frame, n.local.translation)?);
+                pairs.push((id, pid));
+            }
+        }
+        engine_math::rebase(frames, &mut store, frame, new_origin)?;
+        for (id, pid) in pairs {
+            if let (Some(p), Some(n)) = (store.get(pid), self.nodes.get_mut(id)) {
+                n.local.translation = p.local();
+            }
+            self.mark_subtree_dirty(id);
+        }
+        Ok(())
     }
 
     /// All live ids.
