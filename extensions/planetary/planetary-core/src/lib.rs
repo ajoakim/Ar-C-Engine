@@ -9,3 +9,5 @@ pub mod patch_id;
 
 pub use face::{Edge, Face, FaceBasis};
 pub use patch_id::{MAX_LEVEL, PatchId, PatchIdError};
+pub mod adjacency;
+pub use adjacency::{Neighbor, neighbor, neighbor_children};

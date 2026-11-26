@@ -91,6 +91,16 @@ impl PatchId {
         Ok(PatchId(raw))
     }
 
+    /// Builds an id from coordinates already known to satisfy `level <= MAX_LEVEL` and
+    /// `x, y < 2^level` (crate-internal; callers derive them from valid ids).
+    pub(crate) fn from_parts(face: Face, level: u8, x: u32, y: u32) -> PatchId {
+        PatchId(
+            (u64::from(face.index()) << FACE_SHIFT)
+                | (u64::from(level) << LEVEL_SHIFT)
+                | interleave(x, y, level),
+        )
+    }
+
     pub const fn raw(self) -> u64 {
         self.0
     }
