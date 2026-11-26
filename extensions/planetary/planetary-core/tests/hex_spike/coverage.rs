@@ -21,17 +21,17 @@ use std::sync::OnceLock;
 
 type Atom = [Cell; 3];
 
-const TOPO_LEVELS: u8 = 5;
+pub(super) const TOPO_LEVELS: u8 = 5;
 
 // ---------------------------------------------------------------- topology tables
 
 pub struct Topo {
-    nbrs: BTreeMap<Cell, Vec<Cell>>,
-    kids: BTreeMap<Cell, Vec<Cell>>,
-    pars: BTreeMap<Cell, Vec<Cell>>,
+    pub(super) nbrs: BTreeMap<Cell, Vec<Cell>>,
+    pub(super) kids: BTreeMap<Cell, Vec<Cell>>,
+    pub(super) pars: BTreeMap<Cell, Vec<Cell>>,
 }
 
-fn topo() -> &'static Topo {
+pub(super) fn topo() -> &'static Topo {
     static T: OnceLock<Topo> = OnceLock::new();
     T.get_or_init(|| {
         let mut nbrs = BTreeMap::new();
@@ -53,7 +53,7 @@ fn topo() -> &'static Topo {
 }
 
 impl Topo {
-    fn common(&self, a: Cell, b: Cell) -> Vec<Cell> {
+    pub(super) fn common(&self, a: Cell, b: Cell) -> Vec<Cell> {
         let nb = &self.nbrs[&b];
         let out: Vec<Cell> = self.nbrs[&a]
             .iter()
@@ -230,7 +230,7 @@ fn inside(t: [[f64; 3]; 3], x: [f64; 3]) -> bool {
 
 // ---------------------------------------------------------------- pieces and coverage
 
-fn pieces(t: &Topo, split: &BTreeSet<Cell>) -> BTreeMap<Cell, BTreeSet<Cell>> {
+pub(super) fn pieces(t: &Topo, split: &BTreeSet<Cell>) -> BTreeMap<Cell, BTreeSet<Cell>> {
     let mut out: BTreeMap<Cell, BTreeSet<Cell>> = BTreeMap::new();
     for r in all_cells(0) {
         if !split.contains(&r) {
@@ -348,10 +348,10 @@ fn cover_raw(h: &Hier, raw: &[RawPiece], m: u8) -> Cover {
 
 // ---------------------------------------------------------------- random split sets
 
-struct Rng(u64);
+pub(super) struct Rng(pub(super) u64);
 
 impl Rng {
-    fn next(&mut self) -> u64 {
+    pub(super) fn next(&mut self) -> u64 {
         self.0 = self.0.wrapping_add(0x9E37_79B9_7F4A_7C15);
         let mut z = self.0;
         z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
@@ -359,7 +359,7 @@ impl Rng {
         z ^ (z >> 31)
     }
 
-    fn below(&mut self, n: usize) -> usize {
+    pub(super) fn below(&mut self, n: usize) -> usize {
         (self.next() % n as u64) as usize
     }
 }
@@ -375,7 +375,7 @@ pub enum Closure {
 }
 
 /// Returns the number of cells inserted by the closure.
-fn close(t: &Topo, split: &mut BTreeSet<Cell>, mode: Closure) -> usize {
+pub(super) fn close(t: &Topo, split: &mut BTreeSet<Cell>, mode: Closure) -> usize {
     if mode == Closure::None {
         return 0;
     }
