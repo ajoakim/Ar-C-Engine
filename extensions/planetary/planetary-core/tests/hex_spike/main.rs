@@ -4,5 +4,6 @@
 //! This plan covers S1 (`lattice`: diamond ids, wrap, neighbours, parents/children) and S2
 //! (`projection`: exact-op barycentric mapping). Run with `--nocapture` to see the evidence.
 
+mod coverage;
 mod lattice;
 mod projection;
