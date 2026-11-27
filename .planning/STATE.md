@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-11-27)
 
 ## Current Position
 
-Phase: 11 (Terrain Relief & Normals) - in progress (2/10 plans)
-Plan: 11-02 complete; next: 11-03 (v3 calibration)
+Phase: 11 (Terrain Relief & Normals) - in progress (3/10 plans)
+Plan: 11-03 complete; next: 11-04 (v3 cost gates)
 Status: Executing Phase 11
-Last activity: 2026-11-27 - Completed 11-02 (generator v3 hills and mountains, additive, guard v3-inert == v2)
+Last activity: 2026-11-27 - Completed 11-03 (v3 calibration, v3 LOD bounds)
 
 ## Performance Metrics
 
@@ -80,7 +80,7 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-11-26T23:59:00.000Z
-Stopped at: Completed 10-03-PLAN.md
+Stopped at: Completed 11-03-PLAN.md
 Resume file: None
 
 ## Deferred Items
