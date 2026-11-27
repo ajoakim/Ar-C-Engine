@@ -23,4 +23,3 @@ TBD. Ideas: cross-fade or morph colour detail between LOD levels (parent/child b
 
 - Counts render as floats ("selected: 593.00", "queue pending: 0.00"); should be integers.
 - "detail patches: 2026.00 / 1500.00" and "1938.00 / 1500.00": used exceeds cap. Check whether the cap is soft/meaning differs or the budget is not enforced.
-- Window title shows `alt | speed | hex Ln` only; ADR-0016 present-mode and refresh readout not visible (check which flag/state shows it).
