@@ -33,3 +33,16 @@ The design is simple, has O(1) updates and gives deterministic sorted output. It
 ## Evidence
 
 Phase 4 oracle tests compare `HashGridIndex` with `LinearIndex` over pseudo-random entities (crates/engine-spatial/tests/oracle.rs). The Phase 8 benchmark spike will add performance evidence and may supersede this ADR.
+
+## Amendment (Phase 8)
+
+Date: 2026-11-26. Conclusion: keep the hash grid as the default backend; the decision above is not superseded. The "benchmark later" item is now done.
+
+Evidence: `crates/engine-spatial/benches/spatial.rs` (criterion, release, `--quick`, three runs; full table and method in `.planning/phases/08-hardening-decisions/08-BENCH-RESULTS.md`). Entity density is constant across N; each query figure is a batch of 16 queries.
+
+- Flat scaling: the hash grid is essentially flat in N from 1e3 to 1e5 (region 4.9 to 7.5 us, radius 11.7 to 15.0 us, frustum 53.6 to 87.1 us) while the linear scan grows linearly to 7 to 10 ms at N = 1e5. Linear / HashGrid at N = 1e5: region 1308.75x, radius 473.10x, frustum 106.67x; at N = 1e4: 177.19x, 58.24x, 16.74x.
+- Crossover: region and radius queries break even at roughly N = 100 to 300 (HashGrid is already 3.74x and 1.57x faster at N = 300; Linear is equal or faster at N = 100: ratios 1.05x and 0.57x). Frustum queries break even between N = 300 (Linear 2.8x faster, ratio 0.36x) and N = 1000 (HashGrid 1.72x faster). Below a few hundred queried entities the linear scan is as good as or better than the grid.
+- Updates are the weak point: moving 10 percent of the entities and back is 8x to 24x slower on the hash grid than on the linear scan at every N (Linear / HashGrid 0.04x to 0.12x; 7.66 ms against 906 us at N = 1e5), because the grid re-buckets cells and maintains a `BTreeMap`. This is the first thing to revisit if dynamic-entity counts grow; the O(1) update claim in Consequences holds per entity, not relative to an in-place write.
+- Not measured: rstar and kd-tree alternatives (out of the plan scope). The oversize-list and non-uniform-density concerns are still untested by a benchmark.
+
+Revisit trigger: supersede this ADR if a reference workload is update-dominated and profiling shows `HashGridIndex` updates in the top frame costs, or if a second backend benchmarks better on the real workload.

@@ -41,3 +41,13 @@ Render backends must be replaceable (HLD). wgpu breaks its API roughly every thr
 - A scratch crate outside the repo (toolchain 1.99.0) compiled wgpu 30.0.2, winit 0.30.13, raw-window-handle 0.6.2 and pollster, passed an `Arc<dyn RenderTarget>` to `create_surface`, and `request_adapter` succeeded (Intel Arc B580, Vulkan).
 - `cargo deny check licenses bans` on that 251-package tree had zero license failures.
 - Follow-up evidence: the Phase 3 null-backend tests and the manual triangle smoke run (`cargo run -p engine-sdk --example triangle`).
+
+## Amendment (Phase 8)
+
+Date: 2026-11-26. The decision above (wgpu behind an engine-owned backend trait) is unchanged. This amendment adds the evidence and closes the "software-adapter CI is deferred to Phase 8" consequence in part.
+
+- Prototype and tests: `WgpuBackend::new_offscreen_software` (forced fallback adapter, clean error when none is present) and the golden-based image-diff suite `crates/engine-render-wgpu/tests/image_diff.rs` (four scenes plus negative controls, per-channel tolerance 2/255 and a 0.5 percent bad-pixel budget; plan 08-03).
+- Goldens: the four scene goldens were generated on Windows 11 with the WARP software adapter ("Microsoft Basic Render Driver (Dx12)"). Two generations were byte-identical, and two verify runs reported 0 differing pixels.
+- CI: a separate image-diff job requires the software adapter on Linux and Windows. It has not yet run on hosted runners (hosted run 45947523739 predates it).
+- Not yet present: hosted Linux (lavapipe) and macOS goldens, and hosted `windows-latest` WARP goldens, which may differ from the local ones. Plan 11 adds them (plan 11, via the golden-update workflow path) and the tolerances for lavapipe and macOS remain uncalibrated until then.
+- Still open: the Linux Wayland display-handle requirement at instance creation is not resolved. It is recorded as a known limitation (`docs/limitations.md`, plan 09) rather than fixed here.

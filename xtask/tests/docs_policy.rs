@@ -284,3 +284,31 @@ fn adr_0017_present() {
     let readme = read("docs/architecture/adr/README.md");
     require("docs/architecture/adr/README.md", &readme, "[0017]");
 }
+
+#[test]
+fn phase8_amendments_cite_evidence() {
+    let marker = "Amendment (Phase 8)";
+    let f5 = "docs/architecture/adr/0005-rendering-api-wgpu-behind-trait.md";
+    let t5 = read(f5);
+    for lit in [marker, "image_diff", "WARP", "plan 11"] {
+        require(f5, &t5, lit);
+    }
+    let f6 = "docs/architecture/adr/0006-spatial-index-hash-grid-first.md";
+    let t6 = read(f6);
+    for lit in [marker, "HashGridIndex", "spatial.rs", "Linear / HashGrid"] {
+        require(f6, &t6, lit);
+    }
+    let f10 = "docs/architecture/adr/0010-terrain-lod-skirts-and-shared-border-sampling.md";
+    let t10 = read(f10);
+    for lit in [
+        marker,
+        "45947523739",
+        "08-CI-EVIDENCE",
+        "ADR-0014",
+        "LOD transition",
+    ] {
+        require(f10, &t10, lit);
+    }
+    let readme = read("docs/architecture/adr/README.md");
+    require("docs/architecture/adr/README.md", &readme, "LOD transition");
+}
