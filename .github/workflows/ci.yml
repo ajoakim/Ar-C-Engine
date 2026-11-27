@@ -55,6 +55,8 @@ jobs:
         run: "! cargo run --locked -p xtask -- check-deps --manifest-path xtask/fixtures/core-depends-on-ext/Cargo.toml"
       - name: Negative - wgpu/winit misplaced (must fail)
         run: "! cargo run --locked -p xtask -- check-deps --manifest-path xtask/fixtures/wgpu-winit-misplaced/Cargo.toml"
+      - name: Negative - egui-wgpu misplaced (must fail)
+        run: "! cargo run --locked -p xtask -- check-deps --manifest-path xtask/fixtures/egui-wgpu-misplaced/Cargo.toml"
       - name: Build basic_scene example
         run: cargo build --locked -p conventional-3d --example basic_scene
       - name: Run planetary_flight headless

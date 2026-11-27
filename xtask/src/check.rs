@@ -171,6 +171,13 @@ pub fn evaluate(graph: &WorkspaceGraph) -> Vec<Violation> {
                     "wgpu may only be used by engine-render-wgpu".into(),
                 ));
             }
+            if dep.name == "egui-wgpu" && !WGPU_ALLOWED.contains(&pkg.name.as_str()) && !tooling {
+                out.push(mk(
+                    Rule::WgpuOutsideAllowedCrate,
+                    Some("egui-wgpu"),
+                    "egui-wgpu (which links wgpu) may only be used by engine-render-wgpu".into(),
+                ));
+            }
             if dep.name == "winit" && !WINIT_ALLOWED.contains(&pkg.name.as_str()) && !tooling {
                 out.push(mk(
                     Rule::WinitOutsideAllowedCrate,
@@ -288,6 +295,28 @@ mod tests {
             Rule::WgpuOutsideAllowedCrate,
             "engine-core",
             Some("wgpu")
+        ));
+        assert!(!v.iter().any(|x| x.package == "engine-render-wgpu"));
+    }
+
+    #[test]
+    fn egui_wgpu_only_in_render_wgpu() {
+        let v = evaluate(&g(vec![
+            pkg("debug-ui", Location::Core, &["egui-wgpu"]),
+            pkg("engine-sdk", Location::Core, &["egui-wgpu"]),
+            pkg("engine-render-wgpu", Location::Core, &["egui-wgpu"]),
+        ]));
+        assert!(has(
+            &v,
+            Rule::WgpuOutsideAllowedCrate,
+            "debug-ui",
+            Some("egui-wgpu")
+        ));
+        assert!(has(
+            &v,
+            Rule::WgpuOutsideAllowedCrate,
+            "engine-sdk",
+            Some("egui-wgpu")
         ));
         assert!(!v.iter().any(|x| x.package == "engine-render-wgpu"));
     }

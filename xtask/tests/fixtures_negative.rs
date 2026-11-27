@@ -42,6 +42,32 @@ fn fixture_wgpu_winit_misplaced_fails() {
 }
 
 #[test]
+fn fixture_egui_wgpu_misplaced_fails() {
+    let v = check_deps(&fixture("egui-wgpu-misplaced")).expect("metadata");
+    assert!(
+        v.iter().any(|x| x.rule == Rule::WgpuOutsideAllowedCrate
+            && x.package == "debug-ui"
+            && x.dependency.as_deref() == Some("egui-wgpu")),
+        "expected egui-wgpu violation for debug-ui, got {v:?}"
+    );
+    assert!(
+        !v.iter().any(|x| x.package == "engine-render-wgpu"),
+        "engine-render-wgpu must be allowed to use egui-wgpu, got {v:?}"
+    );
+}
+
+#[test]
+fn fixture_egui_wgpu_misplaced_cli_exits_one() {
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_xtask"))
+        .arg("check-deps")
+        .arg("--manifest-path")
+        .arg(fixture("egui-wgpu-misplaced"))
+        .output()
+        .expect("run xtask");
+    assert_eq!(out.status.code(), Some(1));
+}
+
+#[test]
 fn fixture_cli_exits_nonzero() {
     let out = std::process::Command::new(env!("CARGO_BIN_EXE_xtask"))
         .arg("check-deps")
