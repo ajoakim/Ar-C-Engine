@@ -27,6 +27,9 @@ pub enum KeyCode {
     F3,
     ShiftLeft,
     ControlLeft,
+    Z,
+    X,
+    F,
     Other,
 }
 
@@ -77,6 +80,9 @@ pub(crate) fn translate_physical_key(key: PhysicalKey) -> KeyCode {
             K::F3 => KeyCode::F3,
             K::ShiftLeft => KeyCode::ShiftLeft,
             K::ControlLeft => KeyCode::ControlLeft,
+            K::KeyZ => KeyCode::Z,
+            K::KeyX => KeyCode::X,
+            K::KeyF => KeyCode::F,
             _ => KeyCode::Other,
         },
         PhysicalKey::Unidentified(_) => KeyCode::Other,
@@ -183,6 +189,26 @@ mod tests {
         assert_eq!(
             translate_physical_key(PhysicalKey::Code(WK::ArrowUp)),
             KeyCode::Up
+        );
+    }
+
+    #[test]
+    fn input_maps_z_x_f() {
+        assert_eq!(
+            translate_physical_key(PhysicalKey::Code(WK::KeyZ)),
+            KeyCode::Z
+        );
+        assert_eq!(
+            translate_physical_key(PhysicalKey::Code(WK::KeyX)),
+            KeyCode::X
+        );
+        assert_eq!(
+            translate_physical_key(PhysicalKey::Code(WK::KeyF)),
+            KeyCode::F
+        );
+        assert_eq!(
+            translate_physical_key(PhysicalKey::Code(WK::KeyC)),
+            KeyCode::Other
         );
     }
 
