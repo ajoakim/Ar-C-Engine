@@ -18,7 +18,7 @@ pub use engine_assets::{AssetError, AssetId, AssetRegistry, Handle};
 pub use engine_core::{
     Engine, EngineConfig, EngineError, EnginePhase, Module, ModuleConfig, ModuleError,
 };
-pub use engine_diagnostics::{FrameStats, tracing};
+pub use engine_diagnostics::{Budget, DiagnosticsSnapshot, FrameStats, Histogram, tracing};
 pub use engine_jobs::{CancelToken, JobError, JobHandle, JobStatus, JobSystem, Priority};
 pub use engine_math::{DQuat, DVec3, FrameId, FrameRegistry, MathError, Vec3, WorldPos};
 pub use engine_platform::{InputEvent, KeyCode, MouseButton, WindowConfig};

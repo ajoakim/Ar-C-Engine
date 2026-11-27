@@ -1990,8 +1990,6 @@ name = "planetary-app"
 version = "0.1.0"
 dependencies = [
  "criterion",
- "debug-ui",
- "engine-diagnostics",
  "engine-sdk",
  "planetary-core",
  "planetary-terrain",

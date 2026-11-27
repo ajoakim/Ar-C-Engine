@@ -555,7 +555,7 @@ impl PlanetaryApp {
     /// Overlay data for this frame (LOD histograms, queue, budgets, timings).
     #[cfg(feature = "debug-overlay")]
     #[must_use]
-    pub fn diagnostics_snapshot(&self) -> engine_diagnostics::DiagnosticsSnapshot {
+    pub fn diagnostics_snapshot(&self) -> engine_sdk::DiagnosticsSnapshot {
         let sample = self.telemetry.last().cloned().unwrap_or_default();
         overlay_snapshot::build(
             &sample,

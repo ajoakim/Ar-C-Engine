@@ -3,7 +3,7 @@
 //! Level and patch vocabulary stays here; the overlay UI only sees gauges, budgets and
 //! histograms.
 
-use engine_diagnostics::DiagnosticsSnapshot;
+use engine_sdk::DiagnosticsSnapshot;
 use planetary_terrain::StreamBudget;
 
 use crate::telemetry::FrameSample;
