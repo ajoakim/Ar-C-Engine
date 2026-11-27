@@ -9,8 +9,14 @@ description = "Planetary reference app (orbit-to-surface flight) on the public S
 
 [dependencies]
 engine-sdk.workspace = true
+engine-diagnostics.workspace = true
+debug-ui = { path = "../../../crates/debug-ui", optional = true }
 planetary-core = { path = "../planetary-core" }
 planetary-terrain = { path = "../planetary-terrain" }
+
+[features]
+# Debug overlay data and UI crate; off by default (plan 08 wires the painter and F3).
+debug-overlay = ["dep:debug-ui"]
 
 [lints]
 workspace = true

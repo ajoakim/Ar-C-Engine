@@ -5,6 +5,7 @@
 //! Engine crates under crates/ must never depend on this crate.
 
 pub mod descent;
+pub mod overlay_snapshot;
 pub mod stream_bench;
 pub mod telemetry;
 pub mod title;
@@ -294,6 +295,10 @@ impl AnyTerrain {
     fn stream_budget(&self) -> StreamBudget {
         each!(self, t => t.stream_budget())
     }
+    #[cfg(feature = "debug-overlay")]
+    fn detail_budget_patches(&self) -> u64 {
+        each!(self, t => t.config().detail_budget_patches)
+    }
     fn shutdown(self) {
         each!(self, t => t.shutdown());
     }
@@ -545,6 +550,20 @@ impl PlanetaryApp {
     #[must_use]
     pub fn stream_budget(&self) -> StreamBudget {
         self.terrain.stream_budget()
+    }
+
+    /// Overlay data for this frame (LOD histograms, queue, budgets, timings).
+    #[cfg(feature = "debug-overlay")]
+    #[must_use]
+    pub fn diagnostics_snapshot(&self) -> engine_diagnostics::DiagnosticsSnapshot {
+        let sample = self.telemetry.last().cloned().unwrap_or_default();
+        overlay_snapshot::build(
+            &sample,
+            &self.terrain.drawn_levels(),
+            &self.terrain.wanted_levels(),
+            self.terrain.stream_budget(),
+            self.terrain.detail_budget_patches(),
+        )
     }
 
     #[must_use]
