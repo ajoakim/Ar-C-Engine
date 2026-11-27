@@ -1,6 +1,6 @@
 # ADR-0015: Scale, Contrast and Distance Haze (Generator v2, Surface Attribute v2)
 
-- Status: accepted
+- Status: accepted (haze superseded by ADR-0019)
 - Date: 2026-11-26
 - Requirement/Phase: PERF-01, PERF-02, HEX-02, HEX-03 / Phase 7.1
 

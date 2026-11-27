@@ -307,6 +307,48 @@ fn adr_0018_present() {
 }
 
 #[test]
+fn adr_0019_present() {
+    let f = "docs/architecture/adr/0019-minimal-atmosphere-limb-ring.md";
+    let t = read(f);
+    for lit in [
+        "Status: accepted",
+        "limb",
+        "r_in",
+        "planetary-app",
+        "## Evidence",
+        "fallback",
+        "supersede",
+        "## Deviation from CONTEXT",
+        "shader pass",
+        "ShaderId",
+        "REPLACE",
+    ] {
+        require(f, &t, lit);
+    }
+    let readme = read("docs/architecture/adr/README.md");
+    require("docs/architecture/adr/README.md", &readme, "[0019]");
+    require(
+        "docs/architecture/adr/README.md",
+        &readme,
+        "haze superseded by 0019",
+    );
+    let f15 = "docs/architecture/adr/0015-scale-contrast-and-distance-haze.md";
+    let t15 = read(f15);
+    let status = t15
+        .lines()
+        .find(|l| l.starts_with("- Status:"))
+        .expect("0015 status line");
+    assert!(
+        status.contains("Status: accepted") && status.contains("ADR-0019"),
+        "0015 status line must keep `accepted` and cite ADR-0019: {status}"
+    );
+    let limits = read("docs/limitations.md");
+    for lit in ["limb ring", "scattering", "alpha blend"] {
+        require("docs/limitations.md", &limits, lit);
+    }
+}
+
+#[test]
 fn dependency_direction_documents_egui_wgpu_rule() {
     let f = "docs/architecture/dependency-direction.md";
     let t = read(f);
