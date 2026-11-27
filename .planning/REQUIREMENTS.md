@@ -72,7 +72,7 @@
 - [ ] **APP-02**: A planetary reference app runs against the public SDK only
 - [ ] **QA-01**: Unit, integration, performance (criterion), and regression (image-diff on software adapter) tests exist and run in CI
 - [ ] **QA-02**: Debug overlays show LOD and streaming/memory budget state
-- [ ] **QA-03**: Architecture, assumptions, limitations, and SDK usage are documented
+- [x] **QA-03**: Architecture, assumptions, limitations, and SDK usage are documented
 
 ## v2 Requirements
 
@@ -158,7 +158,7 @@
 | APP-02 | Phase 7 | Pending |
 | QA-01 | Phase 8 | Pending |
 | QA-02 | Phase 8 | Pending |
-| QA-03 | Phase 8 | Pending |
+| QA-03 | Phase 8 | Complete |
 
 **Coverage:**
 - v1 requirements: 45 total (40 original + HEX-01..03 and PERF-01..02 added in Phase 7.1 on 2026-11-25)
