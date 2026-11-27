@@ -28,6 +28,12 @@ impl PlatformWindow {
         (s.width, s.height)
     }
 
+    /// Window scale factor (physical pixels per logical point; 2.0 on a typical HiDPI display).
+    #[must_use]
+    pub fn scale_factor(&self) -> f64 {
+        self.inner.scale_factor()
+    }
+
     /// Request a redraw event.
     pub fn request_redraw(&self) {
         self.inner.request_redraw();

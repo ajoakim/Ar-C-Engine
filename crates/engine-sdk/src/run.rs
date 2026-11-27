@@ -88,8 +88,12 @@ impl<A: App> PlatformHandler for Host<A> {
         #[cfg(feature = "egui-overlay")]
         let result = {
             let overlay = &mut self.overlay;
+            let scale = self
+                .window
+                .as_ref()
+                .map_or(1.0, |w| w.scale_factor() as f32);
             rt.frame_with(&mut self.app, dt, |backend, app| {
-                overlay.stage(backend, app, dt);
+                overlay.stage(backend, app, scale, dt);
             })
         };
         #[cfg(not(feature = "egui-overlay"))]
