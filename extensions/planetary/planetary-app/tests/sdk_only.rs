@@ -56,17 +56,28 @@ fn use_roots(files: &[PathBuf]) -> Vec<(PathBuf, String)> {
     out
 }
 
-fn manifest_keys(manifest: &Path) -> Vec<String> {
-    let text = fs::read_to_string(manifest).unwrap();
-    let mut in_deps = false;
+/// Keys declared in `[section]` (inline `key = ...` / `key.workspace = true` lines) and in
+/// `[section.key]` table headers, sorted.
+fn parse_keys(text: &str, section: &str) -> Vec<String> {
+    let header = format!("[{section}]");
+    let table_prefix = format!("[{section}.");
+    let mut in_section = false;
     let mut keys = Vec::new();
     for line in text.lines() {
         let l = line.trim();
         if l.starts_with('[') {
-            in_deps = l == "[dependencies]";
+            in_section = l == header;
+            if let Some(rest) = l.strip_prefix(table_prefix.as_str()) {
+                keys.push(
+                    rest.trim_end_matches(']')
+                        .trim()
+                        .trim_matches('"')
+                        .to_owned(),
+                );
+            }
             continue;
         }
-        if in_deps && !l.is_empty() && !l.starts_with('#') {
+        if in_section && !l.is_empty() && !l.starts_with('#') {
             let key: String = l
                 .chars()
                 .take_while(|c| *c != '.' && *c != '=' && !c.is_whitespace())
@@ -76,6 +87,58 @@ fn manifest_keys(manifest: &Path) -> Vec<String> {
     }
     keys.sort();
     keys
+}
+
+fn manifest_keys(manifest: &Path) -> Vec<String> {
+    parse_keys(&fs::read_to_string(manifest).unwrap(), "dependencies")
+}
+
+fn dev_manifest_keys(manifest: &Path) -> Vec<String> {
+    parse_keys(&fs::read_to_string(manifest).unwrap(), "dev-dependencies")
+}
+
+#[test]
+fn manifest_parser_handles_inline_and_table_forms() {
+    let text = "[dependencies]
+engine-sdk.workspace = true
+# c
+foo = { path = \"x\" }
+
+                [dependencies.bar]
+version = \"1\"
+
+[dependencies.\"baz\"]
+path = \"y\"
+
+                [dev-dependencies]
+qux = \"1\"
+
+[dev-dependencies.quux]
+version = \"1\"
+";
+    assert_eq!(
+        parse_keys(text, "dependencies"),
+        ["bar", "baz", "engine-sdk", "foo"]
+    );
+    assert_eq!(parse_keys(text, "dev-dependencies"), ["quux", "qux"]);
+}
+
+#[test]
+fn dev_dependencies_are_pinned() {
+    // Test-only deps may reach below the SDK (atmosphere_ring.rs renders the ring headless), but
+    // only these; adding one needs a deliberate edit here. They must never move to [dependencies].
+    assert_eq!(
+        dev_manifest_keys(&root().join("Cargo.toml")),
+        ["criterion", "engine-render", "engine-render-wgpu", "png"]
+    );
+    assert_eq!(
+        dev_manifest_keys(&sibling("planetary-terrain").join("Cargo.toml")),
+        Vec::<String>::new()
+    );
+    assert_eq!(
+        dev_manifest_keys(&sibling("planetary-core").join("Cargo.toml")),
+        ["criterion"]
+    );
 }
 
 #[test]
