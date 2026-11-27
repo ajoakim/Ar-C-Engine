@@ -19,7 +19,7 @@ Phases 1-8 plus inserted Phase 7.1, 90 plans, 45/45 requirements. Full details: 
 **Milestone Goal:** Make the planetary reference look and fly better (seamless LOD detail transitions, real terrain relief with lit normals, 6DOF free flight) while closing the v1.0 tech debt, without adding planetary assumptions to the engine core.
 
 - [x] **Phase 9: Overlay, CI & Test Hygiene** - Close IN-01..03 and fix overlay count formatting and the detail-patch cap display
-- [ ] **Phase 10: Free-Flight 6DOF Camera** - Roll, strafe and vertical movement in the planetary example without breaking orbit-to-surface flight
+- [x] **Phase 10: Free-Flight 6DOF Camera** - Roll, strafe and vertical movement in the planetary example without breaking orbit-to-surface flight
 - [ ] **Phase 11: Terrain Relief & Normals** - Generator v3 with hills and mountains plus height-derived normals and bump shading
 - [ ] **Phase 12: LOD Detail Transition** - Remove the blur-then-sharpen pop at level changes with a blended colour/detail transition
 - [ ] **Phase 13: Validation & CI Debt Closure** - 03-VALIDATION, Nyquist for phases 1-5, macOS goldens decision, bench job decision
@@ -58,7 +58,7 @@ Plans:
 Plans:
 - [x] 10-01-PLAN.md — Z/X/F key codes; pure f64 quaternion FreeFlight controller with drift, roll-axis, camera-relative and levelling tests (CAM-01..04, CAM-06)
 - [x] 10-02-PLAN.md — Integrate into planetary_flight input handling, document default and F toggle, scripted descent unchanged (CAM-01..03, CAM-05, CAM-06)
-- [ ] 10-03-PLAN.md — Full local gate, human flight checkpoint, requirement bookkeeping (CAM-01..06)
+- [x] 10-03-PLAN.md — Full local gate, human flight checkpoint, requirement bookkeeping (CAM-01..06)
 
 **UI hint**: yes
 
@@ -104,7 +104,7 @@ Plans:
 |-------|-----------|----------------|--------|-----------|
 | 1-8 (incl. 7.1) | v1.0 | 90/90 | Complete | 2026-11-27 |
 | 9. Overlay, CI & Test Hygiene | v1.1 | 4/4 | Complete | 2026-11-27 |
-| 10. Free-Flight 6DOF Camera | v1.1 | 2/3 | In Progress | - |
+| 10. Free-Flight 6DOF Camera | v1.1 | 3/3 | Complete | 2026-11-27 |
 | 11. Terrain Relief & Normals | v1.1 | 0/TBD | Not started | - |
 | 12. LOD Detail Transition | v1.1 | 0/TBD | Not started | - |
 | 13. Validation & CI Debt Closure | v1.1 | 0/TBD | Not started | - |

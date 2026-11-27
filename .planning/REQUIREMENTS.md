@@ -28,12 +28,12 @@ Scope rule for every requirement below: planetary-specific work (terrain generat
 
 ### CAM: Free-flight 6DOF camera
 
-- [ ] **CAM-01**: In the planetary example/app the user can roll the camera about its view axis with dedicated keys or mouse input.
-- [ ] **CAM-02**: The user can strafe left/right along the camera right axis.
-- [ ] **CAM-03**: The user can move up/down along the camera up axis (vertical thrust), independent of the planet local up.
-- [ ] **CAM-04**: Camera orientation is stored so repeated roll, pitch and yaw do not drift or lose normalisation (unit test of a long input sequence), and the camera stays in f64 world space with camera-relative rendering.
-- [ ] **CAM-05**: The existing orbit-to-surface flight (speed scaling by altitude, scripted descent) still works unchanged, with a toggle or documented default for free-flight versus planet-aligned orientation.
-- [ ] **CAM-06**: 6DOF input mapping lives in the example or planetary extension; any generic camera/controller type added to a non-planetary crate has no planetary assumptions, and `check-deps` stays green.
+- [x] **CAM-01**: In the planetary example/app the user can roll the camera about its view axis with dedicated keys or mouse input.
+- [x] **CAM-02**: The user can strafe left/right along the camera right axis.
+- [x] **CAM-03**: The user can move up/down along the camera up axis (vertical thrust), independent of the planet local up.
+- [x] **CAM-04**: Camera orientation is stored so repeated roll, pitch and yaw do not drift or lose normalisation (unit test of a long input sequence), and the camera stays in f64 world space with camera-relative rendering.
+- [x] **CAM-05**: The existing orbit-to-surface flight (speed scaling by altitude, scripted descent) still works unchanged, with a toggle or documented default for free-flight versus planet-aligned orientation.
+- [x] **CAM-06**: 6DOF input mapping lives in the example or planetary extension; any generic camera/controller type added to a non-planetary crate has no planetary assumptions, and `check-deps` stays green.
 
 ### DEBT: Tech-debt sweep
 
@@ -80,12 +80,12 @@ Deferred, not in v1.1.
 | DEBT-03 | Phase 9 | Complete |
 | DEBT-04 | Phase 9 | Complete |
 | DEBT-05 | Phase 9 | Complete |
-| CAM-01 | Phase 10 | Pending |
-| CAM-02 | Phase 10 | Pending |
-| CAM-03 | Phase 10 | Pending |
-| CAM-04 | Phase 10 | Pending |
-| CAM-05 | Phase 10 | Pending |
-| CAM-06 | Phase 10 | Pending |
+| CAM-01 | Phase 10 | Complete |
+| CAM-02 | Phase 10 | Complete |
+| CAM-03 | Phase 10 | Complete |
+| CAM-04 | Phase 10 | Complete |
+| CAM-05 | Phase 10 | Complete |
+| CAM-06 | Phase 10 | Complete |
 | TERR-01 | Phase 11 | Pending |
 | TERR-02 | Phase 11 | Pending |
 | TERR-03 | Phase 11 | Pending |

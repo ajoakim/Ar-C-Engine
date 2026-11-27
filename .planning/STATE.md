@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-11-27)
 
 ## Current Position
 
-Phase: 10 (Free-Flight 6DOF Camera) - in progress
-Plan: 10-02 complete (2/3 in Phase 10); next: 10-03
-Status: Executing Phase 10
-Last activity: 2026-11-27 - Completed 10-02 (FreeFlight wired into PlanetaryApp, docs, app-level tests)
+Phase: 10 (Free-Flight 6DOF Camera) - complete (3/3 plans)
+Plan: 10-03 complete; next: Phase 11 (Terrain Relief & Normals)
+Status: Phase 10 complete, ready to plan Phase 11
+Last activity: 2026-11-27 - Completed 10-03 (full gate green, human flight approved "looks good", CAM-01..06 ticked)
 
 ## Performance Metrics
 
@@ -50,6 +50,7 @@ Last activity: 2026-11-27 - Completed 10-02 (FreeFlight wired into PlanetaryApp,
 | 7 | 10 | - | - |
 | 07.1 | 27 | - | - |
 | 8 | 12/12 | - | - |
+| 10 | 3/3 | - | - |
 
 ## Accumulated Context
 
@@ -65,6 +66,7 @@ Last activity: 2026-11-27 - Completed 10-02 (FreeFlight wired into PlanetaryApp,
 
 - 07.1-26: present mode setting (default Fifo/2) with pure fallback selection; startup info and title via SDK host; windowed run: Fifo frames 31 ms with 11 ms CPU (present-bound), Immediate 4.6 ms, Mailbox unsupported on the Arc B580; default unchanged (ADR-0016).
 - 07.1-27: hex prepare profiled per scope (footprint 2.8 us/call was the cost); per-thread footprint memo, range memo, faster pieces and request planning, provably safe selection reuse (SelectSlack), all output-identical with equality tests; hex worst-band prepare p95 9.8-11.1 -> 3.6-3.75 ms, descent p95 10.9 -> 4.1 ms; no bound or default changed; frames-to-detail gain on adaptive runs only (generator-bound otherwise).
+- 10-free-flight: free-flight is the PlanetaryApp default, F toggles planet-aligned, Z/X roll, controller lives in planetary-app (no generic-crate change).
 
 ### Pending Todos
 
@@ -78,7 +80,7 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-11-26T23:59:00.000Z
-Stopped at: Completed 08-12-PLAN.md
+Stopped at: Completed 10-03-PLAN.md
 Resume file: None
 
 ## Deferred Items
