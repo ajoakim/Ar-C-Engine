@@ -36,7 +36,12 @@ WASD/arrows move, E/Space up, Q/Ctrl down, Shift boost, hold right mouse button 
 | `--settle` | `--bench-stream` control: workers awaited every frame (what the descent tests do) |
 | `--no-adaptive` | Fixed per-frame streaming caps instead of the cost-adaptive ones (default adaptive for wall-clock runs) |
 | `--frame-ms <ms>` | Real time spun per frame in `--bench-stream` so workers get a window-like slice (default 33) |
+| `--present-mode <fifo\|mailbox\|immediate\|auto>` | Surface present mode (default `fifo`). An unsupported mode falls back to fifo with a warning; other values are a usage error. See ADR-0016 |
+| `--frame-latency <1\|2\|3>` | Maximum frames in flight (default 2); other values are a usage error |
+| `--no-haze` | Turn the altitude haze and sky colour off |
 | `--out <file.csv>` | `--bench-stream` per-frame CSV (wanted/drawn level at the camera, caps, cost, uploads) |
+
+Startup line and title. A windowed run prints one line at startup: `gpu: <adapter> | present: requested <mode>, active <mode>, supported [..], frame latency <n> | refresh: <x.xxx> Hz` (or `unknown`). The window title shows `alt 12.3 km | 1.2 km/s | hex L14` (altitude above the surface, speed, topology and the level of the drawn piece under the camera), refreshed every 15th frame. If the 31 ms frames appear, compare `frame_ms` with `prepare_ms + gpu_frame_ms` in the `--perf-log` CSV: a large gap means the frame waits for the present; try `--present-mode immediate` (may tear) or `mailbox` where supported.
 
 Fly with `--release`. Example: `cargo run --release -p planetary-app --example planetary_flight -- --bench-stream --fast --out stream.csv`. Tests use the same harness through `planetary_app::stream_bench` (`tests/streaming_lag.rs`), paced with `PlanetaryApp::wait_for_workers` instead of a clock.
 

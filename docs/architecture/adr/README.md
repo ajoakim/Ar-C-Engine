@@ -19,3 +19,4 @@ To add an ADR, copy `0000-template.md` to the next free number (4-digit zero-pad
 | [0013](0013-shared-index-buffers-and-index-range-draws.md) | Shared Index Buffers and Index-Range Draws | accepted |
 | [0014](0014-vertex-morph-attribute-geomorphing.md) | Vertex Morph Attribute for Geomorphing (Cell Payload v4) | accepted |
 | [0015](0015-scale-contrast-and-distance-haze.md) | Scale, Contrast and Distance Haze (Generator v2) | accepted |
+| [0016](0016-present-mode-setting-and-window-readout.md) | Present-Mode Setting and Window Readout | accepted |

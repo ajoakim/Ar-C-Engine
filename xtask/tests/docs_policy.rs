@@ -249,3 +249,18 @@ fn adr_0015_scale_contrast_present() {
         require(f, &t, lit);
     }
 }
+
+#[test]
+fn adr_0016_present_mode_present() {
+    let f = "docs/architecture/adr/0016-present-mode-setting-and-window-readout.md";
+    let t = read(f);
+    for lit in [
+        "Status: accepted",
+        "PresentModeSetting",
+        "Fifo",
+        "## Measurements",
+        "## Evidence",
+    ] {
+        require(f, &t, lit);
+    }
+}
