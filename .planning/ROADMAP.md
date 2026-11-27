@@ -36,7 +36,13 @@ Phases 1-8 plus inserted Phase 7.1, 90 plans, 45/45 requirements. Full details: 
   3. The "detail patches used / cap" line is either never above the cap or is labelled so a reader knows what the two numbers mean, and a test pins this
   4. Reconfiguring the surface format rebuilds the overlay painter, and the overlay can take a window scale factor so it is legible on HiDPI
   5. An image-diff test fails on a small-feature change (a negative control of a few pixels) while still reporting max delta
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [ ] 09-01-PLAN.md — CI derives toolchain from rust-toolchain.toml; image-diff absolute bad-pixel cap + small-change negative control (DEBT-01, DEBT-03)
+- [ ] 09-02-PLAN.md — Held-mesh overlay line uses the true base+detail cap, pinned by tests (DEBT-05)
+- [ ] 09-03-PLAN.md — Integer counts, painter rebuild on format change, window scale factor (DEBT-02, DEBT-04)
+- [ ] 09-04-PLAN.md — Full local gate and requirement bookkeeping (DEBT-01..05)
 
 ### Phase 10: Free-Flight 6DOF Camera
 **Goal**: The user can fly the planetary example freely in all six degrees of freedom, which also makes judging the later visual work easier
