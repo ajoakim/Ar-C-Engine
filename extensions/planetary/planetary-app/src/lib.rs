@@ -27,6 +27,7 @@ use planetary_terrain::{
 };
 
 pub use descent::DescentScript;
+pub use free_flight::{DEFAULT_ROLL_RATE, FlightMode, FreeFlight};
 pub use telemetry::{
     ALTITUDE_BANDS, Clock, FrameSample, PerfSettings, PerfSummary, SimClock, Telemetry, WallClock,
     band_of, spin_for_ms, summarize,
