@@ -17,6 +17,9 @@ allow = [
     "ISC",
     "Unicode-3.0",
     "Zlib",
+    # epaint_default_fonts (egui default_fonts): embedded font data; user-approved Phase 8, see ADR-0018 (written in plan 07)
+    "OFL-1.1",
+    "Ubuntu-font-1.0",
 ]
 confidence-threshold = 0.93
 
@@ -29,7 +32,7 @@ multiple-versions = "warn"   # wgpu/winit stacks duplicate; kept at warn per ADR
 wildcards = "deny"
 allow-wildcard-paths = true  # workspace path deps of publish = false crates
 deny = [
-    { crate = "wgpu", wrappers = ["engine-render-wgpu"], reason = "GPU API confined to the backend crate (WS-03, ADR-0002)" },
+    { crate = "wgpu", wrappers = ["engine-render-wgpu", "egui-wgpu"], reason = "GPU API confined to the backend crate (WS-03, ADR-0002)" },
     { crate = "winit", wrappers = ["engine-platform"], reason = "Windowing confined to the platform crate (WS-03, ADR-0002)" },
     { crate = "gltf", wrappers = ["conventional-3d"], reason = "glTF importer confined to the conventional-3d extension (REND-05, ADR-0007)" },
     { crate = "image", wrappers = ["conventional-3d", "gltf"], reason = "Image decoding confined to extensions (REND-05, ADR-0007)" },
