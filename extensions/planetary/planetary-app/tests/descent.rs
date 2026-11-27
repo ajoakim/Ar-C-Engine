@@ -56,6 +56,8 @@ struct FrameRecord {
     draws: usize,
     buffer_count: usize,
     held: usize,
+    /// Buffers of the atmosphere limb ring (0 or 1; the app rebuilds it each frame).
+    ring_buffers: usize,
     altitude: f64,
     /// Level of the wanted / drawn cell at the point 10 m ahead of the eye.
     look_wanted: Option<u8>,
@@ -133,6 +135,7 @@ fn run_path(
             draws,
             buffer_count: rt.backend().buffer_count(),
             held: app.held_mesh_count(),
+            ring_buffers: app.ring_buffer_count(),
             altitude,
             look_wanted: app.wanted_level_at(ahead),
             look_drawn: app.piece_level_at(ahead),
@@ -416,7 +419,12 @@ fn no_gpu_leak(kind: TopologyKind) {
     let cfg = real_terrain(kind);
     for (i, r) in shared(kind, Path::Descent).iter().enumerate() {
         // One vertex buffer per held cell plus one shared index buffer per vertex class.
-        assert_eq!(r.buffer_count, r.held + classes, "f{i} buffers");
+        assert!(r.ring_buffers <= 1, "f{i} ring buffers {}", r.ring_buffers);
+        assert_eq!(
+            r.buffer_count,
+            r.held + classes + r.ring_buffers,
+            "f{i} buffers"
+        );
         assert!(
             r.held <= base_patches + cfg.detail_budget_patches as usize,
             "f{i} held {}",
@@ -428,7 +436,7 @@ fn no_gpu_leak(kind: TopologyKind) {
     for (i, r) in recs.iter().enumerate() {
         assert_eq!(
             r.buffer_count,
-            r.held + classes,
+            r.held + classes + r.ring_buffers,
             "f{i} buffers (small budget)"
         );
         assert!(r.held <= base_patches + 60, "f{i} held {}", r.held);

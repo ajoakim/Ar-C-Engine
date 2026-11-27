@@ -4,6 +4,7 @@
 //! `docs/architecture/dependency-direction.md`.
 //! Engine crates under crates/ must never depend on this crate.
 
+pub mod atmosphere;
 pub mod descent;
 pub mod overlay_snapshot;
 pub mod stream_bench;
@@ -14,8 +15,8 @@ use std::collections::BTreeSet;
 
 use engine_sdk::tracing;
 use engine_sdk::{
-    App, AppControl, DVec3, DirectionalLight, DistanceFog, InputEvent, Resources, SceneState,
-    SdkError, Vec3,
+    App, AppControl, DVec3, DirectionalLight, DistanceFog, InputEvent, MAX_DRAWS_PER_FRAME,
+    RenderItem, Resources, SceneState, SdkError, Vec3, WorldPos,
 };
 use planetary_core::lod::View;
 use planetary_core::{CubeSphere, HexSphere, TerrainParams, Topology};
@@ -60,6 +61,13 @@ pub struct Haze {
 /// fog colour equals the sky behind it. A non-finite altitude gives no haze.
 #[must_use]
 pub fn haze_for_altitude(altitude: f64) -> Haze {
+    haze_with_sky(altitude, SKY_COLOR)
+}
+
+/// [`haze_for_altitude`] with an explicit sky colour (the atmosphere module's sun-tinted sky).
+/// Density and fade are independent of the colour.
+#[must_use]
+pub(crate) fn haze_with_sky(altitude: f64, sky_color: [f32; 3]) -> Haze {
     let fade = if altitude.is_finite() {
         let t = (HAZE_NONE_ALTITUDE - altitude) / (HAZE_NONE_ALTITUDE - HAZE_FULL_ALTITUDE);
         t.clamp(0.0, 1.0) as f32
@@ -69,13 +77,13 @@ pub fn haze_for_altitude(altitude: f64) -> Haze {
     let mix = |sky: f32, space: f32| sky * fade + space * (1.0 - fade);
     Haze {
         fog: DistanceFog {
-            color: SKY_COLOR,
+            color: sky_color,
             density: HAZE_DENSITY * fade,
         },
         clear_color: [
-            mix(SKY_COLOR[0], SPACE_COLOR[0]),
-            mix(SKY_COLOR[1], SPACE_COLOR[1]),
-            mix(SKY_COLOR[2], SPACE_COLOR[2]),
+            mix(sky_color[0], SPACE_COLOR[0]),
+            mix(sky_color[1], SPACE_COLOR[1]),
+            mix(sky_color[2], SPACE_COLOR[2]),
             1.0,
         ],
     }
@@ -174,6 +182,9 @@ pub struct AppSettings {
     /// Altitude-faded distance haze and sky colour (default on). Off keeps the scene fog and
     /// clear colour at their defaults; the relief light is always set.
     pub haze: bool,
+    /// Sun-tinted sky colour and the opaque limb ring (default on, ADR-0019). Needs `haze`; off
+    /// keeps exactly the plain haze behaviour.
+    pub atmosphere: bool,
 }
 
 impl AppSettings {
@@ -209,6 +220,7 @@ impl Default for AppSettings {
             adaptive_streaming: false,
             diagnostics: false,
             haze: true,
+            atmosphere: true,
         }
     }
 }
@@ -371,6 +383,11 @@ pub struct PlanetaryApp {
     exit_after_frames: Option<u64>,
     adaptive_streaming: bool,
     haze: bool,
+    atmosphere: bool,
+    /// Outer radius of the planet for the ring: nominal radius plus maximum relief.
+    ring_radius: f64,
+    /// Ring mesh uploaded last frame, destroyed before the next one is built.
+    ring_mesh: Option<engine_sdk::MeshHandle>,
     light: DirectionalLight,
     prev_pos: Option<DVec3>,
     pose_override: Option<(DVec3, engine_sdk::DQuat)>,
@@ -445,6 +462,9 @@ impl PlanetaryApp {
             exit_after_frames: settings.perf.exit_after_frames,
             adaptive_streaming: settings.adaptive_streaming,
             haze: settings.haze,
+            atmosphere: settings.atmosphere,
+            ring_radius: radius + settings.terrain.terrain.max_relief(),
+            ring_mesh: None,
             light: relief_light(sun_target(settings.script.as_ref(), radius)),
             script: settings.script,
             terrain,
@@ -551,6 +571,12 @@ impl PlanetaryApp {
         self.terrain.held()
     }
 
+    /// GPU buffers held by the atmosphere ring (0 or 1): the vertex buffer uploaded last frame.
+    #[must_use]
+    pub fn ring_buffer_count(&self) -> usize {
+        usize::from(self.ring_mesh.is_some())
+    }
+
     /// Current adaptive streaming caps.
     #[must_use]
     pub fn stream_budget(&self) -> StreamBudget {
@@ -643,6 +669,46 @@ impl PlanetaryApp {
         ));
     }
 
+    /// Replaces last frame's limb-ring mesh with this frame's ring item (after the terrain has
+    /// rewritten `scene.items`). Failures are logged and skip the ring; the flight goes on.
+    fn update_ring(
+        &mut self,
+        resources: &mut Resources<'_>,
+        scene: &mut SceneState,
+        altitude: f64,
+    ) {
+        if let Some(old) = self.ring_mesh.take()
+            && let Err(e) = resources.destroy_mesh(old)
+        {
+            tracing::warn!(error = %e, "ring mesh destroy failed");
+        }
+        if !(self.haze && self.atmosphere) || scene.items.len() >= MAX_DRAWS_PER_FRAME {
+            return;
+        }
+        let Some(ring) = atmosphere::ring_frame(
+            self.camera.position(),
+            self.ring_radius,
+            altitude,
+            self.light.direction,
+            scene.clear_color,
+        ) else {
+            return;
+        };
+        let Ok(position) = WorldPos::from_xyz(scene.frames.root(), 0.0, 0.0, 0.0) else {
+            return;
+        };
+        match resources.create_mesh("atmosphere-ring", &ring.vertices) {
+            Ok(mesh) => {
+                self.ring_mesh = Some(mesh);
+                let mut item = RenderItem::new(mesh, position);
+                item.rotation = ring.rotation;
+                item.scale = Vec3::splat(ring.scale);
+                scene.items.push(item);
+            }
+            Err(e) => tracing::warn!(error = %e, "ring mesh upload failed"),
+        }
+    }
+
     fn apply_camera(&self, scene: &mut SceneState) {
         let alt = self.camera.altitude(&|d| self.terrain.surface_radius_at(d));
         if let Err(e) = self
@@ -653,7 +719,11 @@ impl PlanetaryApp {
         }
         scene.light = self.light;
         if self.haze {
-            let haze = haze_for_altitude(alt);
+            let haze = if self.atmosphere {
+                atmosphere::atmosphere_for_view(alt, self.light.direction, self.camera.position())
+            } else {
+                haze_for_altitude(alt)
+            };
             scene.fog = haze.fog;
             scene.clear_color = haze.clear_color;
         }
@@ -772,6 +842,7 @@ impl App for PlanetaryApp {
         } else {
             0.0
         };
+        self.update_ring(resources, scene, altitude_m);
         let r = self.terrain.report();
         let sample = FrameSample {
             frame: self.frames + 1,
