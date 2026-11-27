@@ -72,18 +72,19 @@ Plans:
   3. The terrain shader uses those normals so relief is visible under directional light, covered by an image-diff golden
   4. Measured worker time and hex descent p95 stay within the stated bounds against the v2 baseline, and rendering still never blocks on generation
   5. After a human flight confirms the relief, v3 is the app default and an ADR records layers, normals method and measured cost
-**Plans**: 9 plans
+**Plans**: 10 plans
 
 Plans:
-- [ ] 11-01-PLAN.md — Generator-version axis on the mesh bench, `--generator` flag, v2 mesh byte golden, v2 baselines (TERR-02, TERR-05)
+- [ ] 11-01-PLAN.md — Generator-version axis on the mesh bench, `--generator` flag, v2 mesh byte golden, mesh ratio script, v2 baselines (TERR-02, TERR-05)
 - [ ] 11-02-PLAN.md — Generator v3 hills and mountains layers, additive, guard v3-inert equals v2 (TERR-01, TERR-02)
-- [ ] 11-03-PLAN.md — Relief calibration, LodModel v3 bounds, v3 cost and descent p95 measurement (TERR-01, TERR-05)
-- [ ] 11-04-PLAN.md — v3 border stencil and rock thresholds, normal seam and cross-LOD tolerance tests (TERR-03)
-- [ ] 11-05-PLAN.md — Pre-flight cost evidence, ADR-0020 draft, human flight of v3 (TERR-05, TERR-06)
-- [ ] 11-06-PLAN.md — Pin v3 goldens, make v3 the app default after approval, accept ADR-0020 (TERR-01, TERR-02, TERR-06)
-- [ ] 11-07-PLAN.md — Terrain relief image-diff golden through LitTextured and CI wiring (TERR-04)
-- [ ] 11-08-PLAN.md — Linux golden via CI regeneration, each push explicitly user-authorised (TERR-04)
-- [ ] 11-09-PLAN.md — Full gate, invariance audit, requirement bookkeeping (TERR-01..06)
+- [ ] 11-03-PLAN.md — Relief calibration (slope/relief bands) and LodModel v3 bounds (TERR-01)
+- [ ] 11-04-PLAN.md — v3 cost bounds enforced by command: mesh ratio <= 1.5, hex descent p95 < 8 ms (TERR-05)
+- [ ] 11-05-PLAN.md — v3 border stencil and rock thresholds, normal seam and cross-LOD tolerance tests (TERR-03)
+- [ ] 11-06-PLAN.md — Pre-flight cost evidence, ADR-0020 draft, human flight of v3 with hash-bound verdict line (TERR-05, TERR-06)
+- [ ] 11-07-PLAN.md — Pin v3 goldens, make v3 the app default after approval, accept ADR-0020 (TERR-01, TERR-02, TERR-06)
+- [ ] 11-08-PLAN.md — Terrain relief image-diff golden through LitTextured and CI wiring (TERR-04)
+- [ ] 11-09-PLAN.md — Linux golden via CI regeneration, each push explicitly user-authorised (TERR-04)
+- [ ] 11-10-PLAN.md — Full gate, invariance audit, requirement bookkeeping (TERR-01..06)
 
 **UI hint**: yes
 
@@ -117,7 +118,7 @@ Plans:
 | 1-8 (incl. 7.1) | v1.0 | 90/90 | Complete | 2026-11-27 |
 | 9. Overlay, CI & Test Hygiene | v1.1 | 4/4 | Complete | 2026-11-27 |
 | 10. Free-Flight 6DOF Camera | v1.1 | 3/3 | Complete | 2026-11-27 |
-| 11. Terrain Relief & Normals | v1.1 | 0/9 | Planned | - |
+| 11. Terrain Relief & Normals | v1.1 | 0/10 | Planned | - |
 | 12. LOD Detail Transition | v1.1 | 0/TBD | Not started | - |
 | 13. Validation & CI Debt Closure | v1.1 | 0/TBD | Not started | - |
 

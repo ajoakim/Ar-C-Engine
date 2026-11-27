@@ -354,15 +354,15 @@ Build one real v3 patch with `build_patch` (cube, level ~8, `n = 16`, camera ~50
 | A7 | Hex `border_normal` using the cube constant `pi/2/(n 2^L)` mismatches the hex grid spacing | Normals | If it already matches, the v3 step variant is unnecessary; verify numerically in Wave 0 |
 | A8 | Lowering the sun to 20-25 degrees improves relief readability | Renderer | Purely visual; judged in the human flight |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **D1 (needs user decision): payload v5.** The locked decision says normals are "added" in payload v5; they already exist in v4 (52 B). Options: (a) no bump, document in the ADR (recommended, zero churn, nothing persisted); (b) header-only v5 with `normal_kind` flag, v4 still decoded; (c) packed normal (needs a generic `VertexLayout` change, not recommended).
+1. **D1: payload v5. RESOLVED by D-01 (no payload v5, normals already in v4; recorded in plan 05 and ADR-0020).** The locked decision says normals are "added" in payload v5; they already exist in v4 (52 B). Options: (a) no bump, document in the ADR (recommended, zero churn, nothing persisted); (b) header-only v5 with `normal_kind` flag, v4 still decoded; (c) packed normal (needs a generic `VertexLayout` change, not recommended).
    - Recommendation: (a); if the user wants traceability, (b).
-2. **D2 (needs user decision): exaggeration.** "Not an extreme profile" is locked, but a real-Earth-like profile has 6 km on a 6371 km radius; relief reads from the ground and from low altitude only. Is p99 slope ~30 degrees with Earth-scale height (9-11 km total) acceptable, or does the user want a stylised vertical exaggeration (no ADR yet)? Recommendation: Earth-like heights, steeper-than-Earth local gradients through small feature sizes (10-100 km), no explicit exaggeration factor.
+2. **D2: exaggeration. RESOLVED by D-02 (Earth-like heights, no exaggeration knob; calibrated in plan 03).** "Not an extreme profile" is locked, but a real-Earth-like profile has 6 km on a 6371 km radius; relief reads from the ground and from low altitude only. Is p99 slope ~30 degrees with Earth-scale height (9-11 km total) acceptable, or does the user want a stylised vertical exaggeration (no ADR yet)? Recommendation: Earth-like heights, steeper-than-Earth local gradients through small feature sizes (10-100 km), no explicit exaggeration factor.
 3. **Is the descent p95 < 8 ms measured with workers settled or free-running?** Wave 0 should confirm (`--bench-descent` uses `prepare + gpu_frame`) `[VERIFIED: 07.1-27-SUMMARY: "prepare plus gpu_frame"]`; this means the binding gate is selection cost (F2). Status: answered, see F2. **RESOLVED.**
 4. **Generator selection in the CLI.** `planetary_flight` has no `--generator` flag (usage string lists none) `[VERIFIED: examples/planetary_flight.rs:65]`. The bench plan needs `--generator <1|2|3>` (maps to `TerrainParams`/`TerrainConfig`). Small app change; not a planetary-type leak. **RESOLVED (needed).**
 5. **Does the render golden need a Linux golden before the phase gate?** Yes (`ARC_REQUIRE_GOLDENS=1` in CI). Linux golden comes from the CI `workflow_dispatch` regeneration; local Windows golden from WARP. **RESOLVED (plan a CI checkpoint).**
-6. **Normal tolerance numbers.** Unknown until measured (A4). Wave 0 measurement task. OPEN.
+6. **Normal tolerance numbers.** Unknown until measured (A4). **RESOLVED: measured in plan 05 Task 2 (normals_v3 cross-level and row tolerances, capped and pinned).**
 7. **Is the engine render API change needed?** No for TERR-04. **RESOLVED.** A generic change only becomes relevant for normal morph (see Renderer section); not recommended now.
 
 ## Environment Availability
