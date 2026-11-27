@@ -229,7 +229,7 @@ Plans:
 - [x] 08-01-PLAN.md — Confirm hosted CI green on pushed 07.1 commits, record cross-OS goldens, fix failures
 - [x] 08-02-PLAN.md — Carry-overs (07-VERIFICATION, STATE) and workspace dependency pins
 - [x] 08-03-PLAN.md — Software-adapter constructor, image-diff harness, goldens, CI image job
-- [ ] 08-04-PLAN.md — Criterion benches (spatial, selection, mesh, streaming)
+- [x] 08-04-PLAN.md — Criterion benches (spatial, selection, mesh, streaming)
 - [ ] 08-05-PLAN.md — ecs-bench spike, ADR-0017, amendments to ADR 0005/0006/0010
 - [ ] 08-06-PLAN.md — DiagnosticsSnapshot, debug-ui crate, planetary snapshot builder
 - [ ] 08-07-PLAN.md — Overlay policy: font licences, egui-wgpu wrapper, xtask R2 fixture, ADR-0018
@@ -254,4 +254,4 @@ Plans:
 | 6. Streaming & Procedural Framework | 6/6 | Complete    | 2026-11-26 |
 | 7. Planetary Extension & Terrain LOD | 10/10 | Complete | 2026-11-25 |
 | 07.1. Hex-Grid Planet Topology & Descent Performance | 27/27 | Complete (human flight approved with caveats) | 2026-11-26 |
-| 8. Hardening & Decisions | 3/12 | In Progress|  |
+| 8. Hardening & Decisions | 4/12 | In Progress|  |

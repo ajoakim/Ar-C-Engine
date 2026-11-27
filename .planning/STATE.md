@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 8 in progress; 08-03 (software-adapter image-diff harness) complete; Phase 07.1 complete 27/27 (human flight approved with caveats)
+stopped_at: Phase 8 in progress; 08-04 (criterion benches) complete; Phase 07.1 complete 27/27 (human flight approved with caveats)
 last_updated: "2026-11-27T05:30:38.960Z"
 last_activity: 2026-11-27
 progress:
   total_phases: 9
   completed_phases: 8
   total_plans: 90
-  completed_plans: 79
+  completed_plans: 80
   percent: 88
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-11-25)
 ## Current Position
 
 Phase: 8 (hardening & decisions) - in progress
-Plan: 08-03 complete (08-01, 08-02 done); 3 of 12 plans summarised. Phase 07.1 is complete 27/27 (human flight approved with caveats: visuals not definitive until meshes exist; plan 26 present-mode/title unexercised by human)
+Plan: 08-04 complete (08-01, 08-02, 08-03 done); 4 of 12 plans summarised. Phase 07.1 is complete 27/27 (human flight approved with caveats: visuals not definitive until meshes exist; plan 26 present-mode/title unexercised by human)
 Status: Phase 8 executing
 Last activity: 2026-11-27
 
@@ -81,5 +81,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-11-26T23:59:00.000Z
-Stopped at: Completed 08-03-PLAN.md
+Stopped at: Completed 08-04-PLAN.md
 Resume file: None
