@@ -25,8 +25,11 @@ const W: usize = 64;
 /// Per-channel absolute tolerance (of 255). Calibrated on WARP: see the calibration note in
 /// 08-03-SUMMARY (observed max delta between runs); 2 only absorbs driver updates.
 const CHANNEL_TOLERANCE: u8 = 2;
-/// Maximum fraction of pixels allowed to exceed the channel tolerance (0.5%).
-const MAX_BAD_FRACTION: f64 = 0.005;
+/// Maximum number of pixels allowed to exceed the channel tolerance. Images are 64x64, so
+/// 4 pixels is about 0.1% (the old 0.5% fraction allowed 20 pixels, roughly a 4x5 block,
+/// which could hide thin-edge or small-feature regressions). Calibrated on the local
+/// software adapter; see 09-01-SUMMARY for observed per-scene bad_pixels.
+const MAX_BAD_PIXELS: usize = 4;
 
 // ---------------------------------------------------------------- harness
 
@@ -68,7 +71,7 @@ fn compare(
     golden: &[u8],
     (w, h): (usize, usize),
     tol: u8,
-    max_bad_frac: f64,
+    max_bad: usize,
 ) -> Result<DiffStats, DiffReport> {
     let want = w * h * 4;
     if actual.len() != want || golden.len() != want {
@@ -101,13 +104,10 @@ fn compare(
             diff[o..o + 4].copy_from_slice(&[a[0] / 4, a[1] / 4, a[2] / 4, 255]);
         }
     }
-    let frac = bad as f64 / (w * h) as f64;
-    if frac > max_bad_frac {
+    if bad > max_bad {
         return Err(DiffReport {
             message: format!(
-                "{bad} pixels differ by more than {tol} ({:.3}% > {:.3}% budget), max delta {max_delta}",
-                frac * 100.0,
-                max_bad_frac * 100.0
+                "{bad} pixels differ by more than {tol} (> {max_bad} pixel cap), max delta {max_delta}"
             ),
             diff: Some(diff),
         });
@@ -234,13 +234,19 @@ fn check_scene(scene: &str, actual: &[u8]) {
                             diff: None,
                         });
                     }
-                    compare(actual, &golden, (W, W), CHANNEL_TOLERANCE, MAX_BAD_FRACTION)
+                    compare(actual, &golden, (W, W), CHANNEL_TOLERANCE, MAX_BAD_PIXELS)
                 });
             match result {
-                Ok(s) => println!(
-                    "image_diff {scene}: ok (max channel delta {}, {} pixels over tolerance)",
-                    s.max_delta, s.bad_pixels
-                ),
+                Ok(s) => {
+                    println!(
+                        "image_diff {scene}: ok (max channel delta {}, {} pixels over tolerance)",
+                        s.max_delta, s.bad_pixels
+                    );
+                    println!(
+                        "image_diff {scene}: bad_pixels={} max_delta={}",
+                        s.bad_pixels, s.max_delta
+                    );
+                }
                 Err(r) => {
                     let dir = artifact_dir();
                     write_png(
@@ -551,9 +557,9 @@ fn flat(rgba: [u8; 4]) -> Vec<u8> {
 #[test]
 fn compare_identical_and_within_tolerance_pass() {
     let a = flat([100, 100, 100, 255]);
-    assert!(compare(&a, &a, (W, W), CHANNEL_TOLERANCE, MAX_BAD_FRACTION).is_ok());
+    assert!(compare(&a, &a, (W, W), CHANNEL_TOLERANCE, MAX_BAD_PIXELS).is_ok());
     let b = flat([102, 98, 100, 255]);
-    let s = compare(&a, &b, (W, W), CHANNEL_TOLERANCE, MAX_BAD_FRACTION).expect("within tol");
+    let s = compare(&a, &b, (W, W), CHANNEL_TOLERANCE, MAX_BAD_PIXELS).expect("within tol");
     assert_eq!(s.max_delta, 2);
 }
 
@@ -561,38 +567,78 @@ fn compare_identical_and_within_tolerance_pass() {
 fn negative_control_perturbed_block_fails() {
     let golden = flat([100, 100, 100, 255]);
     let mut actual = golden.clone();
-    // 8x8 block (1.6% of pixels) off by 40: far over the 0.5% budget.
+    // 8x8 block (1.6% of pixels) off by 40: far over the pixel cap.
     for y in 0..8 {
         for x in 0..8 {
             actual[(y * W + x) * 4] = 140;
         }
     }
-    let err = compare(
-        &actual,
+    let err = compare(&actual, &golden, (W, W), CHANNEL_TOLERANCE, MAX_BAD_PIXELS)
+        .expect_err("perturbed block must be detected");
+    assert!(err.diff.is_some());
+    // A pixel under the cap is tolerated (the cap is real, not zero).
+    let mut few = golden.clone();
+    few[0] = 140;
+    assert!(compare(&few, &golden, (W, W), CHANNEL_TOLERANCE, MAX_BAD_PIXELS).is_ok());
+    // A delta just over the channel tolerance on every pixel fails.
+    let over = flat([103, 100, 100, 255]);
+    assert!(compare(&over, &golden, (W, W), CHANNEL_TOLERANCE, MAX_BAD_PIXELS).is_err());
+}
+
+#[test]
+fn negative_control_small_block_fails() {
+    let golden = flat([100, 100, 100, 255]);
+    let mut actual = golden.clone();
+    // 3x3 block (9 pixels) off by 40: passed under the old 20-pixel allowance.
+    for y in 0..3 {
+        for x in 0..3 {
+            actual[(y * W + x) * 4] = 140;
+        }
+    }
+    let err = compare(&actual, &golden, (W, W), CHANNEL_TOLERANCE, MAX_BAD_PIXELS)
+        .expect_err("9-pixel change must be detected");
+    assert!(err.message.contains("max delta 40"), "{}", err.message);
+}
+
+#[test]
+fn bad_pixel_cap_boundary() {
+    let golden = flat([100, 100, 100, 255]);
+    let perturb = |n: usize| {
+        let mut a = golden.clone();
+        for i in 0..n {
+            a[i * 4] = 140;
+        }
+        a
+    };
+    let s = compare(
+        &perturb(MAX_BAD_PIXELS),
         &golden,
         (W, W),
         CHANNEL_TOLERANCE,
-        MAX_BAD_FRACTION,
+        MAX_BAD_PIXELS,
     )
-    .expect_err("perturbed block must be detected");
-    assert!(err.diff.is_some());
-    // A few pixels under the budget are tolerated (the budget is real, not zero).
-    let mut few = golden.clone();
-    few[0] = 140;
-    assert!(compare(&few, &golden, (W, W), CHANNEL_TOLERANCE, MAX_BAD_FRACTION).is_ok());
-    // A delta just over the channel tolerance on every pixel fails.
-    let over = flat([103, 100, 100, 255]);
-    assert!(compare(&over, &golden, (W, W), CHANNEL_TOLERANCE, MAX_BAD_FRACTION).is_err());
+    .expect("exactly the cap passes");
+    assert_eq!(s.bad_pixels, MAX_BAD_PIXELS);
+    assert_eq!(s.max_delta, 40);
+    let err = compare(
+        &perturb(MAX_BAD_PIXELS + 1),
+        &golden,
+        (W, W),
+        CHANNEL_TOLERANCE,
+        MAX_BAD_PIXELS,
+    )
+    .expect_err("cap + 1 fails");
+    assert!(err.message.contains("max delta 40"), "{}", err.message);
 }
 
 #[test]
 fn compare_rejects_dimension_mismatch_without_panic() {
     let a = flat([1, 2, 3, 255]);
     let short = vec![0u8; 16];
-    let err = compare(&a, &short, (W, W), CHANNEL_TOLERANCE, MAX_BAD_FRACTION)
-        .expect_err("size mismatch");
+    let err =
+        compare(&a, &short, (W, W), CHANNEL_TOLERANCE, MAX_BAD_PIXELS).expect_err("size mismatch");
     assert!(err.message.contains("size mismatch"), "{}", err.message);
-    assert!(compare(&short, &a, (W, W), CHANNEL_TOLERANCE, MAX_BAD_FRACTION).is_err());
+    assert!(compare(&short, &a, (W, W), CHANNEL_TOLERANCE, MAX_BAD_PIXELS).is_err());
 }
 
 #[test]
@@ -605,11 +651,11 @@ fn negative_control_shifted_geometry_fails_on_gpu() {
     let shifted = scene_unlit_triangle(&mut b, 2.0 / W as f32);
     let same = scene_unlit_triangle(&mut b, 0.0);
     assert!(
-        compare(&same, &base, (W, W), CHANNEL_TOLERANCE, MAX_BAD_FRACTION).is_ok(),
+        compare(&same, &base, (W, W), CHANNEL_TOLERANCE, MAX_BAD_PIXELS).is_ok(),
         "software adapter render is not deterministic"
     );
     assert!(
-        compare(&shifted, &base, (W, W), CHANNEL_TOLERANCE, MAX_BAD_FRACTION).is_err(),
+        compare(&shifted, &base, (W, W), CHANNEL_TOLERANCE, MAX_BAD_PIXELS).is_err(),
         "a one-pixel geometry shift went undetected"
     );
 }
