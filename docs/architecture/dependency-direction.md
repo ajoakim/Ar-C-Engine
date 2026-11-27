@@ -16,6 +16,7 @@ Dependencies flow downward only: a crate may depend only on crates of a strictly
 | `engine-render` | crates/engine-render | 3 | `engine-core`, `engine-math`, `engine-world`, `engine-assets` |
 | `engine-streaming` | crates/engine-streaming | 3 | `engine-jobs`, `engine-assets`; dev-only: `engine-procedural` |
 | `engine-render-wgpu` | crates/engine-render-wgpu | 4 | `engine-render`, `engine-core` |
+| `debug-ui` | crates/debug-ui | 4 | `engine-diagnostics`; external `egui` only (no wgpu, winit, egui-winit) |
 | `engine-sdk` | crates/engine-sdk | 5 | all engine-* crates above |
 | `conventional-3d` | extensions/conventional-3d | 6 | `engine-sdk` |
 | `planetary-core` | extensions/planetary/planetary-core | 6 | `engine-sdk` |

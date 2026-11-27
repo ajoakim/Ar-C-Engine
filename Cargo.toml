@@ -14,6 +14,7 @@ members = [
     "crates/engine-render",
     "crates/engine-render-wgpu",
     "crates/engine-sdk",
+    "crates/debug-ui",
     "extensions/conventional-3d",
     "extensions/planetary/planetary-core",
     "extensions/planetary/planetary-terrain",

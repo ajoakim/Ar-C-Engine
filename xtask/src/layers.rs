@@ -58,6 +58,10 @@ pub const LAYERS: &[Layer] = &[
         tier: 4,
     },
     Layer {
+        name: "debug-ui",
+        tier: 4,
+    },
+    Layer {
         name: "engine-sdk",
         tier: 5,
     },
