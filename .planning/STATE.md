@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-11-27)
 
 ## Current Position
 
-Phase: 11 (Terrain Relief & Normals) - in progress (3/10 plans)
-Plan: 11-03 complete; next: 11-04 (v3 cost gates)
+Phase: 11 (Terrain Relief & Normals) - in progress (4/10 plans)
+Plan: 11-04 complete; next: 11-05
 Status: Executing Phase 11
-Last activity: 2026-11-27 - Completed 11-03 (v3 calibration, v3 LOD bounds)
+Last activity: 2026-11-27 - Completed 11-04 (v3 cost gates pass: mesh ratio <= 1.30, hex descent p95 <= 4.09 ms)
 
 ## Performance Metrics
 
@@ -80,7 +80,7 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-11-26T23:59:00.000Z
-Stopped at: Completed 11-03-PLAN.md
+Stopped at: Completed 11-04-PLAN.md
 Resume file: None
 
 ## Deferred Items
