@@ -39,7 +39,11 @@ jobs:
       - name: Install pinned toolchain from rust-toolchain.toml
         run: rustup toolchain install
       - name: Assert pinned toolchain is active
-        run: rustc --version | grep -F "1.99.0"
+        shell: bash
+        run: |
+          want="$(sed -n 's/^channel *= *"\(.*\)"//p' rust-toolchain.toml)"
+          test -n "$want"
+          rustc --version | grep -F "$want"
       - uses: Swatinem/rust-cache@v2
       - name: Format
         run: cargo fmt --all -- --check
@@ -137,7 +141,11 @@ jobs:
       - name: Install pinned toolchain from rust-toolchain.toml
         run: rustup toolchain install
       - name: Assert pinned toolchain is active
-        run: rustc --version | grep -F "1.99.0"
+        shell: bash
+        run: |
+          want="$(sed -n 's/^channel *= *"\(.*\)"//p' rust-toolchain.toml)"
+          test -n "$want"
+          rustc --version | grep -F "$want"
       - uses: Swatinem/rust-cache@v2
       - name: Install lavapipe (Linux software Vulkan)
         if: runner.os == 'Linux'
