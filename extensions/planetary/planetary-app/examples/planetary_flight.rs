@@ -13,6 +13,13 @@
 //! error. `--debug-cells` colours every cell by level and id so hexes visibly give way to their
 //! parts while descending.
 //!
+//! `--present-mode <fifo|mailbox|immediate|auto>` selects the surface present mode (default
+//! fifo; an unsupported mode falls back to fifo with a warning) and `--frame-latency <1|2|3>`
+//! the maximum frames in flight (default 2); other values are usage errors. `--no-haze` turns
+//! the altitude haze off. The startup line prints the adapter, requested and active mode,
+//! supported modes, latency and monitor refresh rate; the window title shows altitude, speed
+//! and level.
+//!
 //! `--diagnostics` turns on the per-frame churn counters (drawn cells appearing, disappearing,
 //! flip-flopping, cull toggles, overlaps) in the perf log, the console line and `--out`.
 //! `--retain-frames <n>` sets how many frames a split cell that is culled stays split (default 8,
@@ -38,7 +45,8 @@
 #![allow(clippy::result_large_err)]
 
 use engine_sdk::{
-    AppConfig, Engine, EngineConfig, NullBackend, Runtime, SdkError, WindowConfig, run_app,
+    AppConfig, Engine, EngineConfig, FrameLatency, NullBackend, PresentConfig, PresentModeSetting,
+    Runtime, SdkError, WindowConfig, run_app,
 };
 use planetary_app::stream_bench::{analyze, csv, report_text, run_stream};
 use planetary_app::{
@@ -46,7 +54,7 @@ use planetary_app::{
     spin_for_ms, summarize,
 };
 
-const USAGE: &str = "usage: planetary_flight [--topology <hex|cube>] [--debug-cells] [--headless <frames>] [--descent] [--ascent] [--frames <n>] [--perf-log <file.csv>] [--no-console] [--bench-descent] [--budget-ms <ms>] [--strict] [--bench-stream] [--fast] [--settle] [--no-adaptive] [--frame-ms <ms>] [--out <file.csv>] [--diagnostics] [--retain-frames <n>]";
+const USAGE: &str = "usage: planetary_flight [--topology <hex|cube>] [--debug-cells] [--headless <frames>] [--descent] [--ascent] [--frames <n>] [--perf-log <file.csv>] [--no-console] [--bench-descent] [--budget-ms <ms>] [--strict] [--bench-stream] [--fast] [--settle] [--no-adaptive] [--frame-ms <ms>] [--out <file.csv>] [--diagnostics] [--retain-frames <n>] [--present-mode <fifo|mailbox|immediate|auto>] [--frame-latency <1|2|3>] [--no-haze]";
 
 #[derive(Default, Clone, Copy)]
 struct BandMax {
@@ -203,6 +211,16 @@ fn bench_stream(
     Ok(())
 }
 
+/// Strictly parse the value of `--present-mode`; `None` for a missing or unknown value.
+fn parse_present_mode(v: Option<String>) -> Option<PresentModeSetting> {
+    PresentModeSetting::parse(&v?).ok()
+}
+
+/// Strictly parse the value of `--frame-latency` (1..=3); `None` otherwise.
+fn parse_frame_latency(v: Option<String>) -> Option<FrameLatency> {
+    FrameLatency::parse(&v?).ok()
+}
+
 fn main() -> Result<(), SdkError> {
     let mut headless: Option<u32> = None;
     let mut descent = false;
@@ -217,6 +235,8 @@ fn main() -> Result<(), SdkError> {
     let mut adaptive = true;
     let mut topology = TopologyKind::Hex;
     let mut debug_cells = false;
+    let mut present = PresentConfig::default();
+    let mut haze = true;
     let mut diagnostics = false;
     let mut retain_frames: Option<u32> = None;
     let mut so = StreamOpts {
@@ -242,6 +262,13 @@ fn main() -> Result<(), SdkError> {
                     .and_then(|v| TopologyKind::parse(&v))
                     .ok_or_else(usage)?;
             }
+            "--present-mode" => {
+                present.mode = parse_present_mode(args.next()).ok_or_else(usage)?;
+            }
+            "--frame-latency" => {
+                present.frame_latency = parse_frame_latency(args.next()).ok_or_else(usage)?;
+            }
+            "--no-haze" => haze = false,
             "--debug-cells" => debug_cells = true,
             "--diagnostics" => diagnostics = true,
             "--retain-frames" => {
@@ -294,6 +321,7 @@ fn main() -> Result<(), SdkError> {
     };
     settings.terrain.debug_cells = debug_cells;
     settings.diagnostics = diagnostics;
+    settings.haze = haze;
     if let Some(n) = retain_frames {
         settings.terrain.retain_frames = n;
     }
@@ -365,6 +393,53 @@ fn main() -> Result<(), SdkError> {
                 ..Default::default()
             },
             engine: EngineConfig::default(),
+            present,
         },
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn some(s: &str) -> Option<String> {
+        Some(s.to_string())
+    }
+
+    #[test]
+    fn present_mode_flag_is_strict() {
+        assert_eq!(parse_present_mode(some("bogus")), None);
+        assert_eq!(parse_present_mode(None), None);
+        assert_eq!(parse_present_mode(some("Fifo")), None);
+        assert_eq!(
+            parse_present_mode(some("mailbox")),
+            Some(PresentModeSetting::Mailbox)
+        );
+        assert_eq!(
+            parse_present_mode(some("auto")),
+            Some(PresentModeSetting::Auto)
+        );
+    }
+
+    #[test]
+    fn frame_latency_flag_is_strict() {
+        assert!(parse_frame_latency(some("0")).is_none());
+        assert!(parse_frame_latency(some("4")).is_none());
+        assert!(parse_frame_latency(None).is_none());
+        for n in ["1", "2", "3"] {
+            assert!(parse_frame_latency(some(n)).is_some());
+        }
+    }
+
+    #[test]
+    fn usage_names_the_new_flags() {
+        for f in [
+            "--present-mode",
+            "--frame-latency",
+            "--no-haze",
+            "--topology",
+        ] {
+            assert!(USAGE.contains(f), "{f}");
+        }
+    }
 }

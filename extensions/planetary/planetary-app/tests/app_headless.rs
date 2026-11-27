@@ -193,3 +193,20 @@ both!(
     frame_sets_light_fog_and_clear_colour,
     haze_off_keeps_default_fog
 );
+
+#[test]
+fn window_title_is_set_only_on_throttle_frames() {
+    let mut app = PlanetaryApp::new(settings(TopologyKind::Hex, true)).expect("app");
+    let mut rt = runtime();
+    rt.setup(&mut app).expect("setup");
+    let mut titled = Vec::new();
+    for i in 0..31_u64 {
+        rt.frame(&mut app, DT).expect("frame");
+        if let Some(t) = rt.take_window_title() {
+            assert!(t.starts_with("alt "), "{t}");
+            assert!(t.contains(" | hex L"), "{t}");
+            titled.push(i);
+        }
+    }
+    assert_eq!(titled, vec![0, 15, 30]);
+}

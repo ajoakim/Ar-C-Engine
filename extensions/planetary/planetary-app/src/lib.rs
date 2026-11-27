@@ -7,6 +7,7 @@
 pub mod descent;
 pub mod stream_bench;
 pub mod telemetry;
+pub mod title;
 
 use std::collections::BTreeSet;
 
@@ -320,6 +321,30 @@ impl AnyTerrain {
     }
 }
 
+/// The startup readout: adapter, requested and active present mode, supported modes, frame
+/// latency and the monitor refresh rate.
+#[must_use]
+pub fn startup_line(info: &engine_sdk::StartupInfo) -> String {
+    let refresh = info.monitor_refresh_mhz.map_or_else(
+        || "unknown".to_string(),
+        |mhz| format!("{:.3} Hz", f64::from(mhz) / 1000.0),
+    );
+    let present = info.present.as_ref().map_or_else(
+        || "present: n/a".to_string(),
+        |p| {
+            format!(
+                "present: requested {}, active {}{}, supported [{}], frame latency {}",
+                p.requested.name(),
+                p.active,
+                if p.fell_back { " (fell back)" } else { "" },
+                p.supported.join(", "),
+                p.frame_latency
+            )
+        },
+    );
+    format!("gpu: {} | {present} | refresh: {refresh}", info.adapter)
+}
+
 /// Flies the planetary camera over streamed terrain.
 pub struct PlanetaryApp {
     kind: TopologyKind,
@@ -339,6 +364,7 @@ pub struct PlanetaryApp {
     adaptive_streaming: bool,
     haze: bool,
     light: DirectionalLight,
+    prev_pos: Option<DVec3>,
 }
 
 /// Direction of the point the sun is anchored to: the end of the descent script, or the end of
@@ -417,6 +443,7 @@ impl PlanetaryApp {
             time: 0.0,
             last_view: View::new(pos, viewport_h, TAN_HALF_FOV_Y),
             quit: false,
+            prev_pos: None,
         })
     }
 
@@ -541,6 +568,33 @@ impl PlanetaryApp {
         self.terrain.shutdown();
     }
 
+    /// Window-title readout (altitude, speed, level) on throttle frames. Counts frames only,
+    /// never reads a clock; the host ignores it for headless runs.
+    fn update_title(&mut self, dt: f64, scene: &mut SceneState) {
+        let pos = self.camera.position();
+        let moved = self.prev_pos.map_or(0.0, |p| (pos - p).length());
+        self.prev_pos = Some(pos);
+        if !title::should_update_title(self.frames, title::TITLE_EVERY_FRAMES) {
+            return;
+        }
+        let len = pos.length();
+        let (alt, level) = if len > 0.0 {
+            let dir = pos / len;
+            (
+                len - self.terrain.surface_radius_at(dir),
+                self.terrain.level_at(dir, false),
+            )
+        } else {
+            (0.0, None)
+        };
+        scene.window_title = Some(title::format_title(
+            alt,
+            title::speed_from_displacement(moved, dt),
+            self.kind.name(),
+            level,
+        ));
+    }
+
     fn apply_camera(&self, scene: &mut SceneState) {
         let alt = self.camera.altitude(&|d| self.terrain.surface_radius_at(d));
         if let Err(e) = self
@@ -566,6 +620,9 @@ impl App for PlanetaryApp {
     ) -> Result<(), SdkError> {
         self.terrain.setup(resources, scene)?;
         self.apply_camera(scene);
+        if !scene.startup.adapter.is_empty() {
+            println!("{}", startup_line(&scene.startup));
+        }
         Ok(())
     }
 
@@ -611,6 +668,7 @@ impl App for PlanetaryApp {
                 .update(dt, &|d| terrain.surface_radius_at(d), extra);
         }
         self.apply_camera(scene);
+        self.update_title(dt, scene);
         if let Some(view) = View::new(self.camera.position(), self.viewport_h, TAN_HALF_FOV_Y) {
             // Conservative aspect: never narrower than 16:9 so culling cannot clip visible edges.
             let aspect = (f64::from(self.viewport_w) / f64::from(self.viewport_h)).max(16.0 / 9.0);
