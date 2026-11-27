@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-11-27)
 
 ## Current Position
 
-Phase: 10 (Free-Flight 6DOF Camera) - complete (3/3 plans)
-Plan: 10-03 complete; next: Phase 11 (Terrain Relief & Normals)
-Status: Phase 10 complete, ready to plan Phase 11
-Last activity: 2026-11-27 - Completed 10-03 (full gate green, human flight approved "looks good", CAM-01..06 ticked)
+Phase: 11 (Terrain Relief & Normals) - in progress (1/10 plans)
+Plan: 11-01 complete; next: 11-02 (generator v3 layers)
+Status: Executing Phase 11
+Last activity: 2026-11-27 - Completed 11-01 (bench gen axis, --generator flag, v2 mesh golden, v2 baselines)
 
 ## Performance Metrics
 
