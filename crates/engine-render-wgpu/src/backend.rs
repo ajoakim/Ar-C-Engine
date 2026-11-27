@@ -222,17 +222,44 @@ impl WgpuBackend {
         height: u32,
         present: &PresentConfig,
     ) -> Result<Self, RenderError> {
+        Self::new_offscreen_policy(width, height, present, false)
+    }
+
+    /// Offscreen backend on the software (fallback) adapter only: WARP on Windows, lavapipe on
+    /// Linux. Used by the image-diff regression tests so goldens never come from a hardware GPU.
+    /// `WGPU_BACKEND` is honoured. Returns an error (never panics) when no fallback adapter exists.
+    pub fn new_offscreen_software(width: u32, height: u32) -> Result<Self, RenderError> {
+        Self::new_offscreen_policy(width, height, &PresentConfig::default(), true)
+    }
+
+    fn new_offscreen_policy(
+        width: u32,
+        height: u32,
+        present: &PresentConfig,
+        software: bool,
+    ) -> Result<Self, RenderError> {
         if width == 0 || height == 0 {
             return Err(RenderError::Backend(
                 "offscreen size must be non-zero".into(),
             ));
         }
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+        let instance = if software {
+            wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env())
+        } else {
+            wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle())
+        };
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
             compatible_surface: None,
+            force_fallback_adapter: software,
             ..Default::default()
         }))
-        .map_err(backend_err)?;
+        .map_err(|e| {
+            if software {
+                RenderError::Backend(format!("no software (fallback) adapter: {e}"))
+            } else {
+                backend_err(e)
+            }
+        })?;
         let color_format = wgpu::TextureFormat::Rgba8UnormSrgb;
         let mut backend = Self::with_device(
             instance,
@@ -245,7 +272,7 @@ impl WgpuBackend {
         )?;
         backend.present_info = PresentInfo::offscreen(present);
         backend.reconfigure()?;
-        tracing::info!(adapter = %backend.adapter_summary(), ?color_format, "wgpu offscreen backend ready");
+        tracing::info!(adapter = %backend.adapter_summary(), ?color_format, software, "wgpu offscreen backend ready");
         Ok(backend)
     }
 
@@ -751,5 +778,24 @@ impl WgpuBackend {
                 Err(RenderError::Backend("surface validation error".into()))
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The software constructor must return Ok or a clean Err on any machine, never panic.
+    #[test]
+    fn software_offscreen_is_ok_or_clean_error() {
+        match WgpuBackend::new_offscreen_software(8, 8) {
+            Ok(b) => {
+                let s = b.adapter_summary();
+                println!("software adapter: {s}");
+                assert!(!s.is_empty());
+            }
+            Err(e) => println!("no software adapter: {e}"),
+        }
+        assert!(WgpuBackend::new_offscreen_software(0, 8).is_err());
     }
 }
