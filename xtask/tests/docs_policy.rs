@@ -362,7 +362,14 @@ fn phase8_amendments_cite_evidence() {
     let marker = "Amendment (Phase 8)";
     let f5 = "docs/architecture/adr/0005-rendering-api-wgpu-behind-trait.md";
     let t5 = read(f5);
-    for lit in [marker, "image_diff", "WARP", "plan 11"] {
+    for lit in [
+        marker,
+        "image_diff",
+        "WARP",
+        "plan 11",
+        "llvmpipe",
+        "46042013890",
+    ] {
         require(f5, &t5, lit);
     }
     let f6 = "docs/architecture/adr/0006-spatial-index-hash-grid-first.md";
