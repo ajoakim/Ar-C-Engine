@@ -1,7 +1,7 @@
 ---
 phase: 8
 slug: hardening-decisions
-status: draft
+status: gate-run
 nyquist_compliant: false
 wave_0_complete: false
 created: 2026-11-26
@@ -39,17 +39,45 @@ Stub derived from the "Validation Architecture" section of 08-RESEARCH.md. Plan 
 
 | Req | Behavior | Test Type | Automated Command | File Exists | Result |
 |-----|----------|-----------|-------------------|-------------|--------|
-| PLAN-08 | atmosphere colour monotone/finite, ring radius formula, no-NaN, fades to 0 below/above bands | unit | `cargo test -p planetary-app atmosphere --locked` | W0 (new `atmosphere.rs`, 08-10) | pending |
-| PLAN-08 | ring renders on a software adapter and is occluded by the planet disc | image-diff | `cargo test -p planetary-app --test atmosphere_ring` | W0 (08-10) | pending |
-| QA-01 | image tests render, compare to goldens with tolerance, skip with message / fail under `ARC_REQUIRE_ADAPTER` / `ARC_REQUIRE_GOLDENS` | integration | `cargo test -p engine-render-wgpu --test image_diff -- --nocapture` | W0 (08-03) | pending |
-| QA-01 | negative control: perturbed golden or shifted geometry is detected | integration | same | W0 (08-03) | pending |
-| QA-01 | benches compile and run | bench | `cargo bench --workspace --benches --locked -- --noplot --quick` | W0 (08-04, 08-05) | pending |
-| QA-02 | snapshot builder yields histogram from `drawn_levels()` and budgets; overlay produces non-empty tessellation headless | unit | `cargo test -p debug-ui -p planetary-app --features debug-overlay` | W0 (08-06) | pending |
-| QA-02 | overlay pixels appear on a software adapter (corner region differs from baseline) | image-diff | `cargo test -p engine-render-wgpu --features egui-overlay --test image_diff` | W0 (08-08) | pending |
-| QA-02 | check-deps and deny still pass with egui crates; negative fixture for misplaced `egui-wgpu` fails | policy | `cargo run -p xtask -- check-deps`; `cargo deny check bans licenses`; negative CI steps | extend existing (08-06, 08-07) | pending |
-| QA-03 | each doc exists and contains required literals | policy | `cargo test -p xtask --test docs_policy` | W0 (08-09) | pending |
-| WS-05 | ADR-0017 (ECS) and amendments to 0005/0006/0010 present and cite bench/test names | policy | `cargo test -p xtask --test docs_policy` | W0 (08-05) | pending |
-| WS-05 | ECS bench runs | bench | `cargo bench -p ecs-bench --benches --locked -- --noplot --quick` | W0 (08-05) | pending |
+| PLAN-08 | atmosphere colour monotone/finite, ring radius formula, no-NaN, fades to 0 below/above bands | unit | `cargo test -p planetary-app atmosphere --locked` | W0 (new `atmosphere.rs`, 08-10) | pass: inside `cargo test --workspace --locked` (exit 0) and `--features debug-overlay` run (exit 0) |
+| PLAN-08 | ring renders on a software adapter and is occluded by the planet disc | image-diff | `cargo test -p planetary-app --test atmosphere_ring` | W0 (08-10) | pass: `atmosphere_ring_scene` ok on Microsoft Basic Render Driver (Dx12), exit 0 |
+| QA-01 | image tests render, compare to goldens with tolerance, skip with message / fail under `ARC_REQUIRE_ADAPTER` / `ARC_REQUIRE_GOLDENS` | integration | `cargo test -p engine-render-wgpu --test image_diff -- --nocapture` | W0 (08-03) | pass: 9 tests ok on real adapter Microsoft Basic Render Driver (Dx12), no skips, exit 0 |
+| QA-01 | negative control: perturbed golden or shifted geometry is detected | integration | same | W0 (08-03) | pass: `negative_control_shifted_geometry_fails_on_gpu` ok, exit 0 |
+| QA-01 | benches compile and run | bench | `cargo bench --workspace --benches --locked -- --noplot --quick` | W0 (08-04, 08-05) | pass: `--bench spatial --bench select --bench mesh --bench stream --bench ecs` completes, exit 0 (report only) |
+| QA-02 | snapshot builder yields histogram from `drawn_levels()` and budgets; overlay produces non-empty tessellation headless | unit | `cargo test -p debug-ui -p planetary-app --features debug-overlay` | W0 (08-06) | pass: `-p planetary-app --features debug-overlay` exit 0; debug-ui covered by workspace run |
+| QA-02 | overlay pixels appear on a software adapter (corner region differs from baseline) | image-diff | `cargo test -p engine-render-wgpu --features egui-overlay --test image_diff` | W0 (08-08) | pass: `overlay_corner_differs` ok on Dx12 software adapter, exit 0 |
+| QA-02 | check-deps and deny still pass with egui crates; negative fixture for misplaced `egui-wgpu` fails | policy | `cargo run -p xtask -- check-deps`; `cargo deny check bans licenses`; negative CI steps | extend existing (08-06, 08-07) | pass: check-deps exit 0; 3 negative fixtures fail as required; `cargo deny check bans licenses sources advisories` exit 0; deny negative fixture fails as required |
+| QA-03 | each doc exists and contains required literals | policy | `cargo test -p xtask --test docs_policy` | W0 (08-09) | pass: `docs_policy` inside workspace test run, exit 0 |
+| WS-05 | ADR-0017 (ECS) and amendments to 0005/0006/0010 present and cite bench/test names | policy | `cargo test -p xtask --test docs_policy` | W0 (08-05) | pass: `docs_policy` inside workspace test run, exit 0 |
+| WS-05 | ECS bench runs | bench | `cargo bench -p ecs-bench --benches --locked -- --noplot --quick` | W0 (08-05) | pass: `--bench ecs` completes, exit 0 |
+
+## Local Gate Results (08-12 Task 1)
+
+Run on Windows 11, rustc 1.99.0, free disk 132G at start. Hosted CI was already green in run 46042013890 (see 08-CI-EVIDENCE.md). Bench commands use `--bench <name>` per crate instead of `--benches -- --noplot --quick` (as in ci.yml, with `--noplot --quick` kept). Image tests use `--test-threads=1` as ci.yml does. Durations are informational. No failures and no flaky tests; nothing was fixed or re-run.
+
+| Gate | Exit | Time |
+|------|------|------|
+| `cargo fmt --all -- --check` | 0 | 0s |
+| `cargo clippy --workspace --all-targets --locked -- -D warnings` | 0 | 1s (cached) |
+| `cargo test --workspace --locked` (913 passed, 0 failed, 11 ignored) | 0 | 1398s |
+| `cargo test -p engine-render-wgpu --locked --test image_diff -- --nocapture --test-threads=1` (adapter: Microsoft Basic Render Driver Dx12) | 0 | 4s |
+| `cargo test -p planetary-app --locked --test atmosphere_ring -- --nocapture --test-threads=1` (same adapter) | 0 | 1s |
+| `cargo bench --workspace --bench spatial --bench select --bench mesh --bench stream --bench ecs --locked -- --noplot --quick` (completes; not asserted) | 0 | 46s |
+| `cargo run --locked -p xtask -- check-deps` | 0 | 1s |
+| `! check-deps` fixtures core-depends-on-ext, wgpu-winit-misplaced, egui-wgpu-misplaced (each fails as required) | 0 | 1s total |
+| `cargo run --locked -p xtask -- check-canary` | 0 | 1s |
+| `! check-canary` fixture canary-leak | 0 | 0s |
+| `cargo build --locked -p conventional-3d --example basic_scene` | 0 | 6s |
+| `cargo run --locked -p planetary-app --example planetary_flight -- --headless 30` | 0 | 7s |
+| same with `--features debug-overlay` | 0 | 9s |
+| `cargo test -p engine-render-wgpu --locked --features egui-overlay --test image_diff -- --nocapture --test-threads=1` | 0 | 2s |
+| `cargo clippy -p planetary-app --features debug-overlay --all-targets --locked -- -D warnings` | 0 | 2s |
+| `cargo test -p planetary-app --features debug-overlay --locked` | 0 | 807s |
+| `cargo test --workspace --exclude planetary-core --exclude planetary-terrain --exclude planetary-app --locked` (487 passed) | 0 | 11s |
+| `cargo deny check bans licenses sources advisories` | 0 | 1s |
+| `! cargo deny ... xtask/fixtures/wgpu-winit-misplaced ... check bans` (fails as required) | 0 | 0s |
+| `cargo check --workspace --locked --target x86_64-unknown-linux-gnu` | 0 | 15s |
+| `cargo check --workspace --locked --target aarch64-apple-darwin` | 0 | 14s |
 
 ## Wave 0 Requirements
 
