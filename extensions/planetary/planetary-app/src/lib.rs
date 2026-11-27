@@ -373,6 +373,7 @@ pub struct PlanetaryApp {
     script: Option<DescentScript>,
     terrain: AnyTerrain,
     camera: PlanetaryCamera,
+    free: FreeFlight,
     viewport_h: u32,
     viewport_w: u32,
     frustum_culling: bool,
@@ -453,6 +454,8 @@ impl PlanetaryApp {
         if let Some(q) = orient {
             camera.set_pose(pos, q);
         }
+        let free = FreeFlight::new(camera.position(), camera.orientation(), settings.camera)
+            .ok_or_else(|| SdkError::App("invalid camera start pose".into()))?;
         let viewport_h = settings.viewport_height.max(1);
         let telemetry = Telemetry::new(clock, &settings.perf)
             .map_err(|e| SdkError::App(format!("perf log: {e}")))?;
@@ -471,6 +474,7 @@ impl PlanetaryApp {
             script: settings.script,
             terrain,
             camera,
+            free,
             viewport_h,
             viewport_w: settings.viewport_width.max(1),
             frustum_culling: settings.frustum_culling,
@@ -604,6 +608,12 @@ impl PlanetaryApp {
     #[must_use]
     pub fn overlay_visible(&self) -> bool {
         self.overlay_visible
+    }
+
+    /// Current interactive flight mode. Defaults to [`FlightMode::Free`]; the F key toggles it.
+    #[must_use]
+    pub fn flight_mode(&self) -> FlightMode {
+        self.free.mode()
     }
 
     #[must_use]
@@ -766,6 +776,13 @@ impl App for PlanetaryApp {
             _ => {}
         }
         if self.script.is_none() {
+            let before = self.free.mode();
+            self.free.handle_input(event);
+            let after = self.free.mode();
+            if after != before {
+                println!("flight mode: {}", after.name());
+                tracing::info!(mode = after.name(), "flight mode changed");
+            }
             self.camera.handle_input(event);
         } else if matches!(
             event,
@@ -789,11 +806,13 @@ impl App for PlanetaryApp {
         }
         if let Some((pos, rot)) = self.pose_override {
             self.camera.set_pose(pos, rot);
+            self.free.set_pose(pos, rot);
         } else if let Some(script) = self.script {
             let (pos, rot) = script.pose_at(self.time, &|d| self.terrain.surface_radius_at(d));
             self.camera.set_pose(pos, rot);
+            self.free.set_pose(pos, rot);
         } else {
-            let pos = self.camera.position();
+            let pos = self.free.position();
             let len = pos.length();
             let extra = if len > 0.0 {
                 self.terrain.drawn_error_at(pos / len)
@@ -801,8 +820,10 @@ impl App for PlanetaryApp {
                 0.0
             };
             let terrain = &self.terrain;
-            self.camera
+            self.free
                 .update(dt, &|d| terrain.surface_radius_at(d), extra);
+            self.camera
+                .set_pose(self.free.position(), self.free.orientation());
         }
         self.apply_camera(scene);
         self.update_title(dt, scene);
