@@ -12,3 +12,14 @@ engine-sdk.workspace = true
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+name = "select"
+harness = false
+
+[[bench]]
+name = "mesh"
+harness = false

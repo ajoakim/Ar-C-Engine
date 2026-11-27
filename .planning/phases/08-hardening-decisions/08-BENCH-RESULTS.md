@@ -37,3 +37,33 @@ Bench: `crates/engine-spatial/benches/spatial.rs`. Entity density is constant ac
 | update_10pct_roundtrip | 100000 | 7.66 ms (7.55 ms-8.10 ms) | 906.23 us (904.65 us-946.14 us) | 0.12x |
 
 Conclusion: for queries the hash grid is flat in N (region 5-8 us, radius 11-15 us, frustum 54-87 us per 16 queries from N=1e3 to 1e5) while the linear scan grows linearly, reaching 9-10 ms at N=1e5 (about 100x-1300x slower). Crossover: region and radius queries break even at roughly N = 100-300 entities (hash grid is already ahead at N=300, linear is ahead or equal at N=100); frustum queries break even between N=300 and N=1000 (linear 3x faster at 300, hash grid 1.7x faster at 1000). Updates go the other way: the hash grid is 8x-24x slower than the linear scan at every N (24x at N=100, 8x at N=1e5) (it re-buckets cells and maintains a `BTreeMap`; linear update is an in-place write), e.g. 7.7 ms vs 0.91 ms for 10k moved entities at N=1e5. Consequence for ADR-0006: hash-grid-first is justified for any scene beyond a few hundred queried entities; update cost is the hash grid's weak point and the first thing to look at if dynamic-entity counts grow, and no rstar/kd-tree comparison was run (out of plan scope).
+
+## Selection
+
+Bench: `extensions/planetary/planetary-core/benches/select.rs`. `select_cells` with `LodParams::default()`; hex sector side 16 (`AppSettings` default), cube 32 cells per edge. `orbit` = eye at 2 R; `low_1km` = 1 km above the surface (hex: above root-cell 0 centre; cube: on +X). `cold` = empty previous split set, `warm` = previous split set from the same view. Results include building the returned `CellSelection`. Cells are median of 3 runs, then (min - max).
+
+| case | median | range |
+|------|--------|-------|
+| select_cells/hex/orbit/cold | 98.44 us | 97.41 us - 98.62 us |
+| select_cells/hex/orbit/warm | 99.16 us | 98.92 us - 102.92 us |
+| select_cells/hex/low_1km/cold | 1.96 ms | 1.89 ms - 2.05 ms |
+| select_cells/hex/low_1km/warm | 1.94 ms | 1.93 ms - 1.97 ms |
+| select_cells/cube-sphere/orbit/cold | 27.97 us | 27.53 us - 27.98 us |
+| select_cells/cube-sphere/orbit/warm | 27.81 us | 27.63 us - 27.92 us |
+| select_cells/cube-sphere/low_1km/cold | 2.62 ms | 2.60 ms - 2.62 ms |
+| select_cells/cube-sphere/low_1km/warm | 2.62 ms | 2.61 ms - 2.63 ms |
+
+Observation: orbit selection is cheap (hex 98 us, cube 28 us). At 1 km the cost rises about 20x (hex) to 90x (cube) to 1.9-2.6 ms, because of far deeper traversal. Warm and cold are within noise of each other, so hysteresis seeding does not change the traversal cost in a static view. The cube is faster than hex in orbit but slower at low altitude here (cube default grid is 32 per edge vs hex 16, so the two are not like-for-like).
+
+## Mesh build
+
+Bench: `extensions/planetary/planetary-core/benches/mesh.rs`. Production grids: hex sector side 16 (`build_hex_cell`, level-8 cell, no debug colouring, never cancelled), cube 32 cells per edge (`build_patch`). Terrain built once outside the timed region.
+
+| case | median | range |
+|------|--------|-------|
+| mesh_build/hex_cell/hexagon_l8_n16 | 2.84 ms | 2.82 ms - 2.85 ms |
+| mesh_build/hex_cell/pentagon_l8_n16 | 2.00 ms | 1.99 ms - 2.06 ms |
+| mesh_build/cube_patch/level4_n32 | 1.56 ms | 1.54 ms - 1.57 ms |
+| mesh_build/cube_patch/level10_n32 | 1.60 ms | 1.56 ms - 1.62 ms |
+
+Observation: one mesh build is 1.6-2.8 ms single-threaded on this machine (hexagon 2.84 ms, pentagon 2.00 ms, cube patch 1.56-1.60 ms; patch level has no measurable effect, as expected since the grid size is fixed).
