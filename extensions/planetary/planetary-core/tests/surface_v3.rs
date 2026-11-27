@@ -204,3 +204,47 @@ fn v2_meshes_still_use_the_v2_thresholds() {
         "the v3 ramp never differs from the v2 ramp on these vertices, so the dispatch is untested"
     );
 }
+
+#[test]
+fn v3_morph_target_colour_matches_the_parent_mesh() {
+    // A coincident child vertex carries the colour the parent mesh draws there (parent level
+    // stencil); exact for interior parent vertices and parent border vertices.
+    let t = PlanetTerrain::new(SEED, TerrainParams::demo_v3(), N).expect("terrain");
+    let m = LodModel::from_terrain(&t, DEFAULT_KAPPA);
+    let w = N + 1;
+    let (mut exact, mut near, mut worst) = (0u32, 0u32, 0.0f32);
+    for level in [3u8, 6, 9, 12] {
+        for k in 0..6 {
+            let c = seeded_patch(level, 100 + k);
+            let p = c.parent().expect("parent");
+            let pm = build_patch(&t, &m, p);
+            let tg =
+                planetary_core::topology::cube::cube_morph_targets_f64(&t, &m, c).expect("targets");
+            let (x, y) = c.xy();
+            for j in 0..=N {
+                for i in 0..=N {
+                    let (ni, nj) = ((x & 1) * N + i, (y & 1) * N + j);
+                    if ni % 2 != 0 || nj % 2 != 0 {
+                        continue;
+                    }
+                    let (pi, pj) = (ni / 2, nj / 2);
+                    let want = pm.vertices[(pj * w + pi) as usize].uv;
+                    let got = tg.uv[(j * w + i) as usize];
+                    assert_eq!(got[0].to_bits(), want[0].to_bits());
+                    if got[1].to_bits() == want[1].to_bits() {
+                        exact += 1;
+                    } else {
+                        near += 1;
+                        worst = worst.max((got[1] - want[1]).abs());
+                    }
+                }
+            }
+        }
+    }
+    eprintln!("v3 coincident uv: exact {exact}, near {near}, worst row diff {worst:e}");
+    assert!(exact > 0);
+    assert!(exact > 4 * near, "exact {exact} near {near}");
+    // Measured worst 0.1115 (v2 bound 0.05): on rough v3 terrain the parent-level border stencil
+    // used for parent-interior vertices differs from the parent's own grid stencil.
+    assert!(worst < 0.15, "worst {worst}");
+}

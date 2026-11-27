@@ -25,9 +25,9 @@ See: .planning/PROJECT.md (updated 2026-11-27)
 ## Current Position
 
 Phase: 11 (Terrain Relief & Normals) - in progress (4/10 plans)
-Plan: 11-05 executed PARTIALLY (stencil, thresholds, seam/row/height-derived tests done; cross-LOD normal tolerance and v3 morph colour exceed limits, awaiting user decision); 11-05 not ticked
+Plan: 11-05 complete; next: 11-06
 Status: Executing Phase 11
-Last activity: 2026-11-27 - 11-05 partial (open questions in 11-05-SUMMARY); prior: Completed 11-04 (v3 cost gates pass: mesh ratio <= 1.30, hex descent p95 <= 4.09 ms)
+Last activity: 2026-11-27 - Completed 11-05 (v3 stencil/thresholds, normal seam + percentile cross-LOD tests)
 
 ## Performance Metrics
 
@@ -80,7 +80,7 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-11-26T23:59:00.000Z
-Stopped at: 11-05-PLAN.md partial, blocked on cross-LOD normal tolerance decision
+Stopped at: Completed 11-05-PLAN.md
 Resume file: None
 
 ## Deferred Items

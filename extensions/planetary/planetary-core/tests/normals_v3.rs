@@ -1,14 +1,18 @@
 //! Generator v3 normals (TERR-03, decision D-01: the height-derived normal already in payload v4
 //! is the normal under test). Seams: same-level shared border normals are bit-equal; cross-level
-//! the border row versus the first interior row stays within `TOL_ROW_DEG`; and the normals are height-derived, not sphere normals.
+//! cross-level coincident normals agree on median and p99 (`MEDIAN_LOD_DEG`, `P99_LOD_DEG`); the border row versus the first interior row stays within `TOL_ROW_DEG`; and the normals are height-derived, not sphere normals.
 //! The tolerances are measured (see the printed tables) and pinned with absolute caps; they are
 //! never raised to pass.
 
+use std::collections::BTreeMap;
+
 use engine_sdk::DVec3;
 use engine_sdk::procedural::splitmix64;
-use planetary_core::hex::CellId;
-use planetary_core::hex::mapping::{cell_sample_point, locate as hex_locate, ring, sample_dir};
+use planetary_core::hex::mapping::{
+    LatticePoint, cell_sample_point, locate as hex_locate, ring, sample_dir,
+};
 use planetary_core::hex::mesh::{build_hex_cell, hex_vertex_position_f64, vertex_count_hex};
+use planetary_core::hex::{CellFrame, CellId, adjacency};
 use planetary_core::lod::{DEFAULT_KAPPA, LodModel};
 use planetary_core::{
     Edge, Face, HexSphere, PatchId, PlanetTerrain, TerrainParams, Topology, border_normal_at,
@@ -19,11 +23,12 @@ const SEED: u64 = 0x0007_5EED_2026_0012;
 const NC: u32 = 32;
 const NH: u32 = 16;
 
-/// Cap on the angle (degrees) between coincident level-L and level-(L+1) normals. The cross-level
-/// test is NOT in this file yet: the measured v3 values exceed this cap (open question, plan 11-05
-/// SUMMARY), so the constant is kept at its cap and unused by an assertion.
-#[allow(dead_code)]
-const TOL_LOD_DEG: f64 = 8.0;
+/// Cross-level (L vs L+1) coincident-normal gate, in degrees, on percentiles. The max is NOT
+/// gated: normals are not morphed (ADR-0014) and the v3 tail (p99.9 about 16-21, max about 21-32
+/// degrees) is a recorded limitation; Phase 12 blends normals across levels. Measured medians are
+/// 0.22-0.34 (limit = worst measured + 0.15), measured p99 9.5-11.8 (limit 12, user decision).
+const MEDIAN_LOD_DEG: f64 = 0.5;
+const P99_LOD_DEG: f64 = 12.0;
 /// Mean angle (degrees) between a border-row normal and its first-interior-row normal.
 const TOL_ROW_DEG: f64 = 4.0;
 
@@ -295,6 +300,169 @@ fn cross(a: DVec3, b: DVec3) -> DVec3 {
 fn unit(a: DVec3) -> DVec3 {
     let l = (a.x * a.x + a.y * a.y + a.z * a.z).sqrt();
     DVec3::new(a.x / l, a.y / l, a.z / l)
+}
+
+/// Angles (degrees) between coincident parent/child normals, split into parent border and
+/// parent interior vertices.
+#[derive(Default)]
+struct CrossLevel {
+    border: Vec<(DVec3, DVec3)>,
+    interior: Vec<(DVec3, DVec3)>,
+}
+
+fn report(name: &str, v: &mut [f64]) -> (f64, f64) {
+    v.sort_by(f64::total_cmp);
+    let (p999, max) = (pct(v, 0.999), v[v.len() - 1]);
+    eprintln!(
+        "{name}: n {} p50 {:.3} p99 {:.3} p99.9 {:.3} max {:.3} deg",
+        v.len(),
+        pct(v, 0.5),
+        pct(v, 0.99),
+        p999,
+        max
+    );
+    (p999, max)
+}
+
+fn cube_cross_level() -> CrossLevel {
+    let t = cube_terrain();
+    let m = LodModel::from_terrain(&t, DEFAULT_KAPPA);
+    let w = NC + 1;
+    let mut out = CrossLevel::default();
+    for level in 3..=14u8 {
+        for k in 0..25u64 {
+            let c = seeded_patch(level, 500 + k);
+            let p = c.parent().expect("parent");
+            let (pm, cm) = (build_patch(&t, &m, p), build_patch(&t, &m, c));
+            let (x, y) = c.xy();
+            for j in 0..=NC {
+                for i in 0..=NC {
+                    let (ni, nj) = ((x & 1) * NC + i, (y & 1) * NC + j);
+                    if ni % 2 != 0 || nj % 2 != 0 {
+                        continue;
+                    }
+                    let (pi, pj) = (ni / 2, nj / 2);
+                    let a = v(pm.vertices[(pj * w + pi) as usize].normal);
+                    let b = v(cm.vertices[(j * w + i) as usize].normal);
+
+                    if pi == 0 || pj == 0 || pi == NC || pj == NC {
+                        out.border.push((a, b));
+                    } else {
+                        out.interior.push((a, b));
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
+fn hex_cross_level() -> CrossLevel {
+    let t = hex_terrain();
+    let m = hex_model(&t);
+    let per = ((NH + 1) * (NH + 2) / 2) as usize;
+    let lattice = |c: CellId| -> BTreeMap<LatticePoint, (usize, bool)> {
+        let sectors = usize::from(CellFrame::new(c, NH).sectors());
+        let mut map = BTreeMap::new();
+        for sec in 0..sectors {
+            for s in 0..=NH {
+                for tt in 0..=(NH - s) {
+                    let border = s == 0 || tt == 0 || s + tt == NH;
+                    map.insert(
+                        cell_sample_point(c, NH, sec as u8, s, tt).canonical(),
+                        (sec * per + gi(NH, 0, s, tt), border),
+                    );
+                }
+            }
+        }
+        map
+    };
+    let mut out = CrossLevel::default();
+    for level in 3..=14u8 {
+        for k in 0..25u64 {
+            let c = hex_locate(dir(900 + k + u64::from(level) * 31), level);
+            let mut ps = Vec::new();
+            adjacency::parents(c, &mut ps);
+            let cm = build_hex_cell(c, &t, &m, false, &|| false).expect("mesh");
+            let child = lattice(c);
+            for p in ps {
+                let pm = build_hex_cell(p, &t, &m, false, &|| false).expect("mesh");
+                let parent = lattice(p);
+                for (lp, (ci, _)) in &child {
+                    if let Some((pi, border)) = parent.get(lp) {
+                        let (a, b) = (v(pm.vertices[*pi].normal), v(cm.vertices[*ci].normal));
+                        if *border {
+                            out.border.push((a, b));
+                        } else {
+                            out.interior.push((a, b));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Rotates unit `n` by `deg` degrees about an axis perpendicular to it (angle change = `deg`).
+fn tilt(n: DVec3, deg: f64) -> DVec3 {
+    let e = if n.x.abs() < 0.9 {
+        DVec3::new(1.0, 0.0, 0.0)
+    } else {
+        DVec3::new(0.0, 1.0, 0.0)
+    };
+    let k = unit(cross(n, e));
+    let kn = cross(k, n);
+    let (s, c) = (deg.to_radians().sin(), deg.to_radians().cos());
+    DVec3::new(n.x * c + kn.x * s, n.y * c + kn.y * s, n.z * c + kn.z * s)
+}
+
+/// Percentile gate on cross-level angles: median and p99 (not the max; see the module docs).
+fn gate(name: &str, pairs: &[(DVec3, DVec3)], tilt_deg: f64) -> Result<(), String> {
+    let mut v: Vec<f64> = pairs
+        .iter()
+        .map(|(a, b)| {
+            angle_deg(
+                *a,
+                if tilt_deg == 0.0 {
+                    *b
+                } else {
+                    tilt(*b, tilt_deg)
+                },
+            )
+        })
+        .collect();
+    let (p999, max) = report(name, &mut v);
+    let (p50, p99) = (pct(&v, 0.5), pct(&v, 0.99));
+    if tilt_deg == 0.0 {
+        eprintln!("{name}: recorded limitation p99.9 {p999:.3} max {max:.3}");
+    }
+    if p50 > MEDIAN_LOD_DEG {
+        return Err(format!("{name}: median {p50} > {MEDIAN_LOD_DEG}"));
+    }
+    if p99 > P99_LOD_DEG {
+        return Err(format!("{name}: p99 {p99} > {P99_LOD_DEG}"));
+    }
+    Ok(())
+}
+
+#[test]
+fn v3_cross_level_normal_agreement() {
+    for (name, cl) in [("cube", cube_cross_level()), ("hex", hex_cross_level())] {
+        assert!(cl.border.len() > 1_000 && cl.interior.len() > 1_000);
+        for (class, pairs) in [
+            ("parent border", &cl.border),
+            ("parent interior", &cl.interior),
+        ] {
+            let label = format!("{name} {class}");
+            gate(&label, pairs, 0.0).unwrap_or_else(|e| panic!("{e}"));
+            // Negative control: a 15 degree perturbation of the compared normals must fail.
+            assert!(
+                gate(&label, pairs, 15.0).is_err(),
+                "{label}: the gate did not catch a 15 degree perturbation"
+            );
+        }
+    }
 }
 
 /// Mean angle between the border row and the first interior row, and the interior baseline
