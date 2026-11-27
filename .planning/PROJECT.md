@@ -12,6 +12,18 @@ The engine core must remain general-purpose and independent of any specialized c
 
 Shipped v1.0 (2026-11-27): about 55,300 lines of Rust across a tiered Cargo workspace (core, platform, render, world/spatial/assets, jobs/streaming/procedural, SDK, debug-ui, planetary extension), two SDK-only reference apps (conventional-3d, planetary-app) and ADRs 0001-0019. All 45 v1 requirements are complete; milestone accepted with tech debt (see `.planning/v1.0-MILESTONE-AUDIT.md`). The planetary reference runs on an H3-inspired hex topology with the cube-sphere kept as oracle.
 
+## Current Milestone: v1.1 Visual Fidelity & Flight
+
+**Goal:** Make the planetary reference look and fly better (seamless LOD detail transitions, real terrain relief with lit normals, 6DOF free flight) while closing the v1.0 tech debt, without adding planetary assumptions to the engine core.
+
+**Target features:**
+- LOD detail transition: no blur-then-sharpen pop at level changes (cross-fade or morph of colour/detail between levels)
+- Terrain relief and normals: generator v3 with hills and mountains, height-based normals / bump shading
+- Free-flight 6DOF camera (roll, strafe, vertical) in the planetary example/app
+- Tech-debt sweep: IN-01..03, 03-VALIDATION, Nyquist phases 1-5, macOS goldens (or documented skip), overlay count formatting and detail-patch cap display
+
+**Key context:** All planetary-specific work stays in the planetary extension; the engine core stays general-purpose (any generic render or camera capability must be expressed without planetary concepts). No ECS, physics, scripting or editor work.
+
 ## Requirements
 
 ### Validated
@@ -31,7 +43,7 @@ Shipped v1.0 (2026-11-27): about 55,300 lines of Rust across a tiered Cargo work
 
 ### Active
 
-Next milestone not yet scoped; see "Next Milestone Goals". Run `/gsd-new-milestone`.
+Defined in `.planning/REQUIREMENTS.md` (v1.1): VIS (LOD detail transition), TERR (terrain relief and normals), CAM (6DOF free flight), DEBT (tech-debt sweep).
 
 ### Out of Scope (P0)
 
@@ -45,21 +57,6 @@ Next milestone not yet scoped; see "Next Milestone Goals". Run `/gsd-new-milesto
 - Plugin marketplace / dynamic plugin loading / external plugin ABI — deferred until a real requirement emerges
 - Ray tracing / advanced GPU-driven rendering — future rendering capabilities
 - Advanced simulation, comprehensive animation system — future phases
-
-## Next Milestone Goals
-
-From `.planning/todos/pending/2026-11-27-post-phase8-visual-feedback.md`:
-
-- LOD colour/detail transition: remove the blur-to-sharp pop at level changes (cross-fade or morph colour/detail, not only vertex geomorphing)
-- More terrain relief (hills, mountains) and height-based normals / bump shading
-- Free-flight camera degrees of freedom (roll, strafe, vertical, 6DOF)
-- Overlay fixes: integer counts, detail-patch used vs cap display
-
-Open tech debt to close:
-
-- IN-01 hard-coded toolchain version in CI; IN-02 overlay renderer ignores later format and scale changes; IN-03 image-diff tolerance can hide small regressions
-- 03-VALIDATION.md draft, and Nyquist validation gaps for phases 01-05
-- macOS image-diff goldens (no software adapter today); non-blocking bench job
 
 ## Context
 
@@ -109,4 +106,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-11-27 after v1.0 milestone*
+*Last updated: 2026-11-27 after starting milestone v1.1*

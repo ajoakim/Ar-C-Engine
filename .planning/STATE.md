@@ -1,17 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: milestone_complete
-stopped_at: v1.0 milestone archived and tagged (local, not pushed)
-last_updated: "2026-11-27T20:00:00.000Z"
+milestone: v1.1
+milestone_name: Visual Fidelity & Flight
+status: planning
+last_updated: "2026-11-27T19:53:13.839Z"
 last_activity: 2026-11-27
 progress:
-  total_phases: 9
-  completed_phases: 9
-  total_plans: 90
-  completed_plans: 87
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -21,16 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-11-27)
 
 **Core value:** The engine core stays general-purpose and independent of any specialized capability (planetary, physics, scripting).
-**Current focus:** v1.0 shipped; next milestone not yet defined (run /gsd-new-milestone)
+**Current focus:** Milestone v1.1 Visual Fidelity & Flight: defining requirements
 
 ## Current Position
 
-Phase: none active. v1.0 milestone complete (9 phases, 90 plans, 45/45 requirements), archived in .planning/milestones/.
-Plan: 08-12 complete (12 of 12). Local gate green; human flight accepted: atmosphere ring accepted (ADR-0019), HLD.md left untracked. Caveats: F3 field check, plan 26 present-mode/title readout (C2) and numbers not explicitly confirmed. Visual feedback tracked in .planning/todos/pending/2026-11-27-post-phase8-visual-feedback.md. Not pushed.
-Status: Milestone v1.0 complete (tag v1.0 local only, not pushed)
-Last activity: 2026-11-27
-
-Progress: [██████████] 100%
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-11-27 — Milestone v1.1 started
 
 ## Performance Metrics
 
