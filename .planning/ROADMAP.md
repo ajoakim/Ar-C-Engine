@@ -19,7 +19,7 @@ Build a small, stable Rust engine core and validate it with two reference apps. 
  (completed 2026-11-26)
 - [x] **Phase 7: Planetary Extension & Terrain LOD** - Cube-sphere, quadtree SSE LOD, crack-free transitions, planetary camera, planetary app (plans complete 2026-11-25; gaps G1-G3 closed by Phase 7.1)
 - [x] **Phase 07.1: Hex-Grid Planet Topology & Descent Performance (INSERTED)** - Hex topology, descent performance, flight feedback fixes (completed 2026-11-26, human flight approved with caveats)
-- [ ] **Phase 8: Hardening & Decisions** - Atmosphere, debug overlays, regression/perf tests, docs, decision ADRs
+- [x] **Phase 8: Hardening & Decisions** - Atmosphere (limb ring, ADR-0019), debug overlays, regression/perf tests, docs, decision ADRs (completed 2026-11-27, human flight accepted with caveats)
 
 ## Phase Details
 
@@ -237,7 +237,7 @@ Plans:
 - [x] 08-09-PLAN.md — Architecture, assumptions, limitations, SDK usage docs
 - [x] 08-10-PLAN.md — Minimal atmosphere limb ring, ADR-0019 (cuttable)
 - [x] 08-11-PLAN.md — Non-blocking bench job, hosted goldens, CI evidence
-- [ ] 08-12-PLAN.md — Final gate, human flight, HLD.md decision, bookkeeping
+- [x] 08-12-PLAN.md — Final gate, human flight, HLD.md decision, bookkeeping
 **UI hint**: yes
 
 ## Progress
@@ -254,4 +254,4 @@ Plans:
 | 6. Streaming & Procedural Framework | 6/6 | Complete    | 2026-11-26 |
 | 7. Planetary Extension & Terrain LOD | 10/10 | Complete | 2026-11-25 |
 | 07.1. Hex-Grid Planet Topology & Descent Performance | 27/27 | Complete (human flight approved with caveats) | 2026-11-26 |
-| 8. Hardening & Decisions | 11/12 | In Progress|  |
+| 8. Hardening & Decisions | 12/12 | Complete (human flight accepted with caveats; atmosphere is a limb-ring mesh per ADR-0019) | 2026-11-27 |

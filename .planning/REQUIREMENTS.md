@@ -59,7 +59,7 @@
 - [ ] **PLAN-05**: Terrain is generated from layered planet-space generators so patch borders agree
 - [ ] **PLAN-06**: User can navigate with a planetary camera from orbit to surface
 - [ ] **PLAN-07**: A scripted orbit-to-surface descent holds the target frame-time budget without stalls
-- [ ] **PLAN-08**: Planet shows a minimal atmosphere (first item to cut if schedule slips)
+- [x] **PLAN-08**: Planet shows a minimal atmosphere (first item to cut if schedule slips). Delivered as an opaque limb-ring mesh plus clear-colour/fog changes, not a shader pass (ADR-0019); user accepted the ring
 - [ ] **HEX-01**: Planet can use an H3-inspired hex-grid topology on an icosahedron (half-cell scheme: each hex gives way to a centre hex plus six half-covered edge hexes, 12 pentagons) with stable packed cell IDs and tested parent/child/neighbor derivation, built with exact arithmetic only (ADR-0008)
 - [x] **HEX-02**: The hex drawn cut covers the sphere exactly once with balanced neighbors, and terrain is crack-free at cell borders, pentagons and mixed levels (seam and coverage proofs with negative controls)
 - [x] **HEX-03**: A `Topology` trait has the cube-sphere quadtree and the hex grid as implementations; the cube-sphere stays as test oracle and fallback until hex passes the full descent
@@ -71,7 +71,7 @@
 - [x] **APP-01**: A conventional 3D reference app runs against the public SDK only
 - [ ] **APP-02**: A planetary reference app runs against the public SDK only
 - [x] **QA-01**: Unit, integration, performance (criterion), and regression (image-diff on software adapter) tests exist and run in CI
-- [ ] **QA-02**: Debug overlays show LOD and streaming/memory budget state
+- [x] **QA-02**: Debug overlays show LOD and streaming/memory budget state
 - [x] **QA-03**: Architecture, assumptions, limitations, and SDK usage are documented
 
 ## v2 Requirements
@@ -153,11 +153,11 @@
 | HEX-03 | Phase 7.1 | Complete |
 | PERF-01 | Phase 7.1 | Pending |
 | PERF-02 | Phase 7.1 | Complete |
-| PLAN-08 | Phase 8 | Pending |
+| PLAN-08 | Phase 8 | Complete (ring mesh, not a shader pass; ADR-0019) |
 | APP-01 | Phase 5 | Complete |
 | APP-02 | Phase 7 | Pending |
 | QA-01 | Phase 8 | Complete |
-| QA-02 | Phase 8 | Pending |
+| QA-02 | Phase 8 | Complete |
 | QA-03 | Phase 8 | Complete |
 
 **Coverage:**

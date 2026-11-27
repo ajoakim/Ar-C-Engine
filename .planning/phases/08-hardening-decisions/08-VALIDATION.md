@@ -1,8 +1,8 @@
 ---
 phase: 8
 slug: hardening-decisions
-status: gate-run
-nyquist_compliant: false
+status: complete-with-caveats
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-11-26
 ---
@@ -91,17 +91,24 @@ Run on Windows 11, rustc 1.99.0, free disk 132G at start. Hosted CI was already 
 
 | Behavior | Requirement | Why Manual | Test Instructions | Result |
 |----------|-------------|------------|-------------------|--------|
-| F3 overlay shows LOD histogram, counts, queue, budgets, frame/prepare ms and updates live | QA-02 | Needs display and human judgement | 08-12 Task 2 | pending |
-| Atmosphere limb ring (opaque ring, deviates from CONTEXT "shader pass"; see ADR-0019) acceptable, or PLAN-08 deferred | PLAN-08 | Visual judgement | 08-12 Task 2 | pending |
-| Plan 26 present mode and window-title readout (07.1-18 caveat C2) | PERF-02 carry-over | Needs window | 08-12 Task 2 | pending |
-| HLD.md disposition (commit / gitignore / leave) | n/a | User decision | 08-12 Task 2 | pending |
+| F3 overlay shows LOD histogram, counts, queue, budgets, frame/prepare ms and updates live | QA-02 | Needs display and human judgement | 08-12 Task 2 | flown, general approval ("impressive progress"); field-by-field overlay check NOT explicitly confirmed by the user (caveat) |
+| Atmosphere limb ring (opaque ring, deviates from CONTEXT "shader pass"; see ADR-0019) acceptable, or PLAN-08 deferred | PLAN-08 | Visual judgement | 08-12 Task 2 | user: "accept the ring"; ADR-0019 deviation accepted, PLAN-08 complete, not deferred |
+| Plan 26 present mode and window-title readout (07.1-18 caveat C2) | PERF-02 carry-over | Needs window | 08-12 Task 2 | NOT explicitly confirmed by the user; caveat C2 stays open |
+| HLD.md disposition (commit / gitignore / leave) | n/a | User decision | 08-12 Task 2 | user: "leave HLD.md untracked" (option c); nothing committed or ignored |
+
+### Human flight (08-12 Task 2), user's words
+
+- After flying: "impressive progress i still see texture blurring and then sharpening when moving from one level to another, i think there should be more of transition or opacity boundary between textures... the surface is smooth. adding different elevations hills mountains, maybe a gridded bump mapping based on color would help. i would like to have more degrees of freedom when free flying"
+- Atmosphere: "accept the ring". HLD.md: "leave HLD.md untracked".
+- Caveats (not verified by the user): F3 field-by-field check, plan 26 present-mode flag and window-title readout (C2 open), numeric telemetry.
+- Visual feedback is a follow-up, not a Phase 8 failure: `.planning/todos/pending/2026-11-27-post-phase8-visual-feedback.md`.
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] No 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] `nyquist_compliant: true` set in frontmatter (08-12 Task 3)
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] No 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] `nyquist_compliant: true` set in frontmatter (08-12 Task 3)
 
-**Approval:** pending
+**Approval:** complete-with-caveats, 2026-11-27

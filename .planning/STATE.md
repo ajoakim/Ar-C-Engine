@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Phase 8 in progress; 08-11 (non-blocking bench job, hosted goldens, CI evidence) complete, run 46042013890 green; only 08-12 (final gate, human flight, HLD.md decision) remains; Phase 07.1 complete 27/27
-last_updated: "2026-11-27T05:30:38.960Z"
+status: complete
+stopped_at: Phase 8 complete (12/12); 08-12 final gate and human flight done with caveats; Phase 07.1 complete 27/27
+last_updated: "2026-11-27T12:00:00.000Z"
 last_activity: 2026-11-27
 progress:
   total_phases: 9
-  completed_phases: 8
+  completed_phases: 9
   total_plans: 90
-  completed_plans: 86
-  percent: 90
+  completed_plans: 87
+  percent: 100
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-11-25)
 
 ## Current Position
 
-Phase: 8 (hardening & decisions) - in progress
-Plan: 08-11 complete (08-01 to 08-11 done); 11 of 12 plans summarised. Hosted CI (run 46042013890 on c44af29) is green: image-diff on lavapipe and WARP with Linux and Windows goldens and ARC_REQUIRE_GOLDENS=1, macOS skip, feature-paths green, non-blocking bench job uploads criterion. QA-01 complete. Post-push evidence and summary commits are local only (not pushed). PLAN-08 stays open until the plan 12 human flight. Phase 07.1 is complete 27/27
-Status: Phase 8 executing
+Phase: 8 (hardening & decisions) - complete with caveats
+Plan: 08-12 complete (12 of 12). Local gate green; human flight accepted: atmosphere ring accepted (ADR-0019), HLD.md left untracked. Caveats: F3 field check, plan 26 present-mode/title readout (C2) and numbers not explicitly confirmed. Visual feedback tracked in .planning/todos/pending/2026-11-27-post-phase8-visual-feedback.md. Not pushed.
+Status: Phase 8 complete
 Last activity: 2026-11-27
 
-Progress: [█████████░] 90%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -52,7 +52,7 @@ Progress: [█████████░] 90%
 | 6 | 6 | - | - |
 | 7 | 10 | - | - |
 | 07.1 | 27 | - | - |
-| 8 | 8/12 (in progress) | - | - |
+| 8 | 12/12 | - | - |
 
 ## Accumulated Context
 
@@ -81,5 +81,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-11-26T23:59:00.000Z
-Stopped at: Completed 08-04-PLAN.md
+Stopped at: Completed 08-12-PLAN.md
 Resume file: None

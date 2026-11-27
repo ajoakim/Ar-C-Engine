@@ -5,7 +5,7 @@ A general-purpose 3D engine in Rust with a strictly layered core and pluggable e
 - **Conventional 3D** (`extensions/conventional-3d`): lit meshes, materials, glTF, fly camera. Builds and runs with every planetary crate removed (enforced in CI).
 - **Planetary** (`extensions/planetary`): a streamed, procedurally generated planet you can fly down to from orbit, with level-of-detail terrain on a hex-grid topology inspired by Uber's H3.
 
-> **Status: early development.** Phases 1-7 and 7.1 (hex-grid planet, descent performance) are complete, with caveats recorded in the phase validation. Phase 8 (hardening, atmosphere, debug overlays, CI image tests, docs and decision ADRs) is next. APIs will change. Hosted CI for Linux, macOS and Windows is configured, but local verification has been Windows-first. See [.planning/ROADMAP.md](.planning/ROADMAP.md).
+> **Status: early development.** Phases 1-7 and 7.1 (hex-grid planet, descent performance) are complete, with caveats recorded in the phase validation. Phase 8 (hardening: F3 debug overlay, atmosphere limb ring, CI image-diff tests and benchmarks, docs and decision ADRs) is complete, with caveats recorded in `.planning/phases/08-hardening-decisions/08-VALIDATION.md`; post-flight visual feedback is tracked as a follow-up todo. APIs will change. Hosted CI for Linux, macOS and Windows is configured, but local verification has been Windows-first. See [.planning/ROADMAP.md](.planning/ROADMAP.md).
 
 ## Highlights
 
@@ -17,6 +17,9 @@ A general-purpose 3D engine in Rust with a strictly layered core and pluggable e
 - Geomorphing: a per-vertex morph target and per-piece factor make level-of-detail handovers smooth (ADR-0014).
 - Scale and relief: mid-scale ridge terrain (generator v2), slope-based rock colouring, relief lighting and distance haze (ADR-0015).
 - Present-mode control and a live window-title readout of altitude, speed, level and frame time (ADR-0016).
+- Debug overlay: press F3 (build with `--features debug-overlay`) for the LOD histogram, selected/drawn counts, streaming queue, memory and upload budgets and frame/prepare times (ADR-0018).
+- Minimal atmosphere: a sun-tinted sky plus an opaque limb-ring mesh around the planet, on by default; `--no-atmosphere` turns it off (ADR-0019; a ring mesh rather than a shader pass).
+- Regression and performance tests: image-diff goldens rendered on software adapters in CI, and criterion benches (non-blocking CI job).
 - Telemetry: frame time, altitude, selection and streaming stats, per-scope prepare timings, morph and handover statistics, CSV log, and headless descent and streaming benchmarks.
 
 ## Building
@@ -47,6 +50,14 @@ cargo run --release -p planetary-app --example planetary_flight -- --descent --p
 
 # Headless descent benchmark with per-altitude-band frame-time statistics
 cargo run --release -p planetary-app --example planetary_flight -- --bench-descent
+
+# Debug overlay (F3) and atmosphere flag
+cargo run --release -p planetary-app --example planetary_flight --features debug-overlay
+cargo run --release -p planetary-app --example planetary_flight -- --no-atmosphere
+
+# Image-diff regression tests (software adapter) and benchmarks
+cargo test -p engine-render-wgpu --locked --test image_diff -- --nocapture
+cargo bench --workspace --bench spatial --bench select --bench mesh --bench stream --bench ecs --locked -- --noplot --quick
 
 # Choose the topology, present mode and haze (Immediate is a diagnostic mode and can tear)
 cargo run --release -p planetary-app --example planetary_flight -- --descent --fast --topology cube --present-mode immediate --no-haze
