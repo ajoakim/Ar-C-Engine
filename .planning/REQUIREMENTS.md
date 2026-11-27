@@ -75,12 +75,39 @@ Deferred, not in v1.1.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (filled by roadmap) | | |
+| DEBT-01 | Phase 9 | Pending |
+| DEBT-02 | Phase 9 | Pending |
+| DEBT-03 | Phase 9 | Pending |
+| DEBT-04 | Phase 9 | Pending |
+| DEBT-05 | Phase 9 | Pending |
+| CAM-01 | Phase 10 | Pending |
+| CAM-02 | Phase 10 | Pending |
+| CAM-03 | Phase 10 | Pending |
+| CAM-04 | Phase 10 | Pending |
+| CAM-05 | Phase 10 | Pending |
+| CAM-06 | Phase 10 | Pending |
+| TERR-01 | Phase 11 | Pending |
+| TERR-02 | Phase 11 | Pending |
+| TERR-03 | Phase 11 | Pending |
+| TERR-04 | Phase 11 | Pending |
+| TERR-05 | Phase 11 | Pending |
+| TERR-06 | Phase 11 | Pending |
+| VIS-01 | Phase 12 | Pending |
+| VIS-02 | Phase 12 | Pending |
+| VIS-03 | Phase 12 | Pending |
+| VIS-04 | Phase 12 | Pending |
+| VIS-05 | Phase 12 | Pending |
+| VIS-06 | Phase 12 | Pending |
+| DEBT-06 | Phase 13 | Pending |
+| DEBT-07 | Phase 13 | Pending |
+| DEBT-08 | Phase 13 | Pending |
+| DEBT-09 | Phase 13 | Pending |
+| DEBT-10 | Phase 13 | Pending |
 
 **Coverage:**
 - v1.1 requirements: 28 total (VIS 6, TERR 6, CAM 6, DEBT 10)
-- Mapped to phases: 0 (pending roadmap)
-- Unmapped: 28
+- Mapped to phases: 28
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-11-27*
