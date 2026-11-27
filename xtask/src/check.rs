@@ -41,6 +41,7 @@ pub enum Rule {
     CoreDependsOnExtension,
     WgpuOutsideAllowedCrate,
     WinitOutsideAllowedCrate,
+    EguiInCoreCrate,
     ExtensionCrossDependency,
     TierViolation,
     UnlistedCrate,
@@ -52,6 +53,7 @@ impl Rule {
             Rule::CoreDependsOnExtension => "core-depends-on-extension",
             Rule::WgpuOutsideAllowedCrate => "wgpu-outside-allowed-crate",
             Rule::WinitOutsideAllowedCrate => "winit-outside-allowed-crate",
+            Rule::EguiInCoreCrate => "egui-in-core-crate",
             Rule::ExtensionCrossDependency => "extension-cross-dependency",
             Rule::TierViolation => "tier-violation",
             Rule::UnlistedCrate => "unlisted-crate",
@@ -176,6 +178,15 @@ pub fn evaluate(graph: &WorkspaceGraph) -> Vec<Violation> {
                     Rule::WgpuOutsideAllowedCrate,
                     Some("egui-wgpu"),
                     "egui-wgpu (which links wgpu) may only be used by engine-render-wgpu".into(),
+                ));
+            }
+            // egui is for the overlay stack (tier 4+); tiers 0-3 must stay UI-free. Unlisted
+            // crates have no tier and are reported by R6 instead.
+            if dep.name == "egui" && !tooling && tier_of(&pkg.name).is_some_and(|t| t <= 3) {
+                out.push(mk(
+                    Rule::EguiInCoreCrate,
+                    Some("egui"),
+                    "egui must not be used by tier 0-3 core crates".into(),
                 ));
             }
             if dep.name == "winit" && !WINIT_ALLOWED.contains(&pkg.name.as_str()) && !tooling {
@@ -322,6 +333,23 @@ mod tests {
     }
 
     #[test]
+    fn egui_not_in_core_tiers() {
+        let v = evaluate(&g(vec![
+            pkg("engine-core", Location::Core, &["egui"]),
+            pkg("engine-render", Location::Core, &["egui"]),
+            pkg("debug-ui", Location::Core, &["egui"]),
+            pkg("engine-render-wgpu", Location::Core, &["egui"]),
+            pkg("engine-sdk", Location::Core, &["egui"]),
+        ]));
+        for bad in ["engine-core", "engine-render"] {
+            assert!(has(&v, Rule::EguiInCoreCrate, bad, Some("egui")), "{bad}");
+        }
+        for ok in ["debug-ui", "engine-render-wgpu", "engine-sdk"] {
+            assert!(!v.iter().any(|x| x.package == ok), "{ok} must be allowed");
+        }
+    }
+
+    #[test]
     fn winit_only_in_platform() {
         let v = evaluate(&g(vec![
             pkg("engine-world", Location::Core, &["winit"]),
@@ -399,6 +427,7 @@ mod tests {
             Rule::WinitOutsideAllowedCrate.id(),
             "winit-outside-allowed-crate"
         );
+        assert_eq!(Rule::EguiInCoreCrate.id(), "egui-in-core-crate");
         assert_eq!(
             Rule::ExtensionCrossDependency.id(),
             "extension-cross-dependency"

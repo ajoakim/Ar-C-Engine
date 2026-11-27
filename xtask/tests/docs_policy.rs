@@ -45,10 +45,11 @@ fn docs_cover_all_crates() {
     for (name, _) in packages() {
         require(file, &doc, &format!("`{name}`"));
     }
-    const ALL: [Rule; 6] = [
+    const ALL: [Rule; 7] = [
         Rule::CoreDependsOnExtension,
         Rule::WgpuOutsideAllowedCrate,
         Rule::WinitOutsideAllowedCrate,
+        Rule::EguiInCoreCrate,
         Rule::ExtensionCrossDependency,
         Rule::TierViolation,
         Rule::UnlistedCrate,

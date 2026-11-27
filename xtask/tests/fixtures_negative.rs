@@ -57,6 +57,21 @@ fn fixture_egui_wgpu_misplaced_fails() {
 }
 
 #[test]
+fn fixture_egui_core_misplaced_fails() {
+    let v = check_deps(&fixture("egui-core-misplaced")).expect("metadata");
+    assert!(
+        v.iter().any(|x| x.rule == Rule::EguiInCoreCrate
+            && x.package == "engine-core"
+            && x.dependency.as_deref() == Some("egui")),
+        "expected egui violation for engine-core, got {v:?}"
+    );
+    assert!(
+        !v.iter().any(|x| x.package == "debug-ui"),
+        "debug-ui must be allowed to use egui, got {v:?}"
+    );
+}
+
+#[test]
 fn fixture_egui_wgpu_misplaced_cli_exits_one() {
     let out = std::process::Command::new(env!("CARGO_BIN_EXE_xtask"))
         .arg("check-deps")

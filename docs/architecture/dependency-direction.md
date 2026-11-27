@@ -32,6 +32,7 @@ Enforced by `cargo xtask check-deps`; the IDs below are the exact rule IDs it re
 - `core-depends-on-extension` (R1): no package under `crates/` may depend (normal, dev or build) on a package under `extensions/`.
 - `wgpu-outside-allowed-crate` (R2): only `engine-render-wgpu` may declare a dependency on `wgpu` or on `egui-wgpu` (which links wgpu; ADR-0018). `debug-ui` has no GPU or window dependencies (pure `egui`).
 - `winit-outside-allowed-crate` (R3): only `engine-platform` may declare a dependency on `winit`.
+- `egui-in-core-crate`: crates in tiers 0-3 may not declare a dependency on `egui` (debug overlay stack stays in tier 4+: `debug-ui`, `engine-render-wgpu`, `engine-sdk`).
 - `extension-cross-dependency` (R4): an extension family (`extensions/conventional-3d`, `extensions/planetary/*`) may not depend on another family.
 - `tier-violation` (R5): a workspace crate may only depend on workspace crates of a strictly lower tier.
 - `unlisted-crate` (R6): every workspace package under `crates/` or `extensions/` must appear in the layer table (`xtask/src/layers.rs`).
