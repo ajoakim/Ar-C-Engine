@@ -18,7 +18,7 @@ Build a small, stable Rust engine core and validate it with two reference apps. 
 - [x] **Phase 6: Streaming & Procedural Framework** - Generic streaming with fallback, deterministic seeded generator layers
  (completed 2026-11-26)
 - [x] **Phase 7: Planetary Extension & Terrain LOD** - Cube-sphere, quadtree SSE LOD, crack-free transitions, planetary camera, planetary app (plans complete 2026-11-25; gaps G1-G3 closed by Phase 7.1)
-- [x] **Phase 7.1: Hex-Grid Planet Topology & Descent Performance (INSERTED)** - Hex topology, descent performance, flight feedback fixes (completed 2026-11-26, human flight approved with caveats)
+- [x] **Phase 07.1: Hex-Grid Planet Topology & Descent Performance (INSERTED)** - Hex topology, descent performance, flight feedback fixes (completed 2026-11-26, human flight approved with caveats)
 - [ ] **Phase 8: Hardening & Decisions** - Atmosphere, debug overlays, regression/perf tests, docs, decision ADRs
 
 ## Phase Details
@@ -240,5 +240,5 @@ Plans:
 | 5. Conventional Reference App | 10/10 | Complete    | 2026-11-26 |
 | 6. Streaming & Procedural Framework | 6/6 | Complete    | 2026-11-26 |
 | 7. Planetary Extension & Terrain LOD | 10/10 | Complete | 2026-11-25 |
-| 7.1 Hex-Grid Planet Topology & Descent Performance | 27/27 | Complete (human flight approved with caveats) | 2026-11-26 |
+| 07.1. Hex-Grid Planet Topology & Descent Performance | 27/27 | Complete (human flight approved with caveats) | 2026-11-26 |
 | 8. Hardening & Decisions | 0/TBD | Not started | - |
