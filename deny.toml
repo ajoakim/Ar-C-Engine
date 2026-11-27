@@ -17,11 +17,14 @@ allow = [
     "ISC",
     "Unicode-3.0",
     "Zlib",
-    # epaint_default_fonts (egui default_fonts): embedded font data; user-approved Phase 8, see ADR-0018 (written in plan 07)
-    "OFL-1.1",
-    "Ubuntu-font-1.0",
 ]
 confidence-threshold = 0.93
+
+# epaint_default_fonts (egui default_fonts): embedded font data; user-approved Phase 8, see ADR-0018.
+# Scoped to this crate only so the font licenses are not allowed workspace-wide.
+exceptions = [
+    { crate = "epaint_default_fonts", allow = ["OFL-1.1", "Ubuntu-font-1.0"] },
+]
 
 [licenses.private]
 # Workspace crates are publish = false; their license (MIT OR Apache-2.0) is still declared.
@@ -36,6 +39,9 @@ deny = [
     { crate = "winit", wrappers = ["engine-platform"], reason = "Windowing confined to the platform crate (WS-03, ADR-0002)" },
     { crate = "gltf", wrappers = ["conventional-3d"], reason = "glTF importer confined to the conventional-3d extension (REND-05, ADR-0007)" },
     { crate = "image", wrappers = ["conventional-3d", "gltf"], reason = "Image decoding confined to extensions (REND-05, ADR-0007)" },
+    { crate = "egui", wrappers = ["debug-ui", "engine-render-wgpu", "engine-sdk"], reason = "egui confined to the debug overlay path: debug-ui, the wgpu backend and the optional SDK feature (ADR-0018)" },
+    { crate = "egui-wgpu", wrappers = ["engine-render-wgpu"], reason = "egui painter confined to the backend crate (ADR-0018)" },
+    { crate = "hecs", wrappers = ["ecs-bench"], reason = "ECS candidate confined to the ecs-bench spike (ADR-0017)" },
 ]
 
 [sources]
