@@ -79,6 +79,22 @@ impl LodModel {
     /// sample). With `h = max(sea, base + detail * (0.25 + 0.75 * mask))`, base and detail being
     /// `A * (2 * fbm - 1)`: `2 A_b V_b + 2 A_d V_d + 0.75 A_d V_m`, where `V_x` is the fbm
     /// variation. The `max` with sea level is 1-Lipschitz, so the bound carries over.
+    ///
+    /// Generator v3 (`generator_version >= 3`) keeps the v2 terms and adds
+    /// `h * (1 - 0.6 g) + m * g`, `g = smoothstep(a, b, mask)`. Each added term is bounded as
+    /// follows (`V_x` the fbm variation at the cell angle, `V_mask` the mask variation):
+    /// - Gate: `0 <= g <= 1` and the smoothstep slope is at most `1.5 / (b - a)`, so
+    ///   `|dg| <= min(1, 1.5 / (b - a) * V_mask)`.
+    /// - Hills `h = A_h (2 f - 1)`: `|h| <= A_h`, `|dh| <= 2 A_h V_h`. The factor `1 - 0.6 g`
+    ///   lies in `[0.4, 1]` and changes by `0.6 |dg|`. The product changes by at most
+    ///   `A_h (2 V_h + 0.6 |dg|)`.
+    /// - Mountains `m = A_m r * r`, `r = 1 - |2 f - 1|` in `[0, 1]`: `r` is 2-Lipschitz in `f`
+    ///   and `r1 * r1 - r2 * r2 = (r1 + r2)(r1 - r2)` with `r1 + r2 <= 2`, so `|dm| <= 4 A_m
+    ///   V_m'`; also `m` lies in `[0, A_m]`, so `|dm| <= A_m` and the change is at most
+    ///   `A_m min(4 V_m', 1)`. With the gate factor in `[0, 1]`, `|d(m g)| <= A_m (min(4 V_m',
+    ///   1) + |dg|)`.
+    /// - Span: both heights lie in `[sea, top]`, so no change exceeds `top - sea`; the v3
+    ///   residual is capped there (v1/v2 are left as they were).
     #[must_use]
     pub fn from_terrain(t: &PlanetTerrain, kappa: f64) -> LodModel {
         Self::for_topology(t, kappa, FRAC_PI_2 / f64::from(t.cells_per_edge()))
@@ -118,6 +134,21 @@ impl LodModel {
                 // `r * r <= 1`: the product varies by at most `A_r * (4 V_r + 0.75 V_m)`.
                 let vr = fbm_variation(p.ridge_frequency, p.ridge_octaves, s);
                 model.residual[level] += p.ridge_amplitude * (4.0 * vr + 0.75 * vm);
+            }
+            if p.generator_version >= 3 {
+                // See the "Generator v3" section of the `from_terrain` documentation.
+                let lip = 1.5 / (p.range_gate_hi - p.range_gate_lo);
+                let dg = (lip * vm).min(1.0);
+                let vh = fbm_variation(p.hills_frequency, p.hills_octaves, s);
+                let vmt = fbm_variation(p.mountains_frequency, p.mountains_octaves, s);
+                let hills = p.hills_amplitude * (2.0 * vh + 0.6 * dg);
+                let mountains =
+                    p.mountains_amplitude * (4.0 * vmt).min(1.0) + p.mountains_amplitude * dg;
+                model.residual[level] += hills + mountains;
+                let span = model.height.max - model.height.min;
+                if model.residual[level] > span {
+                    model.residual[level] = span;
+                }
             }
         }
         model
