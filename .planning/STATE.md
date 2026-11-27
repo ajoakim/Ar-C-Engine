@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-11-27)
 ## Current Position
 
 Phase: Not started (roadmap created, next: Phase 9)
-Plan: 09-01 complete (1/4 in Phase 9)
+Plan: 09-01 and 09-02 complete (2/4 in Phase 9)
 Status: Executing Phase 9
 Last activity: 2026-11-27 — Completed 09-01 (CI toolchain single-sourced, image-diff absolute pixel cap)
 
