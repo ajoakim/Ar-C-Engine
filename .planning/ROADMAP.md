@@ -17,7 +17,8 @@ Build a small, stable Rust engine core and validate it with two reference apps. 
  (completed 2026-11-26)
 - [x] **Phase 6: Streaming & Procedural Framework** - Generic streaming with fallback, deterministic seeded generator layers
  (completed 2026-11-26)
-- [ ] **Phase 7: Planetary Extension & Terrain LOD** - Cube-sphere, quadtree SSE LOD, crack-free transitions, planetary camera, planetary app
+- [x] **Phase 7: Planetary Extension & Terrain LOD** - Cube-sphere, quadtree SSE LOD, crack-free transitions, planetary camera, planetary app (plans complete 2026-11-25; gaps G1-G3 closed by Phase 7.1)
+- [x] **Phase 7.1: Hex-Grid Planet Topology & Descent Performance (INSERTED)** - Hex topology, descent performance, flight feedback fixes (completed 2026-11-26, human flight approved with caveats)
 - [ ] **Phase 8: Hardening & Decisions** - Atmosphere, debug overlays, regression/perf tests, docs, decision ADRs
 
 ## Phase Details
@@ -154,16 +155,16 @@ Plans:
   6. A scripted orbit-to-surface descent stays within the frame-time budget without stalls
 **Plans:** 10 plans
 Plans:
-- [ ] 07-01-PLAN.md — SDK gpu_frame hook + destroy_mesh, scaffold planetary-terrain/planetary-app, xtask/docs/CI wiring, ADR-0009 and ADR-0010 (proposed)
-- [ ] 07-02-PLAN.md — planetary-core: packed PatchId, face bases, cross-face adjacency with exhaustive reciprocity + oracle tests
-- [ ] 07-03-PLAN.md — planetary-core: exact-op equal-angle mapping, locate, layered planet-space generators, goldens, banned-ops scan
-- [ ] 07-04-PLAN.md — planetary-core: SSE LOD selection with hysteresis, cross-face 2:1 balance, leaf cap, validators
-- [ ] 07-05-PLAN.md — planetary-core: patch mesh with skirts and per-patch origin, validated payload, CPU seam proofs, ADR-0010 evidence
-- [ ] 07-06-PLAN.md — planetary-terrain: planetary camera (altitude-scaled speed, parallel transport, clearance, near plane)
-- [ ] 07-07-PLAN.md — planetary-terrain: effective (residency-limited) cut with coarsen-to-balance, request planning
-- [ ] 07-08-PLAN.md — planetary-terrain: PatchKey/PatchSource/GpuUploader/TerrainSystem streaming glue, headless integration test
-- [ ] 07-09-PLAN.md — planetary-app: PlanetaryApp, DescentScript, planetary_flight example, sdk_only policy test, CI headless step
-- [ ] 07-10-PLAN.md — scripted descent test (PLAN-07), ADR-0010 accepted, validation sign-off, human window-flight checkpoint
+- [x] 07-01-PLAN.md — SDK gpu_frame hook + destroy_mesh, scaffold planetary-terrain/planetary-app, xtask/docs/CI wiring, ADR-0009 and ADR-0010 (proposed)
+- [x] 07-02-PLAN.md — planetary-core: packed PatchId, face bases, cross-face adjacency with exhaustive reciprocity + oracle tests
+- [x] 07-03-PLAN.md — planetary-core: exact-op equal-angle mapping, locate, layered planet-space generators, goldens, banned-ops scan
+- [x] 07-04-PLAN.md — planetary-core: SSE LOD selection with hysteresis, cross-face 2:1 balance, leaf cap, validators
+- [x] 07-05-PLAN.md — planetary-core: patch mesh with skirts and per-patch origin, validated payload, CPU seam proofs, ADR-0010 evidence
+- [x] 07-06-PLAN.md — planetary-terrain: planetary camera (altitude-scaled speed, parallel transport, clearance, near plane)
+- [x] 07-07-PLAN.md — planetary-terrain: effective (residency-limited) cut with coarsen-to-balance, request planning
+- [x] 07-08-PLAN.md — planetary-terrain: PatchKey/PatchSource/GpuUploader/TerrainSystem streaming glue, headless integration test
+- [x] 07-09-PLAN.md — planetary-app: PlanetaryApp, DescentScript, planetary_flight example, sdk_only policy test, CI headless step
+- [x] 07-10-PLAN.md — scripted descent test (PLAN-07), ADR-0010 accepted, validation sign-off, human window-flight checkpoint
 **UI hint**: yes
 
 ### Phase 07.1: Hex-Grid Planet Topology & Descent Performance (INSERTED)
@@ -180,7 +181,7 @@ Plans:
   5. A `Topology` trait has cube-sphere and half-cell hex implementations; the hex cut covers the sphere exactly once with balanced neighbors, and its seam/coverage proofs (with negative controls) pass
   6. The hex planet runs the full scripted orbit-to-surface descent at real defaults in the planetary app (SDK only), and the user's window flight confirms detail rendering in on descent and aggregating on ascent
   7. The flight feedback items are fixed or measured with evidence and confirmed in the human flight: flicker cause established (plan 20), seamless level changes via geomorphing (plans 21-24), scale and contrast with mountain ranges, colour bands, relief light and distance haze (plan 25; the haze is a generic precursor that Phase 8 atmosphere PLAN-08 supersedes), present mode and window readout (plan 26), hex streaming speed (plan 27)
-**Plans:** 23/27 plans executed
+**Plans:** 27/27 plans executed
 
 Plans:
 - [x] 07.1-01-PLAN.md — Telemetry (Clock/SimClock/WallClock, CSV, --bench-descent at real defaults) + evidence-based crash/stutter diagnosis on the baseline (G3, G2 diagnosis)
@@ -210,7 +211,7 @@ Plans:
 - [x] 07.1-25-PLAN.md — Scale and contrast: generator v2 ridge layer, bounds, colour ramp and slope rock, relief light, distance haze (precursor to Phase 8 atmosphere), ADR-0015
 - [x] 07.1-26-PLAN.md — Present mode setting, startup info and window title readout, strict flags, measured table, ADR-0016
 - [x] 07.1-27-PLAN.md — Hex prepare speed: profile first, orientation-safe re-selection skip, equality proofs, stated targets
-- [ ] 07.1-18-PLAN.md — CHECKPOINT (last wave, depends on 17 and 19-27): full gate + human window flight with telemetry; the flight covers every Pending (human) item of plans 20-27
+- [x] 07.1-18-PLAN.md — CHECKPOINT (last wave, depends on 17 and 19-27): full gate + human window flight with telemetry; the flight covers every Pending (human) item of plans 20-27
 
 
 ### Phase 8: Hardening & Decisions
@@ -238,5 +239,6 @@ Plans:
 | 4. World, Spatial & Assets | 8/8 | Complete    | 2026-11-26 |
 | 5. Conventional Reference App | 10/10 | Complete    | 2026-11-26 |
 | 6. Streaming & Procedural Framework | 6/6 | Complete    | 2026-11-26 |
-| 7. Planetary Extension & Terrain LOD | 0/10 | Planned | - |
+| 7. Planetary Extension & Terrain LOD | 10/10 | Complete | 2026-11-25 |
+| 7.1 Hex-Grid Planet Topology & Descent Performance | 27/27 | Complete (human flight approved with caveats) | 2026-11-26 |
 | 8. Hardening & Decisions | 0/TBD | Not started | - |
