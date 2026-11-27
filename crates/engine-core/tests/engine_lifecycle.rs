@@ -13,6 +13,17 @@ use engine_core::{
 
 type Log = Arc<Mutex<Vec<String>>>;
 
+/// Serialises the tests that tick an engine. The tracing callsite interest
+/// cache is process-global: a callsite first hit by another test thread while
+/// no subscriber is set can be cached as "never" just as the span test installs
+/// its thread-local subscriber, so its spans were occasionally missed
+/// (`left: None, right: Some(2)`). Ticking one engine at a time removes the race.
+static TICK_LOCK: Mutex<()> = Mutex::new(());
+
+fn tick_guard() -> std::sync::MutexGuard<'static, ()> {
+    TICK_LOCK.lock().unwrap_or_else(|p| p.into_inner())
+}
+
 fn push(log: &Log, s: String) {
     if let Ok(mut g) = log.lock() {
         g.push(s);
@@ -104,6 +115,7 @@ fn two_module_engine(log: &Log) -> Result<Engine, EngineError> {
 
 #[test]
 fn engine_lifecycle_full_run() -> Result<(), EngineError> {
+    let _tick = tick_guard();
     let log: Log = Arc::default();
     let mut e = two_module_engine(&log)?;
     e.initialize()?;
@@ -196,6 +208,7 @@ fn engine_lifecycle_missing_dependency() -> Result<(), EngineError> {
 
 #[test]
 fn engine_lifecycle_frame_stats_spans() -> Result<(), EngineError> {
+    let _tick = tick_guard();
     let log: Log = Arc::default();
     let mut e = two_module_engine(&log)?;
     let (sub, handle) = engine_diagnostics::frame_timing_subscriber();
@@ -213,6 +226,7 @@ fn engine_lifecycle_frame_stats_spans() -> Result<(), EngineError> {
 
 #[test]
 fn engine_lifecycle_frame_history_from_config() -> Result<(), EngineError> {
+    let _tick = tick_guard();
     let mut e = Engine::from_ron_str("(engine: (frame_history: 2))")?;
     e.initialize()?;
     e.load()?;
