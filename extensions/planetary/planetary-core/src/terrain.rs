@@ -77,13 +77,13 @@ impl Default for TerrainParams {
             ridge_frequency: 12.0,
             ridge_octaves: 5,
             hills_amplitude: 600.0,
-            hills_frequency: 64.0,
+            hills_frequency: 200.0,
             hills_octaves: 4,
             mountains_amplitude: 3500.0,
-            mountains_frequency: 40.0,
+            mountains_frequency: 470.0,
             mountains_octaves: 5,
-            range_gate_lo: 0.50,
-            range_gate_hi: 0.70,
+            range_gate_lo: 0.44,
+            range_gate_hi: 0.74,
         }
     }
 }
@@ -100,8 +100,8 @@ impl TerrainParams {
     }
 
     /// Generator version 3: `demo_v2` plus hills and mountains layers. All v3 constants
-    /// (ridge 1800 m / 3 octaves, hills 600 m, mountains 3500 m, gate 0.50..0.70) are
-    /// starting estimates calibrated later; there is no vertical-exaggeration parameter.
+    /// (ridge 1800 m / 3 octaves, hills 600 m f200 x4, mountains 3500 m f470 x5, gate 0.44..0.74)
+    /// are calibrated by `tests/relief_v3.rs`; there is no vertical-exaggeration parameter.
     #[must_use]
     pub fn demo_v3() -> Self {
         Self {
