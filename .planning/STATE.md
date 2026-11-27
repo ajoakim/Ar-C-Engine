@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-11-27)
 
 ## Current Position
 
-Phase: 9 (Overlay, CI & Test Hygiene) - complete; next: Phase 10
-Plan: 09-01..09-04 complete (4/4 in Phase 9)
-Status: Phase 9 complete (gate green)
-Last activity: 2026-11-27 - Completed 09-04 (full local gate green, DEBT-01..05 closed)
+Phase: 10 (Free-Flight 6DOF Camera) - in progress
+Plan: 10-01 complete (1/3 in Phase 10); next: 10-02
+Status: Executing Phase 10
+Last activity: 2026-11-27 - Completed 10-01 (Z/X/F keys, FreeFlight controller, drift/parity tests)
 
 ## Performance Metrics
 
