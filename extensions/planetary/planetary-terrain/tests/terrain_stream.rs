@@ -18,7 +18,7 @@ use planetary_core::{
 use planetary_terrain::{
     BudgetLimits, CameraParams, DRAW_MARGIN, GpuUploader, PatchKey, PlanetaryCamera, Scope,
     ScopeProbe, StreamBudget, TAN_HALF_FOV_Y, TerrainConfig, TerrainReport, TerrainSystem,
-    cell_payload_estimate,
+    base_patch_budget, cell_payload_estimate,
 };
 
 const RADIUS: f64 = 6_371_000.0;
@@ -414,14 +414,23 @@ fn draw_items_plus_culled_equals_drawn() {
 }
 
 #[test]
+fn held_mesh_cap_is_base_plus_detail() {
+    let cfg = TerrainConfig {
+        base_levels: 3,
+        detail_budget_patches: 60,
+        ..test_cfg()
+    };
+    let (_rt, app) = start(cfg, above_pos_x());
+    assert_eq!(app.sys.held_mesh_cap(), 526 + 60);
+    assert_eq!(app.sys.held_mesh_cap(), base_patch_budget(3) + 60);
+}
+
+#[test]
 fn held_meshes_bounded_while_hovering() {
     let cfg = TerrainConfig {
         detail_budget_patches: 60,
         ..test_cfg()
     };
-    let base_levels = u32::from(cfg.base_levels);
-    let base = 6 * ((1u64 << (2 * (base_levels + 1))) - 1) / 3 + 16;
-    let bound = usize::try_from(base + cfg.detail_budget_patches).expect("bound");
     // Slow drift 40 m above the surface: new cells keep entering the wanted set.
     let eyes: Vec<DVec3> = (0..600)
         .map(|i| {
@@ -430,6 +439,8 @@ fn held_meshes_bounded_while_hovering() {
         })
         .collect();
     let (mut rt, mut app) = start(cfg.clone(), eyes);
+    // Same value the debug overlay shows as the held-mesh cap.
+    let bound = usize::try_from(app.sys.held_mesh_cap()).expect("bound");
     let mut max_held = 0usize;
     for _ in 0..600 {
         step(&mut rt, &mut app);

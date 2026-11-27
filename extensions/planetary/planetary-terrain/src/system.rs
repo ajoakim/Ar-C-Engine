@@ -469,6 +469,12 @@ fn max_level_jump<T: Topology>(topo: &T, cells: &[T::Cell]) -> u8 {
     jump
 }
 
+/// Patch budget of the base class: every cell of levels `0..=base_levels` plus 16 spare.
+#[must_use]
+pub fn base_patch_budget(base_levels: u8) -> u64 {
+    6 * ((1u64 << (2 * (u32::from(base_levels) + 1))) - 1) / 3 + 16
+}
+
 fn app_err(what: &str, e: impl std::fmt::Display) -> SdkError {
     SdkError::App(format!("{what}: {e}"))
 }
@@ -559,7 +565,7 @@ impl<T: Topology> TerrainSystem<T> {
             upload_slots = upload_slots.max(cfg.budget.max_uploads);
         }
         let mut residency = ResidencyManager::new(u64::from(upload_slots) * bytes);
-        let base_patches = 6 * ((1u64 << (2 * (u32::from(cfg.base_levels) + 1))) - 1) / 3 + 16;
+        let base_patches = base_patch_budget(cfg.base_levels);
         residency.set_class_budget(
             BASE_CLASS,
             ClassBudget {
@@ -1308,6 +1314,12 @@ impl<T: Topology> TerrainSystem<T> {
     #[must_use]
     pub fn held_mesh_count(&self) -> usize {
         self.held.len()
+    }
+
+    /// Hard cap on [`Self::held_mesh_count`]: base-class plus detail-class patch budgets.
+    #[must_use]
+    pub fn held_mesh_cap(&self) -> u64 {
+        base_patch_budget(self.cfg.base_levels).saturating_add(self.cfg.detail_budget_patches)
     }
 
     /// Planet radius plus terrain height in direction `dir`.
