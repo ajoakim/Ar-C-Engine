@@ -147,26 +147,26 @@ jobs:
           ARC_UPDATE_GOLDENS: "1"
           ARC_REQUIRE_ADAPTER: ${{ matrix.require_adapter }}
         run: |
-          cargo test -p engine-render-wgpu --locked --features egui-overlay --test image_diff -- --nocapture
-          cargo test -p planetary-app --locked --test atmosphere_ring -- --nocapture
+          cargo test -p engine-render-wgpu --locked --features egui-overlay --test image_diff -- --nocapture --test-threads=1
+          cargo test -p planetary-app --locked --test atmosphere_ring -- --nocapture --test-threads=1
       # ARC_REQUIRE_ADAPTER is "1" on Linux and Windows only; macOS has no software Metal adapter.
       - name: Verify image diffs
         if: github.event_name != 'workflow_dispatch' || !inputs.update_goldens
         env:
           ARC_REQUIRE_ADAPTER: ${{ matrix.require_adapter }}
-        run: cargo test -p engine-render-wgpu --locked --test image_diff -- --nocapture
+        run: cargo test -p engine-render-wgpu --locked --test image_diff -- --nocapture --test-threads=1
       # egui-overlay feature path: also runs the overlay_corner golden and overlay_corner_differs.
       - name: Verify image diffs (egui-overlay feature)
         if: github.event_name != 'workflow_dispatch' || !inputs.update_goldens
         env:
           ARC_REQUIRE_ADAPTER: ${{ matrix.require_adapter }}
-        run: cargo test -p engine-render-wgpu --locked --features egui-overlay --test image_diff -- --nocapture
+        run: cargo test -p engine-render-wgpu --locked --features egui-overlay --test image_diff -- --nocapture --test-threads=1
       # atmosphere_ring lives in planetary-app (plan 08-10), same skip/require env semantics.
       - name: Verify atmosphere_ring image
         if: github.event_name != 'workflow_dispatch' || !inputs.update_goldens
         env:
           ARC_REQUIRE_ADAPTER: ${{ matrix.require_adapter }}
-        run: cargo test -p planetary-app --locked --test atmosphere_ring -- --nocapture
+        run: cargo test -p planetary-app --locked --test atmosphere_ring -- --nocapture --test-threads=1
       - name: Upload image-diff artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -187,7 +187,8 @@ jobs:
   feature-paths:
     name: feature paths (debug-overlay)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # planetary-app tests in a debug build took ~27 min on hosted CI (a 30 min limit cancelled the job).
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - name: Install pinned toolchain from rust-toolchain.toml
