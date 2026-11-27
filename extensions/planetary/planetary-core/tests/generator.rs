@@ -269,13 +269,14 @@ fn validation_rejects_bad_input() {
 fn validation_covers_generator_version_and_ridge_fields() {
     let v2 = TerrainParams::demo_v2();
     assert!(v2.validate().is_ok());
+    assert!(TerrainParams::demo_v3().validate().is_ok());
     let bad = [
         TerrainParams {
             generator_version: 0,
             ..v2
         },
         TerrainParams {
-            generator_version: 3,
+            generator_version: 4,
             ..v2
         },
         TerrainParams {
