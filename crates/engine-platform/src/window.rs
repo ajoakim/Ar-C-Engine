@@ -33,6 +33,14 @@ impl PlatformWindow {
         self.inner.request_redraw();
     }
 
+    /// Refresh rate of the current monitor in millihertz, when the platform reports it.
+    #[must_use]
+    pub fn monitor_refresh_mhz(&self) -> Option<u32> {
+        self.inner
+            .current_monitor()
+            .and_then(|m| m.refresh_rate_millihertz())
+    }
+
     /// Set the window title.
     pub fn set_title(&self, title: &str) {
         self.inner.set_title(title);
@@ -66,5 +74,10 @@ mod tests {
     #[test]
     fn window_satisfies_render_target_bounds() {
         assert_target::<PlatformWindow>();
+    }
+
+    #[test]
+    fn monitor_refresh_signature() {
+        let _f: fn(&PlatformWindow) -> Option<u32> = PlatformWindow::monitor_refresh_mhz;
     }
 }

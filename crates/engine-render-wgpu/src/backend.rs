@@ -14,6 +14,7 @@ use crate::pipeline::{
     FRAME_UNIFORM_BYTES, FrameUniform, create_bind_group_layouts, create_render_pipeline,
     draw_uniform_offset, uniform_buffer_size, uses_texture,
 };
+use crate::present::{PresentConfig, PresentInfo, resolve_present_mode};
 use crate::target::Target;
 
 fn backend_err(e: impl std::fmt::Display) -> RenderError {
@@ -122,6 +123,7 @@ pub struct WgpuBackend {
     textures: HashMap<TextureId, GpuTexture>,
     default_texture: GpuTexture,
     gpu_error: ErrorSlot,
+    present_info: PresentInfo,
 }
 
 impl WgpuBackend {
@@ -130,6 +132,17 @@ impl WgpuBackend {
         target: Arc<dyn RenderTarget>,
         width: u32,
         height: u32,
+    ) -> Result<Self, RenderError> {
+        Self::new_with(target, width, height, &PresentConfig::default())
+    }
+
+    /// Create a backend presenting to a window target with an explicit present configuration.
+    /// An unsupported mode falls back to Fifo with a logged warning.
+    pub fn new_with(
+        target: Arc<dyn RenderTarget>,
+        width: u32,
+        height: u32,
+        present: &PresentConfig,
     ) -> Result<Self, RenderError> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
         let surface = instance
@@ -153,13 +166,32 @@ impl WgpuBackend {
             .first()
             .copied()
             .unwrap_or(wgpu::CompositeAlphaMode::Auto);
+        let resolved = resolve_present_mode(present.mode, &caps.present_modes);
+        if resolved.fell_back {
+            tracing::warn!(
+                requested = present.mode.name(),
+                supported = ?caps.present_modes,
+                "requested present mode unsupported, falling back to Fifo"
+            );
+        }
+        let info = PresentInfo {
+            requested: present.mode,
+            active: format!("{:?}", resolved.active),
+            supported: caps
+                .present_modes
+                .iter()
+                .map(|m| format!("{m:?}"))
+                .collect(),
+            frame_latency: present.frame_latency.get(),
+            fell_back: resolved.fell_back,
+        };
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: color_format,
             width,
             height,
-            present_mode: wgpu::PresentMode::Fifo,
-            desired_maximum_frame_latency: 2,
+            present_mode: resolved.active,
+            desired_maximum_frame_latency: present.frame_latency.get(),
             alpha_mode,
             color_space: wgpu::SurfaceColorSpace::Auto,
             view_formats: vec![],
@@ -173,13 +205,23 @@ impl WgpuBackend {
             Some(surface),
             Some(config),
         )?;
+        backend.present_info = info;
         backend.reconfigure()?;
-        tracing::info!(adapter = %backend.adapter_summary(), ?color_format, "wgpu backend ready");
+        tracing::info!(adapter = %backend.adapter_summary(), ?color_format, present = ?backend.present_info, "wgpu backend ready");
         Ok(backend)
     }
 
     /// Create a backend rendering into an offscreen texture (tests, headless CI).
     pub fn new_offscreen(width: u32, height: u32) -> Result<Self, RenderError> {
+        Self::new_offscreen_with(width, height, &PresentConfig::default())
+    }
+
+    /// Offscreen backend that accepts a present configuration and ignores it (no surface).
+    pub fn new_offscreen_with(
+        width: u32,
+        height: u32,
+        present: &PresentConfig,
+    ) -> Result<Self, RenderError> {
         if width == 0 || height == 0 {
             return Err(RenderError::Backend(
                 "offscreen size must be non-zero".into(),
@@ -201,6 +243,7 @@ impl WgpuBackend {
             None,
             None,
         )?;
+        backend.present_info = PresentInfo::offscreen(present);
         backend.reconfigure()?;
         tracing::info!(adapter = %backend.adapter_summary(), ?color_format, "wgpu offscreen backend ready");
         Ok(backend)
@@ -309,7 +352,13 @@ impl WgpuBackend {
             textures: HashMap::new(),
             default_texture,
             gpu_error,
+            present_info: PresentInfo::offscreen(&PresentConfig::default()),
         })
+    }
+
+    /// The configured present mode, supported modes and frame latency.
+    pub fn present_info(&self) -> &PresentInfo {
+        &self.present_info
     }
 
     /// Human-readable adapter description: "name (backend)".
