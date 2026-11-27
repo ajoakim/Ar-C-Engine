@@ -30,7 +30,7 @@ Dependencies flow downward only: a crate may depend only on crates of a strictly
 Enforced by `cargo xtask check-deps`; the IDs below are the exact rule IDs it reports.
 
 - `core-depends-on-extension` (R1): no package under `crates/` may depend (normal, dev or build) on a package under `extensions/`.
-- `wgpu-outside-allowed-crate` (R2): only `engine-render-wgpu` may declare a dependency on `wgpu`.
+- `wgpu-outside-allowed-crate` (R2): only `engine-render-wgpu` may declare a dependency on `wgpu` or on `egui-wgpu` (which links wgpu; ADR-0018). `debug-ui` has no GPU or window dependencies (pure `egui`).
 - `winit-outside-allowed-crate` (R3): only `engine-platform` may declare a dependency on `winit`.
 - `extension-cross-dependency` (R4): an extension family (`extensions/conventional-3d`, `extensions/planetary/*`) may not depend on another family.
 - `tier-violation` (R5): a workspace crate may only depend on workspace crates of a strictly lower tier.

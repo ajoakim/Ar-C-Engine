@@ -286,6 +286,36 @@ fn adr_0017_present() {
 }
 
 #[test]
+fn adr_0018_present() {
+    let f = "docs/architecture/adr/0018-debug-overlay-placement-and-font-licences.md";
+    let t = read(f);
+    for lit in [
+        "Status: accepted",
+        "egui-wgpu",
+        "engine-render-wgpu",
+        "OFL-1.1",
+        "Ubuntu-font-1.0",
+        "egui-winit",
+        "F3",
+        "## Alternatives Considered",
+        "## Evidence",
+    ] {
+        require(f, &t, lit);
+    }
+    let readme = read("docs/architecture/adr/README.md");
+    require("docs/architecture/adr/README.md", &readme, "[0018]");
+}
+
+#[test]
+fn dependency_direction_documents_egui_wgpu_rule() {
+    let f = "docs/architecture/dependency-direction.md";
+    let t = read(f);
+    for lit in ["egui-wgpu", "ADR-0018"] {
+        require(f, &t, lit);
+    }
+}
+
+#[test]
 fn phase8_amendments_cite_evidence() {
     let marker = "Amendment (Phase 8)";
     let f5 = "docs/architecture/adr/0005-rendering-api-wgpu-behind-trait.md";
