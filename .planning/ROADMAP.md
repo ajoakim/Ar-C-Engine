@@ -235,7 +235,7 @@ Plans:
 - [x] 08-07-PLAN.md — Overlay policy: font licences, egui-wgpu wrapper, xtask R2 fixture, ADR-0018
 - [x] 08-08-PLAN.md — egui-wgpu painter, SDK hand-off, F3 overlay
 - [x] 08-09-PLAN.md — Architecture, assumptions, limitations, SDK usage docs
-- [ ] 08-10-PLAN.md — Minimal atmosphere limb ring, ADR-0019 (cuttable)
+- [x] 08-10-PLAN.md — Minimal atmosphere limb ring, ADR-0019 (cuttable)
 - [ ] 08-11-PLAN.md — Non-blocking bench job, hosted goldens, CI evidence
 - [ ] 08-12-PLAN.md — Final gate, human flight, HLD.md decision, bookkeeping
 **UI hint**: yes
@@ -254,4 +254,4 @@ Plans:
 | 6. Streaming & Procedural Framework | 6/6 | Complete    | 2026-11-26 |
 | 7. Planetary Extension & Terrain LOD | 10/10 | Complete | 2026-11-25 |
 | 07.1. Hex-Grid Planet Topology & Descent Performance | 27/27 | Complete (human flight approved with caveats) | 2026-11-26 |
-| 8. Hardening & Decisions | 9/12 | In Progress|  |
+| 8. Hardening & Decisions | 10/12 | In Progress|  |
