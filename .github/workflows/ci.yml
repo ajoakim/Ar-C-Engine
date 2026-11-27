@@ -4,6 +4,12 @@ on:
   push:
     branches: [main, master]
   pull_request:
+  workflow_dispatch:
+    inputs:
+      update_goldens:
+        description: "Regenerate image-diff goldens on the software adapter and upload them as artifacts"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -99,3 +105,63 @@ jobs:
         run: cargo deny check bans licenses sources advisories
       - name: Negative - cargo-deny rejects misplaced wgpu (must fail)
         run: "! cargo deny --manifest-path xtask/fixtures/wgpu-winit-misplaced/Cargo.toml --config deny.toml check bans"
+
+  image-diff:
+    name: image-diff (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            wgpu_backend: vulkan   # lavapipe via mesa-vulkan-drivers
+            require_adapter: "1"
+          - os: windows-latest
+            wgpu_backend: dx12     # WARP is built in
+            require_adapter: "1"
+          - os: macos-latest
+            wgpu_backend: metal
+            require_adapter: ""    # no software Metal adapter exists: skip-allowed
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    env:
+      WGPU_BACKEND: ${{ matrix.wgpu_backend }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned toolchain from rust-toolchain.toml
+        run: rustup toolchain install
+      - name: Assert pinned toolchain is active
+        run: rustc --version | grep -F "1.99.0"
+      - uses: Swatinem/rust-cache@v2
+      - name: Install lavapipe (Linux software Vulkan)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mesa-vulkan-drivers vulkan-tools
+          vulkaninfo --summary || true
+      # Update path: replaces the verify step. ONLY place ARC_UPDATE_GOLDENS is set.
+      - name: Update goldens (workflow_dispatch only)
+        if: github.event_name == 'workflow_dispatch' && inputs.update_goldens
+        env:
+          ARC_UPDATE_GOLDENS: "1"
+          ARC_REQUIRE_ADAPTER: ${{ matrix.require_adapter }}
+        run: cargo test -p engine-render-wgpu --locked --test image_diff -- --nocapture
+      # ARC_REQUIRE_ADAPTER is "1" on Linux and Windows only; macOS has no software Metal adapter.
+      - name: Verify image diffs
+        if: github.event_name != 'workflow_dispatch' || !inputs.update_goldens
+        env:
+          ARC_REQUIRE_ADAPTER: ${{ matrix.require_adapter }}
+        run: cargo test -p engine-render-wgpu --locked --test image_diff -- --nocapture
+      - name: Upload image-diff artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-diff-${{ matrix.os }}
+          path: target/image-diff/
+          if-no-files-found: ignore
+      - name: Upload regenerated goldens
+        if: always() && github.event_name == 'workflow_dispatch' && inputs.update_goldens
+        uses: actions/upload-artifact@v4
+        with:
+          name: goldens-${{ matrix.os }}
+          path: crates/engine-render-wgpu/tests/golden/
+          if-no-files-found: ignore
