@@ -16,8 +16,9 @@ use planetary_core::{
     Topology, encode_cell_payload, vertex_count,
 };
 use planetary_terrain::{
-    BudgetLimits, CameraParams, DRAW_MARGIN, GpuUploader, PatchKey, PlanetaryCamera, StreamBudget,
-    TAN_HALF_FOV_Y, TerrainConfig, TerrainReport, TerrainSystem, cell_payload_estimate,
+    BudgetLimits, CameraParams, DRAW_MARGIN, GpuUploader, PatchKey, PlanetaryCamera, Scope,
+    ScopeProbe, StreamBudget, TAN_HALF_FOV_Y, TerrainConfig, TerrainReport, TerrainSystem,
+    cell_payload_estimate,
 };
 
 const RADIUS: f64 = 6_371_000.0;
@@ -34,6 +35,19 @@ struct Harness<T: Topology = CubeSphere> {
     /// Items drawn with a morph factor other than 0, and the factors of the last frame.
     morph_nonzero: usize,
     frame_morphs: Vec<f32>,
+    /// When set, `prepare_with` records every scope begin (`true`) and end (`false`) here.
+    probe_log: Option<Vec<(bool, Scope)>>,
+}
+
+struct LogProbe<'a>(&'a mut Vec<(bool, Scope)>);
+
+impl ScopeProbe for LogProbe<'_> {
+    fn begin(&mut self, scope: Scope) {
+        self.0.push((true, scope));
+    }
+    fn end(&mut self, scope: Scope) {
+        self.0.push((false, scope));
+    }
 }
 
 impl<T: Topology> App for Harness<T> {
@@ -52,7 +66,11 @@ impl<T: Topology> App for Harness<T> {
             let cam = PlanetaryCamera::new(eye, CameraParams::default()).expect("camera");
             view = view.with_frustum(cam.frustum_planes(16.0 / 9.0, 10.0));
         }
-        self.sys.prepare(&view);
+        if let Some(log) = self.probe_log.as_mut() {
+            self.sys.prepare_with(&view, &mut LogProbe(log));
+        } else {
+            self.sys.prepare(&view);
+        }
         self.frame += 1;
         AppControl::Continue
     }
@@ -109,6 +127,7 @@ fn start_with<T: Topology>(
         items_bad: 0,
         morph_nonzero: 0,
         frame_morphs: Vec::new(),
+        probe_log: None,
     };
     rt.setup(&mut app).expect("setup");
     (rt, app)
@@ -1135,4 +1154,153 @@ fn morph_config_is_validated() {
         c.morph_enabled = false;
         c.morph_frames = 0;
     }));
+}
+
+#[test]
+fn scope_probe_sees_each_scope_once_in_order_and_changes_nothing() {
+    let run = |probe: bool| {
+        let (mut rt, mut app) = start(test_cfg(), orbit(40, 2000.0));
+        if probe {
+            app.probe_log = Some(Vec::new());
+        }
+        let mut reports = Vec::new();
+        let mut logs = Vec::new();
+        for _ in 0..40 {
+            if let Some(l) = app.probe_log.as_mut() {
+                l.clear();
+            }
+            step(&mut rt, &mut app);
+            reports.push(app.sys.report().clone());
+            if let Some(l) = app.probe_log.as_ref() {
+                logs.push(l.clone());
+            }
+        }
+        app.sys.shutdown();
+        (reports, logs)
+    };
+    let (plain, _) = run(false);
+    let (probed, logs) = run(true);
+    assert_eq!(plain, probed, "a probe must not change any prepare result");
+    let mut expected = Vec::new();
+    for sc in Scope::ALL {
+        expected.push((true, sc));
+        expected.push((false, sc));
+    }
+    assert_eq!(logs.len(), 40);
+    for (i, l) in logs.iter().enumerate() {
+        assert_eq!(
+            l, &expected,
+            "frame {i}: each scope begins and ends once, in order"
+        );
+    }
+}
+
+/// A stationary eye, a teleport to the far side, a stationary eye again.
+fn still_jump_still() -> Vec<DVec3> {
+    let mut eyes = vec![DVec3::new(RADIUS + 3000.0, 0.0, 0.0); 150];
+    eyes.extend(vec![DVec3::new(-(RADIUS + 900.0), 0.0, 0.0); 150]);
+    eyes
+}
+
+/// Generous per-frame caps so a hover converges within a hundred frames.
+fn quick_cfg() -> TerrainConfig {
+    let mut cfg = test_cfg();
+    cfg.uploads_per_frame = 32;
+    cfg.max_requests_per_frame = 64;
+    cfg.stream.max_starts_per_frame = 64;
+    cfg
+}
+
+fn trace_reports(cfg: TerrainConfig, eyes: Vec<DVec3>) -> (Vec<TerrainReport>, Vec<Vec<u64>>) {
+    let n = eyes.len();
+    let (mut rt, mut app) = start(cfg, eyes);
+    // With the frustum attached the selection stays inside the leaf budget in a hover.
+    app.frustum = true;
+    let mut reports = Vec::new();
+    let mut splits = Vec::new();
+    for _ in 0..n {
+        step(&mut rt, &mut app);
+        reports.push(app.sys.report().clone());
+        splits.push(
+            app.sys
+                .wanted_split()
+                .iter()
+                .map(|c| app.sys.topology().raw(*c))
+                .collect(),
+        );
+    }
+    app.sys.shutdown();
+    (reports, splits)
+}
+
+#[test]
+fn reselect_is_skipped_only_when_provably_safe() {
+    let (reports, _) = trace_reports(quick_cfg(), still_jump_still());
+    let skipped: Vec<usize> = (0..reports.len())
+        .filter(|&f| reports[f].reselect_skipped)
+        .collect();
+    assert!(
+        skipped.len() >= 20,
+        "the skip never fires in a stationary hover ({} frames)",
+        skipped.len()
+    );
+    for &f in &skipped {
+        // The reused selection hit no budget and was not trimmed.
+        let s = &reports[f].select;
+        assert!(
+            !s.node_budget_hit && !s.leaf_budget_hit && s.trimmed_splits == 0,
+            "frame {f}"
+        );
+        // No mesh was uploaded or destroyed since the selection (the previous gpu_frame).
+        assert!(f >= 1);
+        let prev = &reports[f - 1];
+        assert_eq!(prev.stream.uploads, 0, "frame {f}: skipped after an upload");
+        assert_eq!(prev.destroyed, 0, "frame {f}: skipped after a destroy");
+    }
+    // The teleport frame (the eye jumps on frame 150) re-selects.
+    assert!(
+        !reports[150].reselect_skipped,
+        "skipped on the teleport frame"
+    );
+}
+
+#[test]
+fn a_leaf_budget_hit_forbids_the_skip() {
+    let mut cfg = test_cfg();
+    cfg.lod.max_leaves = 40;
+    let (reports, _) = trace_reports(cfg, vec![DVec3::new(RADIUS + 500.0, 0.0, 0.0); 80]);
+    assert!(
+        reports
+            .iter()
+            .any(|r| r.select.leaf_budget_hit || r.select.trimmed_splits > 0),
+        "the budget was never hit: the test does not test anything"
+    );
+    for (f, r) in reports.iter().enumerate() {
+        if r.select.leaf_budget_hit || r.select.trimmed_splits > 0 {
+            assert!(
+                !r.reselect_skipped,
+                "frame {f}: skipped a budget-limited selection"
+            );
+        }
+    }
+}
+
+#[test]
+fn skipping_gives_the_same_selection_as_always_reselect() {
+    let mut eyes = orbit(40, 2000.0);
+    eyes.extend(vec![*eyes.last().expect("eye"); 120]);
+    let mut always = quick_cfg();
+    always.always_reselect = true;
+    let (a, sa) = trace_reports(always, eyes.clone());
+    let (b, sb) = trace_reports(quick_cfg(), eyes);
+    assert_eq!(sa, sb, "wanted split differs");
+    for (f, (x, y)) in a.iter().zip(&b).enumerate() {
+        assert!(!x.reselect_skipped);
+        let mut y = y.clone();
+        y.reselect_skipped = false;
+        // The probes of the held table are what a reused selection saves.
+        y.range_lookups = x.range_lookups;
+        assert_eq!(*x, y, "frame {f}");
+    }
+    assert!(b.iter().any(|r| r.reselect_skipped), "never skipped");
 }

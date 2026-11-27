@@ -44,27 +44,39 @@ pub fn plan_requests_scored<T: Topology>(
     max: usize,
 ) -> Vec<T::Cell> {
     let mut best: BTreeMap<(u8, u64), f64> = BTreeMap::new();
-    let mut chain: Vec<T::Cell> = Vec::new();
+    // First non-resident cell on the chain root..cell, per cell (None: the whole chain is
+    // resident). Pieces share ancestors, so each chain is walked once instead of once per piece;
+    // the value is exactly what the root-first scan over the chain of each piece finds.
+    let mut first_gap: BTreeMap<T::Cell, Option<T::Cell>> = BTreeMap::new();
+    let mut stack: Vec<T::Cell> = Vec::new();
     for &(piece, score) in wanted {
         let score = if score.is_finite() { score } else { 0.0 };
-        chain.clear();
+        stack.clear();
         let mut cur = Some(piece);
+        let mut below: Option<Option<T::Cell>> = None;
         while let Some(c) = cur {
-            chain.push(c);
+            if let Some(g) = first_gap.get(&c) {
+                below = Some(*g);
+                break;
+            }
+            stack.push(c);
             cur = topo.primary_parent(c);
         }
-        // Root first; the first non-resident node has a resident parent (or is a root).
-        for &a in chain.iter().rev() {
-            if is_resident(a) {
-                continue;
+        // `below` is the answer for the parent of the last pushed cell (None: reached a root).
+        let mut gap: Option<T::Cell> = below.flatten();
+        for &c in stack.iter().rev() {
+            if gap.is_none() && !is_resident(c) {
+                gap = Some(c);
             }
-            if !is_pending(a) {
-                let e = best.entry((topo.level(a), topo.raw(a))).or_insert(score);
-                if score > *e {
-                    *e = score;
-                }
+            first_gap.insert(c, gap);
+        }
+        if let Some(a) = gap
+            && !is_pending(a)
+        {
+            let e = best.entry((topo.level(a), topo.raw(a))).or_insert(score);
+            if score > *e {
+                *e = score;
             }
-            break;
         }
     }
     let mut order: Vec<((u8, u64), f64)> = best.into_iter().collect();

@@ -31,7 +31,8 @@ pub mod uploader;
 pub use uploader::{GpuUploader, HeldCell};
 pub mod system;
 pub use system::{
-    BudgetLimits, DRAW_MARGIN, StreamBudget, TerrainConfig, TerrainReport, TerrainSystem,
+    BudgetLimits, DRAW_MARGIN, NoProbe, Scope, ScopeProbe, StreamBudget, TerrainConfig,
+    TerrainReport, TerrainSystem,
 };
 
 use engine_sdk::streaming::AssetClass;

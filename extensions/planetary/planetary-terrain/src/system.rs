@@ -16,7 +16,9 @@ use planetary_core::lod::{
     DEFAULT_KAPPA, LodModel, LodParams, SelectStats, View, cell_bound, cell_distance, eye_in_cone,
     frustum_visible, horizon_visible, morph_factor, refine_distance,
 };
-use planetary_core::topology::select::{retain_culled, select_cells, unsplit_reasons};
+use planetary_core::topology::select::{
+    CellSelection, retain_culled_known, select_cells_with, unsplit_reasons,
+};
 use planetary_core::{MAX_LEVEL, PlanetTerrain, TerrainParams, Topology};
 
 use crate::churn::{ChurnFlags, ChurnTracker};
@@ -32,6 +34,64 @@ use crate::requests::{
 use crate::source::{CellSource, cell_payload_estimate};
 use crate::uploader::{GpuUploader, HeldCell};
 use crate::{BASE_CLASS, DEMO_SEED, DETAIL_CLASS};
+
+/// A timed section of [`TerrainSystem::prepare_with`] (07.1-27 profiling).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Scope {
+    /// `select_cells`.
+    Select,
+    /// Culled-split retention (`retain_culled`) and the piece rebuild after it.
+    Closure,
+    /// Request scores of the non-resident pieces.
+    Score,
+    /// Diagnostics-only unsplit classification (empty with diagnostics off).
+    Cull,
+    /// Split-set bookkeeping: `prev_split`, `wanted`, pending retain, ancestor closure, stale set.
+    SetBuild,
+    /// Request planning and issuing.
+    Requests,
+}
+
+impl Scope {
+    /// Every scope, in the fixed order `prepare_with` runs them.
+    pub const ALL: [Scope; 6] = [
+        Scope::Select,
+        Scope::Closure,
+        Scope::Score,
+        Scope::Cull,
+        Scope::SetBuild,
+        Scope::Requests,
+    ];
+
+    /// Dense index into [`Scope::ALL`].
+    #[must_use]
+    pub fn index(self) -> usize {
+        match self {
+            Scope::Select => 0,
+            Scope::Closure => 1,
+            Scope::Score => 2,
+            Scope::Cull => 3,
+            Scope::SetBuild => 4,
+            Scope::Requests => 5,
+        }
+    }
+}
+
+/// Receives the begin and end of each [`Scope`] of a prepare. The terrain system reads no clock;
+/// the app implements this over its telemetry clock.
+pub trait ScopeProbe {
+    fn begin(&mut self, scope: Scope);
+    fn end(&mut self, scope: Scope);
+}
+
+/// The probe that does nothing (what [`TerrainSystem::prepare`] uses).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct NoProbe;
+
+impl ScopeProbe for NoProbe {
+    fn begin(&mut self, _scope: Scope) {}
+    fn end(&mut self, _scope: Scope) {}
+}
 
 /// Draw slots kept free below `MAX_DRAWS_PER_FRAME` (other scene items).
 pub const DRAW_MARGIN: usize = 24;
@@ -76,6 +136,10 @@ pub struct TerrainConfig {
     /// Slew limit: a shown factor falls by at most `1 / morph_frames` per frame (>= 1 when
     /// `morph_enabled`).
     pub morph_frames: u32,
+    /// Run `select_cells` every frame even when the previous selection provably still holds
+    /// (07.1-27). Off by default: a selection is reused only when `SelectSlack::allows` the view
+    /// change and no other input changed; the result is identical either way (tested).
+    pub always_reselect: bool,
 }
 
 /// Hard maxima and target of the adaptive per-frame streaming budget.
@@ -194,6 +258,8 @@ impl StreamBudget {
 struct Budgeted<U> {
     inner: U,
     left: u32,
+    /// Uploads that succeeded this frame (each may have inserted or replaced a held mesh).
+    done: u32,
 }
 
 impl<K, U: Uploader<K>> Uploader<K> for Budgeted<U> {
@@ -204,6 +270,7 @@ impl<K, U: Uploader<K>> Uploader<K> for Budgeted<U> {
         let ok = self.inner.upload(key, data);
         if ok {
             self.left -= 1;
+            self.done += 1;
         }
         ok
     }
@@ -252,6 +319,7 @@ impl Default for TerrainConfig {
             morph_enabled: true,
             morph_end_scale: 1.25,
             morph_frames: 8,
+            always_reselect: false,
         }
     }
 }
@@ -310,6 +378,11 @@ pub struct TerrainReport {
     pub handover_gap_max: f64,
     /// Drawn cells replaced by descendants more than one level deeper this frame.
     pub multi_level_handovers: u32,
+    /// The selection of the previous frame was reused (`select_cells` was not run; 07.1-27).
+    pub reselect_skipped: bool,
+    /// Resident-range probes the selection made this frame (0 when it was reused): a
+    /// deterministic proxy for the held-table lookups of `select_cells` (07.1-27).
+    pub range_lookups: u32,
 }
 
 /// Streams, uploads and draws the terrain of any [`Topology`].
@@ -359,6 +432,19 @@ pub struct TerrainSystem<T: Topology> {
     prev_drawn: BTreeSet<T::Cell>,
     /// Shown morph factor per cell drawn in the last frame.
     morph_shown: BTreeMap<T::Cell, f64>,
+    /// Bumped whenever `held` gains, replaces or loses a mesh (its ranges feed the selection).
+    held_version: u64,
+    /// The last real selection equalled its `prev_split` (predicts the next one will).
+    settled: bool,
+    /// The last selection that may be reused while the view stays inside its slack.
+    reusable: Option<Reusable<T::Cell>>,
+}
+
+/// A selection that a later frame may reuse instead of running `select_cells` again.
+struct Reusable<C> {
+    view: View,
+    held_version: u64,
+    selection: CellSelection<C>,
 }
 
 /// Maximum level difference across any shared edge of `cells` (cells may repeat).
@@ -508,6 +594,9 @@ impl<T: Topology> TerrainSystem<T> {
             retained_age: BTreeMap::new(),
             prev_drawn: BTreeSet::new(),
             morph_shown: BTreeMap::new(),
+            held_version: 0,
+            settled: false,
+            reusable: None,
             cfg,
             terrain,
             topo,
@@ -615,6 +704,7 @@ impl<T: Topology> TerrainSystem<T> {
     /// Propagates backend destroy errors (the first one; all destroys are attempted).
     pub fn teardown(&mut self, resources: &mut Resources<'_>) -> Result<(), SdkError> {
         let mut first: Option<SdkError> = None;
+        self.held_version += 1;
         for (_, h) in std::mem::take(&mut self.held) {
             if let Err(e) = resources.destroy_mesh(h.mesh) {
                 first.get_or_insert(e);
@@ -632,26 +722,81 @@ impl<T: Topology> TerrainSystem<T> {
 
     /// `App::update` step: select (with hysteresis), cancel stale requests, issue capped requests.
     pub fn prepare(&mut self, view: &View) {
+        self.prepare_with(view, &mut NoProbe);
+    }
+
+    /// [`TerrainSystem::prepare`] with scoped timing hooks (identical results).
+    pub fn prepare_with(&mut self, view: &View, probe: &mut dyn ScopeProbe) {
         let mut rep = TerrainReport {
             frame: self.frame,
             ..TerrainReport::default()
         };
         self.last_view = Some(*view);
         self.budget = StreamBudget::next(&self.cfg, self.budget.scale, self.frame_cost_ms);
-        let mut sel = {
+        probe.begin(Scope::Select);
+        // A selection is a pure function of the view, `prev_split`, the held ranges, the (fixed)
+        // configuration and the model. The previous one is reused only when it was a fixed point
+        // of the hysteresis (it equals the `prev_split` it was computed from, nothing retained),
+        // hit no budget, no meshes were uploaded or destroyed since, and the view moved less than
+        // its recorded slack (identical views always qualify). `diagnostics` and
+        // `always_reselect` force the real call.
+        //
+        // Why the reused result (including `stats`) is exactly what the real call would return:
+        // the slack bounds every threshold the selection evaluates (distance thresholds, cone,
+        // horizon, frustum planes) for every evaluated cell, so each cell is culled, split or kept
+        // exactly as before. The heap pop order may differ under a view change, but without a
+        // budget hit it cannot change the outcome: the node budget counts the same evaluated
+        // cells, and the running piece estimate never decreases (a cube split adds three; an
+        // eager hex split removes at most the pieces of its forced group and adds at least their
+        // children), so a re-run cannot newly trip `leaf_budget_hit` when the stored run did not.
+        // `reselect_equality.rs` checks the consequence on scripted and seeded random flights.
+        let reuse = !self.cfg.always_reselect
+            && !self.cfg.diagnostics
+            && self.retained_age.is_empty()
+            && self.reusable.as_ref().is_some_and(|r| {
+                r.held_version == self.held_version && r.selection.slack.allows(&r.view, view)
+            });
+        rep.reselect_skipped = reuse;
+        let mut sel = if let (true, Some(r)) = (reuse, self.reusable.as_ref()) {
+            r.selection.clone()
+        } else {
             let held = &self.held;
-            select_cells(
+            let probes = std::cell::Cell::new(0u32);
+            // The margins only matter when this selection can become a fixed point, which is
+            // predicted by the previous one being a fixed point (a misprediction only costs one
+            // extra real selection, never a wrong reuse).
+            let want_slack = !self.cfg.always_reselect && !self.cfg.diagnostics && self.settled;
+            let fresh = select_cells_with(
                 &*self.topo,
                 &self.model,
                 &self.cfg.lod,
                 view,
                 &self.prev_split,
-                &|id| held.get(&id).map(|h| h.range),
-            )
+                &|id| {
+                    probes.set(probes.get().saturating_add(1));
+                    held.get(&id).map(|h| h.range)
+                },
+                want_slack,
+            );
+            self.settled = fresh.split == self.prev_split;
+            rep.range_lookups = probes.get();
+            let st = &fresh.stats;
+            let clean = !st.node_budget_hit
+                && !st.leaf_budget_hit
+                && st.trimmed_splits == 0
+                && self.settled;
+            self.reusable = (clean && want_slack).then(|| Reusable {
+                view: *view,
+                held_version: self.held_version,
+                selection: fresh.clone(),
+            });
+            fresh
         };
+        probe.end(Scope::Select);
         // Pieces added by the retention: drawn if resident, never requested (they are not visible,
         // and requests for them would compete with the detail the camera is waiting for).
         let mut before: BTreeSet<T::Cell> = BTreeSet::new();
+        probe.begin(Scope::Closure);
         if self.cfg.retain_frames > 0 {
             // Cells culled this frame keep their split for at most `retain_frames` frames, so a
             // cell that leaves the view and returns is not split again (flip-flop).
@@ -671,7 +816,7 @@ impl<T: Topology> TerrainSystem<T> {
             )
             .unwrap_or(u32::MAX);
             let held = &self.held;
-            let r = retain_culled(
+            let r = retain_culled_known(
                 &*self.topo,
                 &self.model,
                 &self.cfg.lod,
@@ -679,13 +824,20 @@ impl<T: Topology> TerrainSystem<T> {
                 &candidates,
                 &|id| held.get(&id).map(|h| h.range),
                 &mut sel.split,
+                Some(sel.pieces.len()),
             );
             sel.stats.retained_culled = u32::try_from(r.cells.len()).unwrap_or(u32::MAX);
             sel.stats.retain_rejected = r.rejected;
             if !r.cells.is_empty() {
                 before = sel.pieces.iter().map(|p| p.cell).collect();
-                sel.pieces.clear();
-                self.topo.pieces(&sel.split, &mut sel.pieces);
+                sel.pieces = match r.pieces {
+                    Some(p) => p,
+                    None => {
+                        let mut p = Vec::new();
+                        self.topo.pieces(&sel.split, &mut p);
+                        p
+                    }
+                };
                 sel.stats.leaves = sel.pieces.len();
             }
             self.retained_age = r
@@ -694,8 +846,10 @@ impl<T: Topology> TerrainSystem<T> {
                 .map(|c| (*c, self.retained_age.get(c).copied().unwrap_or(0) + 1))
                 .collect();
         }
+        probe.end(Scope::Closure);
         // Urgency of each piece that is not resident yet: nearest and largest screen-space error
         // first. Resident pieces need no request, so they are not scored.
+        probe.begin(Scope::Score);
         let scored: Vec<(T::Cell, f64)> = sel
             .pieces
             .iter()
@@ -717,6 +871,8 @@ impl<T: Topology> TerrainSystem<T> {
                 (p.cell, score)
             })
             .collect();
+        probe.end(Scope::Score);
+        probe.begin(Scope::Cull);
         if self.cfg.diagnostics {
             let held = &self.held;
             let (u, culled_cells) = unsplit_reasons(
@@ -738,6 +894,8 @@ impl<T: Topology> TerrainSystem<T> {
                 u.cascade,
             ];
         }
+        probe.end(Scope::Cull);
+        probe.begin(Scope::SetBuild);
         self.prev_split.clone_from(&sel.split);
         self.wanted_split = sel.split;
         self.wanted = sel.pieces.iter().map(|p| p.cell).collect();
@@ -770,6 +928,8 @@ impl<T: Topology> TerrainSystem<T> {
             .min((self.budget.starts as usize * QUEUE_FRAMES).saturating_sub(queued))
             .min(window.saturating_sub(in_flight));
         self.closure = closure;
+        probe.end(Scope::SetBuild);
+        probe.begin(Scope::Requests);
         let planned = {
             let held = &self.held;
             let requested = &self.requested;
@@ -807,6 +967,7 @@ impl<T: Topology> TerrainSystem<T> {
             }
         }
         rep.pending_requests = self.requested.len();
+        probe.end(Scope::Requests);
         self.report = rep;
     }
 
@@ -837,11 +998,15 @@ impl<T: Topology> TerrainSystem<T> {
             } else {
                 self.cfg.uploads_per_frame
             },
+            done: 0,
         };
         let stream = self
             .manager
             .update(&self.jobs, self.frame, &mut uploader)
             .map_err(|e| app_err("stream update", e))?;
+        if uploader.done > 0 {
+            self.held_version += 1;
+        }
         let rejected = std::mem::take(&mut uploader.inner.rejected);
         if self.cfg.settle_each_frame {
             // Test-only determinism: production never blocks on workers.
@@ -863,6 +1028,7 @@ impl<T: Topology> TerrainSystem<T> {
         let mut destroyed_ids: Vec<T::Cell> = Vec::new();
         for id in stale {
             if let Some(h) = self.held.remove(&id) {
+                self.held_version += 1;
                 resources.destroy_mesh(h.mesh)?;
                 destroyed += 1;
                 if self.cfg.diagnostics {
@@ -1125,6 +1291,12 @@ impl<T: Topology> TerrainSystem<T> {
     #[must_use]
     pub fn drawn_morph(&self, cell: T::Cell) -> Option<f64> {
         self.morph_shown.get(&cell).copied()
+    }
+
+    /// Split set the last `prepare` selected (the hysteresis input of the next one).
+    #[must_use]
+    pub fn wanted_split(&self) -> &BTreeSet<T::Cell> {
+        &self.wanted_split
     }
 
     /// Leaves wanted by the last `prepare`, ascending.

@@ -204,3 +204,117 @@ fn roots_are_planned_before_any_higher_scored_deeper_cell() {
     let out = plan_requests_scored(&t, &[(deep, 1.0e6), (root, 0.001)], &res, &|_| false, 10);
     assert_eq!(out, vec![root, deep]);
 }
+
+/// The root-first chain scan `plan_requests_scored` used before the shared-ancestor memo.
+fn plan_reference<T: Topology>(
+    topo: &T,
+    wanted: &[(T::Cell, f64)],
+    is_resident: &dyn Fn(T::Cell) -> bool,
+    is_pending: &dyn Fn(T::Cell) -> bool,
+    max: usize,
+) -> Vec<T::Cell> {
+    let mut best: std::collections::BTreeMap<(u8, u64), f64> = std::collections::BTreeMap::new();
+    let mut chain: Vec<T::Cell> = Vec::new();
+    for &(piece, score) in wanted {
+        let score = if score.is_finite() { score } else { 0.0 };
+        chain.clear();
+        let mut cur = Some(piece);
+        while let Some(c) = cur {
+            chain.push(c);
+            cur = topo.primary_parent(c);
+        }
+        for &a in chain.iter().rev() {
+            if is_resident(a) {
+                continue;
+            }
+            if !is_pending(a) {
+                let e = best.entry((topo.level(a), topo.raw(a))).or_insert(score);
+                if score > *e {
+                    *e = score;
+                }
+            }
+            break;
+        }
+    }
+    let mut order: Vec<((u8, u64), f64)> = best.into_iter().collect();
+    order.sort_by(|a, b| {
+        (a.0.0 != 0)
+            .cmp(&(b.0.0 != 0))
+            .then_with(|| b.1.total_cmp(&a.1))
+    });
+    order
+        .into_iter()
+        .take(max)
+        .filter_map(|((_, raw), _)| topo.from_raw(raw))
+        .collect()
+}
+
+fn splitmix(state: &mut u64) -> u64 {
+    *state = state.wrapping_add(0x9E37_79B9_7F4A_7C15);
+    let mut z = *state;
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    z ^ (z >> 31)
+}
+
+fn planning_equals_reference<T: Topology>(topo: &T, seed: u64) {
+    let mut st = seed;
+    // A pool of cells over levels 0..=7 reached by descending from the roots.
+    let mut pool: Vec<T::Cell> = Vec::new();
+    let mut frontier: Vec<T::Cell> = topo.roots().to_vec();
+    for _ in 0..7 {
+        pool.extend(frontier.iter().copied());
+        let mut next = Vec::new();
+        let mut kids = Vec::new();
+        for &c in &frontier {
+            kids.clear();
+            topo.children(c, &mut kids);
+            if let Some(k) = kids.get(usize::try_from(splitmix(&mut st) % 3).expect("i")) {
+                next.push(*k);
+            }
+            next.extend(kids.iter().copied().take(2));
+        }
+        next.sort();
+        next.dedup();
+        frontier = next;
+    }
+    pool.extend(frontier.iter().copied());
+    for round in 0..80 {
+        let resident_pct = splitmix(&mut st) % 100;
+        let pending_pct = splitmix(&mut st) % 40;
+        let mut resident = BTreeSet::new();
+        let mut pending = BTreeSet::new();
+        for &c in &pool {
+            if splitmix(&mut st) % 100 < resident_pct {
+                resident.insert(c);
+            }
+            if splitmix(&mut st) % 100 < pending_pct {
+                pending.insert(c);
+            }
+        }
+        let mut wanted = Vec::new();
+        for _ in 0..(1 + splitmix(&mut st) % 120) {
+            let c = pool[usize::try_from(splitmix(&mut st) % pool.len() as u64).expect("i")];
+            let score = match splitmix(&mut st) % 9 {
+                0 => f64::NAN,
+                1 => f64::INFINITY,
+                _ => (splitmix(&mut st) % 50) as f64 * 0.5,
+            };
+            wanted.push((c, score));
+        }
+        let max = usize::try_from(1 + splitmix(&mut st) % 40).expect("max");
+        let res = |c: T::Cell| resident.contains(&c);
+        let pen = |c: T::Cell| pending.contains(&c);
+        assert_eq!(
+            plan_requests_scored(topo, &wanted, &res, &pen, max),
+            plan_reference(topo, &wanted, &res, &pen, max),
+            "round {round}"
+        );
+    }
+}
+
+#[test]
+fn shared_ancestor_planning_equals_the_chain_scan_hex_and_cube() {
+    planning_equals_reference(&CubeSphere::new(8), 1);
+    planning_equals_reference(&planetary_core::HexSphere::new(8).expect("hex"), 2);
+}
