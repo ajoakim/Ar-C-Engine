@@ -22,6 +22,7 @@ Dependencies flow downward only: a crate may depend only on crates of a strictly
 | `planetary-terrain` | extensions/planetary/planetary-terrain | 7 | `engine-sdk`, `planetary-core` |
 | `planetary-app` | extensions/planetary/planetary-app | 8 | `engine-sdk`, `planetary-core`, `planetary-terrain` |
 | `xtask` | xtask | tooling (exempt from tiers) | none (uses cargo_metadata) |
+| `ecs-bench` | spikes/ecs-bench | tooling (exempt from tiers) | `engine-math`, `engine-world`; the only crate allowed to depend on `hecs` (ADR-0017) |
 
 ## Checked rules
 

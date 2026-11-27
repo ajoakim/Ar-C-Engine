@@ -18,6 +18,7 @@ members = [
     "extensions/planetary/planetary-core",
     "extensions/planetary/planetary-terrain",
     "extensions/planetary/planetary-app",
+    "spikes/ecs-bench",
     "xtask",
 ]
 exclude = ["xtask/fixtures"]

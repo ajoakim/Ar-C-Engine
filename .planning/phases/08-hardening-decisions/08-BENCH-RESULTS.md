@@ -85,3 +85,24 @@ Observation: run-to-run spread is under 2 percent. The hex low-altitude frame (1
 
 - `--quick` mode, 3 runs per bench, one machine, desktop OS with background processes. Numbers are for relative comparison and regression-spotting, not absolute budgets.
 - Cube and hex are configured with their respective app defaults (32 vs 16 cells per edge), so the cube-vs-hex rows are not like-for-like grid sizes.
+
+## ECS: engine_world::World vs hecs 0.11.2 (ADR-0017 evidence)
+
+Bench: `spikes/ecs-bench/benches/ecs.rs` (tooling crate; hecs is confined to it). Same machine, toolchain and method as above, run as `cargo bench -p ecs-bench --bench ecs --locked -- --noplot --quick` three times in separate processes; cells show the median of the three runs' point estimates, then (min - max). Component payload is the engine `Transform` (f64 translation, f32 quat, f32 scale, 48 bytes). Setup is deterministic (splitmix64, no rand crate).
+
+Cases: `spawn` = build N entities; `update_all_locals` = read-modify-write every local transform (engine: `local` + `set_local` per id, which also marks the subtree dirty; hecs: `query_mut::<&mut Transform>`); `random_1pct` = same on a fixed 1% sample of ids (engine: handle lookup; hecs: `query_one_mut`); `despawn10_respawn` = despawn every 10th entity then spawn N/10 new ones (setup excluded); `hierarchy_update` = N/10 roots with 9 children each, nudge the roots and recompute world transforms (engine: `set_local` on roots + `update_transforms`, which caches every world transform; hecs: two query passes, roots' world transform stored, children composed on it and not stored). The engine World provides hierarchy, frames and dirty tracking that hecs does not, so this is the cost of what the engine needs, not feature parity.
+
+| case | N | slotmap_world (engine) | hecs | engine / hecs |
+|------|---|------------------------|------|---------------|
+| spawn | 10000 | 1.24 ms (1.22 ms-1.25 ms) | 747.30 us (489.75 us-804.66 us) | 1.7x |
+| spawn | 100000 | 10.57 ms (10.56 ms-10.85 ms) | 6.01 ms (5.89 ms-6.34 ms) | 1.8x |
+| update_all_locals | 10000 | 391.35 us (389.98 us-398.08 us) | 9.14 us (9.07 us-9.23 us) | 42.8x |
+| update_all_locals | 100000 | 3.96 ms (3.91 ms-4.13 ms) | 92.10 us (91.86 us-93.93 us) | 43.0x |
+| random_1pct | 10000 | 4.18 us (4.18 us-4.20 us) | 600 ns (583 ns-602 ns) | 7.0x |
+| random_1pct | 100000 | 52.14 us (50.71 us-52.64 us) | 7.92 us (7.76 us-7.95 us) | 6.6x |
+| despawn10_respawn | 10000 | 119.43 us (111.55 us-136.29 us) | 47.87 us (46.54 us-61.83 us) | 2.5x |
+| despawn10_respawn | 100000 | 1.01 ms (964.09 us-1.16 ms) | 533.82 us (527.64 us-553.91 us) | 1.9x |
+| hierarchy_update | 10000 | 468.73 us (467.18 us-471.31 us) | 221.11 us (216.19 us-223.39 us) | 2.1x |
+| hierarchy_update | 100000 | 5.31 ms (5.21 ms-6.07 ms) | 2.19 ms (2.16 ms-2.21 ms) | 2.4x |
+
+Observation: hecs is faster in every case. The widest gap is the bulk transform sweep (about 43x; hecs streams a dense archetype column, the engine does a generational lookup plus dirty marking per entity), the narrowest is spawn and despawn (about 2x). In absolute terms the engine World costs about 40 ns per entity for a read-modify-write sweep and about 53 ns per entity for a hierarchy update (4.0 ms and 5.3 ms at N = 1e5, against a 16.7 ms frame at 60 Hz). Below N = 1e4 every engine case is under 0.5 ms. Single-digit-percent differences are noise (`--quick`, desktop not idle-controlled).
