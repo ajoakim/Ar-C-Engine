@@ -2017,9 +2017,12 @@ name = "planetary-app"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "engine-render",
+ "engine-render-wgpu",
  "engine-sdk",
  "planetary-core",
  "planetary-terrain",
+ "png",
 ]
 
 [[package]]

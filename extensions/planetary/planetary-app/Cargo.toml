@@ -23,6 +23,12 @@ workspace = true
 
 [dev-dependencies]
 criterion = { workspace = true }
+# Image-scene test only (tests/atmosphere_ring.rs): the ring builder is planetary-app code, so
+# the test lives here (crates/ must never depend on extensions/, rule R1). Not [dependencies]:
+# the APP-02 guard (tests/sdk_only.rs) keeps the shipped crate SDK-only.
+engine-render = { workspace = true }
+engine-render-wgpu = { workspace = true }
+png = { workspace = true }
 
 [[bench]]
 name = "stream"

@@ -58,6 +58,7 @@ cargo run --release -p planetary-app --example planetary_flight -- --bench-desce
 | `--present-mode <fifo\|mailbox\|immediate\|auto>` | Surface present mode (default `fifo`) |
 | `--frame-latency <1\|2\|3>` | Maximum frames in flight (default 2) |
 | `--no-haze` | Turn the altitude haze and sky colour off |
+| `--no-atmosphere` | Keep the plain haze but drop the sun-tinted sky and the limb ring (ADR-0019) |
 | `--always-reselect` | Run the LOD selection every frame (same result, slower; for comparisons) |
 
 Controls are the same as `basic_scene`. Immediate is a diagnostic present mode and can tear. A windowed run prints one startup line (adapter, requested and active present mode, supported modes, frame latency, monitor refresh) and shows `alt ... | ... km/s | hex L14` in the window title (ADR-0016).

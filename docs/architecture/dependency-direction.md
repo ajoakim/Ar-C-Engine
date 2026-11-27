@@ -21,7 +21,7 @@ Dependencies flow downward only: a crate may depend only on crates of a strictly
 | `conventional-3d` | extensions/conventional-3d | 6 | `engine-sdk` |
 | `planetary-core` | extensions/planetary/planetary-core | 6 | `engine-sdk` |
 | `planetary-terrain` | extensions/planetary/planetary-terrain | 7 | `engine-sdk`, `planetary-core` |
-| `planetary-app` | extensions/planetary/planetary-app | 8 | `engine-sdk`, `planetary-core`, `planetary-terrain` |
+| `planetary-app` | extensions/planetary/planetary-app | 8 | `engine-sdk`, `planetary-core`, `planetary-terrain`; dev-only: `engine-render`, `engine-render-wgpu` (atmosphere image-scene test, ADR-0019) |
 | `xtask` | xtask | tooling (exempt from tiers) | none (uses cargo_metadata) |
 | `ecs-bench` | spikes/ecs-bench | tooling (exempt from tiers) | `engine-math`, `engine-world`; the only crate allowed to depend on `hecs` (ADR-0017) |
 

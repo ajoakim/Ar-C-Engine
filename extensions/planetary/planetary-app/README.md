@@ -39,6 +39,7 @@ WASD/arrows move, E/Space up, Q/Ctrl down, Shift boost, hold right mouse button 
 | `--present-mode <fifo\|mailbox\|immediate\|auto>` | Surface present mode (default `fifo`). An unsupported mode falls back to fifo with a warning; other values are a usage error. See ADR-0016 |
 | `--frame-latency <1\|2\|3>` | Maximum frames in flight (default 2); other values are a usage error |
 | `--no-haze` | Turn the altitude haze and sky colour off |
+| `--no-atmosphere` | Keep the plain haze but drop the sun-tinted sky and the limb ring (ADR-0019) |
 | `--always-reselect` | Run the LOD selection every frame. By default a selection is reused while the previous one was a fixed point of the hysteresis, hit no budget, no mesh was uploaded or destroyed since, and the eye and frustum moved less than the recorded margins (07.1-27); the result is identical either way (`tests/reselect_equality.rs`). The `reselect_skipped` CSV column and the per-scope `prep_*_ms` columns show the effect |
 | `--out <file.csv>` | `--bench-stream` per-frame CSV (wanted/drawn level at the camera, caps, cost, uploads) |
 

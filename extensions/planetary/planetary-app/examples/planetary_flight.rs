@@ -18,7 +18,8 @@
 //! `--present-mode <fifo|mailbox|immediate|auto>` selects the surface present mode (default
 //! fifo; an unsupported mode falls back to fifo with a warning) and `--frame-latency <1|2|3>`
 //! the maximum frames in flight (default 2); other values are usage errors. `--no-haze` turns
-//! the altitude haze off. `--always-reselect` runs the LOD selection every frame instead of reusing a
+//! the altitude haze off and `--no-atmosphere` keeps the plain haze but drops the sun-tinted sky
+//! and the limb ring (ADR-0019). `--always-reselect` runs the LOD selection every frame instead of reusing a
 //! selection that provably still holds (same result, only slower; for comparisons). The startup line prints the adapter, requested and active mode,
 //! supported modes, latency and monitor refresh rate; the window title shows altitude, speed
 //! and level.
@@ -57,7 +58,7 @@ use planetary_app::{
     spin_for_ms, summarize,
 };
 
-const USAGE: &str = "usage: planetary_flight [--topology <hex|cube>] [--debug-cells] [--headless <frames>] [--descent] [--ascent] [--frames <n>] [--perf-log <file.csv>] [--no-console] [--bench-descent] [--budget-ms <ms>] [--strict] [--bench-stream] [--fast] [--settle] [--no-adaptive] [--frame-ms <ms>] [--out <file.csv>] [--diagnostics] [--retain-frames <n>] [--present-mode <fifo|mailbox|immediate|auto>] [--frame-latency <1|2|3>] [--no-haze] [--always-reselect]";
+const USAGE: &str = "usage: planetary_flight [--topology <hex|cube>] [--debug-cells] [--headless <frames>] [--descent] [--ascent] [--frames <n>] [--perf-log <file.csv>] [--no-console] [--bench-descent] [--budget-ms <ms>] [--strict] [--bench-stream] [--fast] [--settle] [--no-adaptive] [--frame-ms <ms>] [--out <file.csv>] [--diagnostics] [--retain-frames <n>] [--present-mode <fifo|mailbox|immediate|auto>] [--frame-latency <1|2|3>] [--no-haze] [--no-atmosphere] [--always-reselect]";
 
 #[derive(Default, Clone, Copy)]
 struct BandMax {
@@ -240,6 +241,7 @@ fn main() -> Result<(), SdkError> {
     let mut debug_cells = false;
     let mut present = PresentConfig::default();
     let mut haze = true;
+    let mut atmosphere = true;
     let mut always_reselect = false;
     let mut diagnostics = false;
     let mut retain_frames: Option<u32> = None;
@@ -273,6 +275,7 @@ fn main() -> Result<(), SdkError> {
                 present.frame_latency = parse_frame_latency(args.next()).ok_or_else(usage)?;
             }
             "--no-haze" => haze = false,
+            "--no-atmosphere" => atmosphere = false,
             "--always-reselect" => always_reselect = true,
             "--debug-cells" => debug_cells = true,
             "--diagnostics" => diagnostics = true,
@@ -327,6 +330,7 @@ fn main() -> Result<(), SdkError> {
     settings.terrain.debug_cells = debug_cells;
     settings.diagnostics = diagnostics;
     settings.haze = haze;
+    settings.atmosphere = atmosphere;
     settings.terrain.always_reselect = always_reselect;
     if let Some(n) = retain_frames {
         settings.terrain.retain_frames = n;
@@ -441,6 +445,7 @@ mod tests {
             "--present-mode",
             "--frame-latency",
             "--no-haze",
+            "--no-atmosphere",
             "--always-reselect",
             "--topology",
         ] {
