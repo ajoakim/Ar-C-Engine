@@ -669,6 +669,12 @@ impl WgpuBackend {
     pub fn set_overlay(&mut self, data: crate::overlay::OverlayData) {
         self.overlay.stage(data);
     }
+
+    /// True once after the painter was rebuilt for a new surface format; the overlay producer
+    /// should then resend its font atlas (IN-02).
+    pub fn take_overlay_renderer_rebuilt(&mut self) -> bool {
+        self.overlay.take_rebuilt()
+    }
 }
 
 impl RenderBackend for WgpuBackend {

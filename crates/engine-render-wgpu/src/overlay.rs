@@ -27,7 +27,16 @@ impl OverlayData {
 #[derive(Default)]
 pub(crate) struct OverlayState {
     renderer: Option<egui_wgpu::Renderer>,
+    /// Colour format the current `renderer` was built for.
+    renderer_format: Option<wgpu::TextureFormat>,
+    /// Set when the renderer was rebuilt for a new format; read once via [`Self::take_rebuilt`].
+    rebuilt: bool,
     pending: Option<OverlayData>,
+}
+
+/// True when the painter must be (re)built for `now`: never built, or built for another format.
+fn needs_rebuild(built_for: Option<wgpu::TextureFormat>, now: wgpu::TextureFormat) -> bool {
+    built_for != Some(now)
 }
 
 impl OverlayState {
@@ -47,6 +56,11 @@ impl OverlayState {
         }
     }
 
+    /// True once after the painter was rebuilt for a new format (the first build is not counted).
+    pub(crate) fn take_rebuilt(&mut self) -> bool {
+        std::mem::take(&mut self.rebuilt)
+    }
+
     /// Record the overlay pass into `encoder` over `view`. Returns extra command buffers that
     /// must be submitted before the encoder's.
     pub(crate) fn record(
@@ -61,23 +75,34 @@ impl OverlayState {
         let Some(mut data) = self.pending.take() else {
             return Vec::new();
         };
-        let renderer = self.renderer.get_or_insert_with(|| {
-            egui_wgpu::Renderer::new(
+        // A rebuilt renderer has no font atlas (it was uploaded to the old one), so the frame
+        // that rebuilds applies its texture deltas but paints nothing; the host is told via
+        // `take_rebuilt` and re-sends the atlas, so the next frame paints normally.
+        let mut skip_paint = false;
+        if needs_rebuild(self.renderer_format, format) {
+            skip_paint = self.renderer.is_some();
+            self.rebuilt |= skip_paint;
+            self.renderer = Some(egui_wgpu::Renderer::new(
                 device,
                 format,
                 egui_wgpu::RendererOptions {
                     msaa_samples: 1,
                     ..egui_wgpu::RendererOptions::default()
                 },
-            )
-        });
+            ));
+            self.renderer_format = Some(format);
+        }
+        let renderer = self
+            .renderer
+            .as_mut()
+            .expect("overlay renderer was just built");
         for (id, deltas) in data.textures_delta.set.drain() {
             for delta in &deltas {
                 renderer.update_texture(device, queue, id, delta);
             }
         }
         let mut extra = Vec::new();
-        if !data.primitives.is_empty() && size.0 > 0 && size.1 > 0 {
+        if !skip_paint && !data.primitives.is_empty() && size.0 > 0 && size.1 > 0 {
             let screen = egui_wgpu::ScreenDescriptor {
                 size_in_pixels: [size.0, size.1],
                 pixels_per_point: if data.pixels_per_point.is_finite()
@@ -122,5 +147,19 @@ impl Drop for OverlayState {
         if let Some(p) = self.pending.as_mut() {
             p.textures_delta.clear();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn needs_rebuild_table() {
+        let a = wgpu::TextureFormat::Rgba8UnormSrgb;
+        let b = wgpu::TextureFormat::Bgra8UnormSrgb;
+        assert!(needs_rebuild(None, a));
+        assert!(needs_rebuild(Some(a), b));
+        assert!(!needs_rebuild(Some(a), a));
     }
 }
