@@ -613,3 +613,80 @@ fn negative_control_shifted_geometry_fails_on_gpu() {
         "a one-pixel geometry shift went undetected"
     );
 }
+
+// ---------------------------------------------------------------- overlay (feature egui-overlay)
+
+/// Raw egui shapes in the top-left 32x32 pixel corner (layer table forbids `debug-ui` as a
+/// dev-dependency of this crate, so the test builds its own shapes).
+#[cfg(feature = "egui-overlay")]
+fn overlay_corner_data() -> engine_render_wgpu::OverlayData {
+    let ctx = egui::Context::default();
+    let mut textures_delta = egui::TexturesDelta::default();
+    let mut primitives = Vec::new();
+    let mut ppp = 1.0;
+    for pass in 0..2 {
+        let input = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(W as f32, W as f32),
+            )),
+            time: Some(f64::from(pass) / 60.0),
+            ..egui::RawInput::default()
+        };
+        let out = ctx.run_ui(input, |ui| {
+            let p = ui.painter();
+            p.rect_filled(
+                egui::Rect::from_min_max(egui::pos2(2.0, 2.0), egui::pos2(30.0, 30.0)),
+                0.0,
+                egui::Color32::from_rgb(240, 200, 20),
+            );
+            p.text(
+                egui::pos2(4.0, 4.0),
+                egui::Align2::LEFT_TOP,
+                "ab",
+                egui::FontId::monospace(10.0),
+                egui::Color32::BLACK,
+            );
+        });
+        ppp = out.pixels_per_point;
+        primitives = ctx.tessellate(out.shapes, ppp);
+        textures_delta.append(out.textures_delta);
+    }
+    engine_render_wgpu::OverlayData {
+        primitives,
+        textures_delta,
+        pixels_per_point: ppp,
+    }
+}
+
+#[cfg(feature = "egui-overlay")]
+#[test]
+fn overlay_corner_differs() {
+    let (Some(mut base), Some(mut with)) = (adapter_or_skip(), adapter_or_skip()) else {
+        return;
+    };
+    let baseline = scene_unlit_triangle(&mut base, 0.0);
+    // An empty overlay is a no-op.
+    with.set_overlay(engine_render_wgpu::OverlayData::default());
+    let empty = scene_unlit_triangle(&mut with, 0.0);
+    assert_eq!(baseline, empty, "empty overlay must not change pixels");
+    with.set_overlay(overlay_corner_data());
+    let painted = scene_unlit_triangle(&mut with, 0.0);
+    let mut inside = 0usize;
+    for y in 0..W {
+        for x in 0..W {
+            let i = (y * W + x) * 4;
+            let same = baseline[i..i + 4] == painted[i..i + 4];
+            if x < 32 && y < 32 {
+                inside += usize::from(!same);
+            } else {
+                assert!(same, "pixel ({x},{y}) outside the overlay corner changed");
+            }
+        }
+    }
+    assert!(
+        inside > 400,
+        "overlay left only {inside} corner pixels changed"
+    );
+    check_scene("overlay_corner", &painted);
+}

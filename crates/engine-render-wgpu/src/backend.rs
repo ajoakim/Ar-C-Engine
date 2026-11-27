@@ -124,6 +124,8 @@ pub struct WgpuBackend {
     default_texture: GpuTexture,
     gpu_error: ErrorSlot,
     present_info: PresentInfo,
+    #[cfg(feature = "egui-overlay")]
+    overlay: crate::overlay::OverlayState,
 }
 
 impl WgpuBackend {
@@ -380,6 +382,8 @@ impl WgpuBackend {
             default_texture,
             gpu_error,
             present_info: PresentInfo::offscreen(&PresentConfig::default()),
+            #[cfg(feature = "egui-overlay")]
+            overlay: crate::overlay::OverlayState::default(),
         })
     }
 
@@ -528,7 +532,7 @@ impl WgpuBackend {
     }
 
     fn render(
-        &self,
+        &mut self,
         packet: &FramePacket,
         color_view: &wgpu::TextureView,
     ) -> Result<(), RenderError> {
@@ -640,8 +644,30 @@ impl WgpuBackend {
                 index += 1;
             }
         }
+        #[cfg(feature = "egui-overlay")]
+        {
+            let extra = self.overlay.record(
+                &self.device,
+                &self.queue,
+                &mut encoder,
+                color_view,
+                self.color_format,
+                self.size,
+            );
+            self.queue
+                .submit(extra.into_iter().chain(Some(encoder.finish())));
+        }
+        #[cfg(not(feature = "egui-overlay"))]
         self.queue.submit(Some(encoder.finish()));
         Ok(())
+    }
+}
+
+#[cfg(feature = "egui-overlay")]
+impl WgpuBackend {
+    /// Stage the overlay painted over the next submitted frame (read-only egui output).
+    pub fn set_overlay(&mut self, data: crate::overlay::OverlayData) {
+        self.overlay.stage(data);
     }
 }
 

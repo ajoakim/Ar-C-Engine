@@ -5,11 +5,15 @@
 //! No other crate may depend on wgpu.
 
 mod backend;
+#[cfg(feature = "egui-overlay")]
+mod overlay;
 mod pipeline;
 mod present;
 mod target;
 
 pub use backend::WgpuBackend;
+#[cfg(feature = "egui-overlay")]
+pub use overlay::OverlayData;
 pub use pipeline::DRAW_UNIFORM_STRIDE;
 pub use present::{
     FrameLatency, PresentConfig, PresentInfo, PresentModeSetting, PresentParseError, Resolved,

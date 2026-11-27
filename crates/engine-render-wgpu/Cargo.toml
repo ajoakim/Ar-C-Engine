@@ -15,6 +15,12 @@ pollster.workspace = true
 bytemuck.workspace = true
 raw-window-handle.workspace = true
 tracing.workspace = true
+egui = { workspace = true, optional = true }
+egui-wgpu = { workspace = true, optional = true }
+
+[features]
+# Read-only debug overlay painter (ADR-0018); off by default, no egui in default builds.
+egui-overlay = ["dep:egui", "dep:egui-wgpu"]
 
 [dev-dependencies]
 glam.workspace = true
