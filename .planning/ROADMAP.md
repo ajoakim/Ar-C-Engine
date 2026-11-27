@@ -41,7 +41,7 @@ Phases 1-8 plus inserted Phase 7.1, 90 plans, 45/45 requirements. Full details: 
 Plans:
 - [x] 09-01-PLAN.md — CI derives toolchain from rust-toolchain.toml; image-diff absolute bad-pixel cap + small-change negative control (DEBT-01, DEBT-03)
 - [x] 09-02-PLAN.md — Held-mesh overlay line uses the true base+detail cap, pinned by tests (DEBT-05)
-- [ ] 09-03-PLAN.md — Integer counts, painter rebuild on format change, window scale factor (DEBT-02, DEBT-04)
+- [x] 09-03-PLAN.md — Integer counts, painter rebuild on format change, window scale factor (DEBT-02, DEBT-04)
 - [ ] 09-04-PLAN.md — Full local gate and requirement bookkeeping (DEBT-01..05)
 
 ### Phase 10: Free-Flight 6DOF Camera
@@ -97,7 +97,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 1-8 (incl. 7.1) | v1.0 | 90/90 | Complete | 2026-11-27 |
-| 9. Overlay, CI & Test Hygiene | v1.1 | 2/4 | In Progress | - |
+| 9. Overlay, CI & Test Hygiene | v1.1 | 3/4 | In Progress | - |
 | 10. Free-Flight 6DOF Camera | v1.1 | 0/TBD | Not started | - |
 | 11. Terrain Relief & Normals | v1.1 | 0/TBD | Not started | - |
 | 12. LOD Detail Transition | v1.1 | 0/TBD | Not started | - |
