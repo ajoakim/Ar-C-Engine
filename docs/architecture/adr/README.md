@@ -20,3 +20,4 @@ To add an ADR, copy `0000-template.md` to the next free number (4-digit zero-pad
 | [0014](0014-vertex-morph-attribute-geomorphing.md) | Vertex Morph Attribute for Geomorphing (Cell Payload v4) | accepted |
 | [0015](0015-scale-contrast-and-distance-haze.md) | Scale, Contrast and Distance Haze (Generator v2) | accepted |
 | [0016](0016-present-mode-setting-and-window-readout.md) | Present-Mode Setting and Window Readout | accepted |
+| [0017](0017-no-ecs-in-p0.md) | No ECS in P0 (engine_world::World Stays) | accepted |

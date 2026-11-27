@@ -264,3 +264,23 @@ fn adr_0016_present_mode_present() {
         require(f, &t, lit);
     }
 }
+
+#[test]
+fn adr_0017_present() {
+    let f = "docs/architecture/adr/0017-no-ecs-in-p0.md";
+    let t = read(f);
+    for lit in [
+        "Status: accepted",
+        "hecs",
+        "slotmap",
+        "## Measurements",
+        "## Evidence",
+        "ecs-bench",
+        "bevy_ecs",
+        "Revisit",
+    ] {
+        require(f, &t, lit);
+    }
+    let readme = read("docs/architecture/adr/README.md");
+    require("docs/architecture/adr/README.md", &readme, "[0017]");
+}
