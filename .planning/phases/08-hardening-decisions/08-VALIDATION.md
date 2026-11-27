@@ -91,16 +91,16 @@ Run on Windows 11, rustc 1.99.0, free disk 132G at start. Hosted CI was already 
 
 | Behavior | Requirement | Why Manual | Test Instructions | Result |
 |----------|-------------|------------|-------------------|--------|
-| F3 overlay shows LOD histogram, counts, queue, budgets, frame/prepare ms and updates live | QA-02 | Needs display and human judgement | 08-12 Task 2 | flown, general approval ("impressive progress"); field-by-field overlay check NOT explicitly confirmed by the user (caveat) |
+| F3 overlay shows LOD histogram, counts, queue, budgets, frame/prepare ms and updates live | QA-02 | Needs display and human judgement | 08-12 Task 2 | CONFIRMED by user screenshots (2026-11-27): panel shows frame/prepare ms, selected, drawn, queue pending/in flight/awaiting upload, detail patches, uploads/frame, starts/frame, LOD drawn and wanted histograms; values change between alt 728.5 km (hex L7) and alt 974 m (hex L16). Cosmetic findings: counts print as floats (593.00); detail patches 2026/1500 and 1938/1500 exceed the displayed cap (todo) |
 | Atmosphere limb ring (opaque ring, deviates from CONTEXT "shader pass"; see ADR-0019) acceptable, or PLAN-08 deferred | PLAN-08 | Visual judgement | 08-12 Task 2 | user: "accept the ring"; ADR-0019 deviation accepted, PLAN-08 complete, not deferred |
-| Plan 26 present mode and window-title readout (07.1-18 caveat C2) | PERF-02 carry-over | Needs window | 08-12 Task 2 | NOT explicitly confirmed by the user; caveat C2 stays open |
+| Plan 26 present mode and window-title readout (07.1-18 caveat C2) | PERF-02 carry-over | Needs window | 08-12 Task 2 | Screenshots show the title as `alt | speed | hex Ln` with no present-mode or refresh text; the --present-mode run output was not reported, so C2 stays open |
 | HLD.md disposition (commit / gitignore / leave) | n/a | User decision | 08-12 Task 2 | user: "leave HLD.md untracked" (option c); nothing committed or ignored |
 
 ### Human flight (08-12 Task 2), user's words
 
 - After flying: "impressive progress i still see texture blurring and then sharpening when moving from one level to another, i think there should be more of transition or opacity boundary between textures... the surface is smooth. adding different elevations hills mountains, maybe a gridded bump mapping based on color would help. i would like to have more degrees of freedom when free flying"
 - Atmosphere: "accept the ring". HLD.md: "leave HLD.md untracked".
-- Caveats (not verified by the user): F3 field-by-field check, plan 26 present-mode flag and window-title readout (C2 open), numeric telemetry.
+- Caveats: plan 26 present-mode flag and window-title readout (C2 open: title lacks present-mode text in screenshots), numeric telemetry. F3 overlay confirmed from screenshots; cosmetic follow-ups in the todo.
 - Visual feedback is a follow-up, not a Phase 8 failure: `.planning/todos/pending/2026-11-27-post-phase8-visual-feedback.md`.
 
 ## Validation Sign-Off

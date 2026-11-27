@@ -18,3 +18,9 @@ Reported by the user after flying Phase 8 (their words): "i still see texture bl
 ## Solution
 
 TBD. Ideas: cross-fade or morph colour detail between LOD levels (parent/child blend, alpha-dither); more generator layers and amplitude (generator v3); height-derived normals in the lit shader; camera roll and strafe/vertical axes in the example. Candidate for a post-v1.0 phase or a gap-closure phase. Not for Phase 8 scope.
+
+## Overlay findings from screenshots (2026-11-27)
+
+- Counts render as floats ("selected: 593.00", "queue pending: 0.00"); should be integers.
+- "detail patches: 2026.00 / 1500.00" and "1938.00 / 1500.00": used exceeds cap. Check whether the cap is soft/meaning differs or the budget is not enforced.
+- Window title shows `alt | speed | hex Ln` only; ADR-0016 present-mode and refresh readout not visible (check which flag/state shows it).
