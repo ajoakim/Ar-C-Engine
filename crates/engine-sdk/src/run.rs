@@ -9,8 +9,10 @@ use engine_platform::{
 };
 use engine_render::RenderTarget;
 use engine_render_wgpu::WgpuBackend;
+/// Present-mode types re-exported for [`AppConfig`] (they carry no GPU API types).
+pub use engine_render_wgpu::{FrameLatency, PresentConfig, PresentInfo, PresentModeSetting};
 
-use crate::app::{App, AppControl};
+use crate::app::{App, AppControl, StartupInfo};
 use crate::error::SdkError;
 use crate::runtime::Runtime;
 
@@ -21,6 +23,8 @@ pub struct AppConfig {
     pub window: WindowConfig,
     /// Engine configuration.
     pub engine: EngineConfig,
+    /// Surface present mode and frame latency (default Fifo, latency 2).
+    pub present: PresentConfig,
 }
 
 struct Host<A: App> {
@@ -28,21 +32,32 @@ struct Host<A: App> {
     engine: Option<Engine>,
     runtime: Option<Runtime<WgpuBackend>>,
     error: Option<SdkError>,
+    present: PresentConfig,
+    window: Option<PlatformWindow>,
 }
 
 impl<A: App> Host<A> {
     fn start(&mut self, window: PlatformWindow) -> Result<(), SdkError> {
         let (w, h) = window.inner_size();
+        let handle = window.clone();
+        let refresh = handle.monitor_refresh_mhz();
         let target: Arc<dyn RenderTarget> = Arc::new(window);
-        let backend = WgpuBackend::new(target, w, h)?;
+        let backend = WgpuBackend::new_with(target, w, h, &self.present)?;
         engine_diagnostics::tracing::info!(adapter = %backend.adapter_summary(), "gpu adapter");
+        let startup = StartupInfo {
+            adapter: backend.adapter_summary(),
+            present: Some(backend.present_info().clone()),
+            monitor_refresh_mhz: refresh,
+        };
         let engine = self
             .engine
             .take()
             .ok_or_else(|| SdkError::App("window_ready called twice".into()))?;
         let mut runtime = Runtime::new(engine, backend)?;
+        runtime.set_startup_info(startup);
         runtime.setup(&mut self.app)?;
         self.runtime = Some(runtime);
+        self.window = Some(handle);
         Ok(())
     }
 
@@ -69,8 +84,16 @@ impl<A: App> PlatformHandler for Host<A> {
             return LoopControl::Continue;
         };
         match rt.frame(&mut self.app, dt) {
-            Ok(AppControl::Continue) => LoopControl::Continue,
-            Ok(AppControl::Exit) => LoopControl::Exit,
+            Ok(control) => {
+                if let (Some(title), Some(window)) = (rt.take_window_title(), self.window.as_ref())
+                {
+                    window.set_title(&title);
+                }
+                match control {
+                    AppControl::Continue => LoopControl::Continue,
+                    AppControl::Exit => LoopControl::Exit,
+                }
+            }
             Err(e) => {
                 engine_diagnostics::tracing::error!(error = %e, "frame failed");
                 self.record(e);
@@ -102,6 +125,8 @@ pub fn run_app<A: App>(app: A, config: AppConfig) -> Result<(), SdkError> {
         engine: Some(engine),
         runtime: None,
         error: None,
+        present: config.present,
+        window: None,
     };
     match engine_platform::run(config.window, &mut host) {
         Ok(()) => {}
@@ -116,5 +141,16 @@ pub fn run_app<A: App>(app: A, config: AppConfig) -> Result<(), SdkError> {
     match host.error {
         Some(e) => Err(e),
         None => Ok(()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_present_config_is_fifo_two() {
+        assert_eq!(AppConfig::default().present, PresentConfig::default());
+        assert_eq!(AppConfig::default().present.frame_latency.get(), 2);
     }
 }

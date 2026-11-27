@@ -7,7 +7,7 @@ use engine_render::{
     VertexLayout, extract,
 };
 
-use crate::app::{App, AppControl, Resources, SceneState};
+use crate::app::{App, AppControl, Resources, SceneState, StartupInfo};
 use crate::error::SdkError;
 
 /// Owns the engine, backend and scene and runs the per-frame path.
@@ -147,6 +147,16 @@ impl<B: RenderBackend> Runtime<B> {
     /// The engine.
     pub fn engine(&self) -> &Engine {
         &self.engine
+    }
+
+    /// Record startup information (adapter, present mode, refresh) before [`Runtime::setup`].
+    pub fn set_startup_info(&mut self, info: StartupInfo) {
+        self.scene.startup = info;
+    }
+
+    /// Take the window title the app requested, if any.
+    pub fn take_window_title(&mut self) -> Option<String> {
+        self.scene.take_window_title()
     }
 
     /// The scene.

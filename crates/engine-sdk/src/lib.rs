@@ -13,7 +13,7 @@ mod error;
 mod run;
 mod runtime;
 
-pub use app::{App, AppControl, Resources, SceneState};
+pub use app::{App, AppControl, Resources, SceneState, StartupInfo};
 pub use engine_assets::{AssetError, AssetId, AssetRegistry, Handle};
 pub use engine_core::{
     Engine, EngineConfig, EngineError, EnginePhase, Module, ModuleConfig, ModuleError,
@@ -34,7 +34,7 @@ pub use engine_render::{
 pub use engine_streaming as streaming;
 pub use engine_world::{EntityId, Transform, World, WorldError, WorldTransform};
 pub use error::SdkError;
-pub use run::{AppConfig, run_app};
+pub use run::{AppConfig, FrameLatency, PresentConfig, PresentInfo, PresentModeSetting, run_app};
 pub use runtime::Runtime;
 
 /// Convenient glob import for apps.

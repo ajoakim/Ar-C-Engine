@@ -142,3 +142,40 @@ fn headless_invalid_mesh_is_error() {
     let err = rt.setup(&mut Bad).unwrap_err();
     assert!(matches!(err, SdkError::Render(RenderError::EmptyBuffer)));
 }
+
+#[test]
+fn startup_info_reaches_setup_before_the_first_frame() {
+    use engine_sdk::{
+        App, AppControl, Engine, EngineConfig, InputEvent, NullBackend, Resources, Runtime,
+        SceneState, SdkError, StartupInfo,
+    };
+
+    struct Probe(Option<StartupInfo>);
+    impl App for Probe {
+        fn setup(
+            &mut self,
+            _r: &mut Resources<'_>,
+            scene: &mut SceneState,
+        ) -> Result<(), SdkError> {
+            self.0 = Some(scene.startup.clone());
+            Ok(())
+        }
+        fn input(&mut self, _e: &InputEvent, _s: &mut SceneState) {}
+        fn update(&mut self, _dt: f64, _s: &mut SceneState) -> AppControl {
+            AppControl::Continue
+        }
+    }
+
+    let info = StartupInfo {
+        adapter: "test (null)".into(),
+        present: None,
+        monitor_refresh_mhz: Some(59_940),
+    };
+    let mut rt = Runtime::new(Engine::new(EngineConfig::default()), NullBackend::new()).unwrap();
+    rt.set_startup_info(info.clone());
+    assert_eq!(rt.scene().startup, info);
+    let mut app = Probe(None);
+    rt.setup(&mut app).unwrap();
+    assert_eq!(app.0, Some(info));
+    assert_eq!(rt.take_window_title(), None);
+}

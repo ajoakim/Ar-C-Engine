@@ -10,6 +10,8 @@ use engine_render::{
     validate_indices,
 };
 
+use engine_render_wgpu::PresentInfo;
+
 use crate::error::SdkError;
 
 /// What the app wants the loop to do after an update.
@@ -19,6 +21,18 @@ pub enum AppControl {
     Continue,
     /// Stop the loop.
     Exit,
+}
+
+/// Information about the GPU and presentation, filled by the host before `App::setup`.
+/// Strings only, so apps need no GPU or windowing types. Headless runs keep the default.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct StartupInfo {
+    /// Adapter description ("name (backend)"), empty when unknown.
+    pub adapter: String,
+    /// Present mode and frame latency configuration.
+    pub present: Option<PresentInfo>,
+    /// Monitor refresh rate in millihertz, when the platform reports it.
+    pub monitor_refresh_mhz: Option<u32>,
 }
 
 /// Mutable scene owned by the runtime and edited by the app.
@@ -38,6 +52,10 @@ pub struct SceneState {
     pub light: DirectionalLight,
     /// Distance fog (density 0, the default, disables it).
     pub fog: DistanceFog,
+    /// Startup information (adapter, present mode, refresh), set by the host.
+    pub startup: StartupInfo,
+    /// Window title requested by the app; the host applies it after the frame and clears it.
+    pub window_title: Option<String>,
 }
 
 impl SceneState {
@@ -54,7 +72,14 @@ impl SceneState {
             materials: MaterialTable::new(),
             light: DirectionalLight::default(),
             fog: DistanceFog::default(),
+            startup: StartupInfo::default(),
+            window_title: None,
         }
+    }
+
+    /// Take the pending window title (once); `None` when nothing was requested.
+    pub fn take_window_title(&mut self) -> Option<String> {
+        self.window_title.take()
     }
 
     /// Add a material.
@@ -330,6 +355,19 @@ pub trait App {
 mod tests {
     use super::*;
     use engine_render::NullBackend;
+
+    #[test]
+    fn scene_defaults_and_title_take_once() {
+        let mut s = SceneState::new();
+        assert_eq!(s.window_title, None);
+        assert_eq!(s.startup, StartupInfo::default());
+        assert!(s.startup.adapter.is_empty());
+        assert_eq!(s.startup.monitor_refresh_mhz, None);
+        s.window_title = Some("a".into());
+        s.window_title = Some("b".into());
+        assert_eq!(s.take_window_title().as_deref(), Some("b"));
+        assert_eq!(s.take_window_title(), None);
+    }
 
     fn vtx() -> [VertexPosNormalUv; 3] {
         let v = VertexPosNormalUv {
