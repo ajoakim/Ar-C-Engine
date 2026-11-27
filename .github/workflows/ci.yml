@@ -140,19 +140,33 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y mesa-vulkan-drivers vulkan-tools
           vulkaninfo --summary || true
-      # Update path: replaces the verify step. ONLY place ARC_UPDATE_GOLDENS is set.
+      # Update path: replaces the verify steps. ONLY place ARC_UPDATE_GOLDENS is set.
       - name: Update goldens (workflow_dispatch only)
         if: github.event_name == 'workflow_dispatch' && inputs.update_goldens
         env:
           ARC_UPDATE_GOLDENS: "1"
           ARC_REQUIRE_ADAPTER: ${{ matrix.require_adapter }}
-        run: cargo test -p engine-render-wgpu --locked --test image_diff -- --nocapture
+        run: |
+          cargo test -p engine-render-wgpu --locked --features egui-overlay --test image_diff -- --nocapture
+          cargo test -p planetary-app --locked --test atmosphere_ring -- --nocapture
       # ARC_REQUIRE_ADAPTER is "1" on Linux and Windows only; macOS has no software Metal adapter.
       - name: Verify image diffs
         if: github.event_name != 'workflow_dispatch' || !inputs.update_goldens
         env:
           ARC_REQUIRE_ADAPTER: ${{ matrix.require_adapter }}
         run: cargo test -p engine-render-wgpu --locked --test image_diff -- --nocapture
+      # egui-overlay feature path: also runs the overlay_corner golden and overlay_corner_differs.
+      - name: Verify image diffs (egui-overlay feature)
+        if: github.event_name != 'workflow_dispatch' || !inputs.update_goldens
+        env:
+          ARC_REQUIRE_ADAPTER: ${{ matrix.require_adapter }}
+        run: cargo test -p engine-render-wgpu --locked --features egui-overlay --test image_diff -- --nocapture
+      # atmosphere_ring lives in planetary-app (plan 08-10), same skip/require env semantics.
+      - name: Verify atmosphere_ring image
+        if: github.event_name != 'workflow_dispatch' || !inputs.update_goldens
+        env:
+          ARC_REQUIRE_ADAPTER: ${{ matrix.require_adapter }}
+        run: cargo test -p planetary-app --locked --test atmosphere_ring -- --nocapture
       - name: Upload image-diff artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -165,5 +179,44 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: goldens-${{ matrix.os }}
-          path: crates/engine-render-wgpu/tests/golden/
+          path: |
+            crates/engine-render-wgpu/tests/golden/
+            extensions/planetary/planetary-app/tests/golden/
+          if-no-files-found: ignore
+
+  feature-paths:
+    name: feature paths (debug-overlay)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned toolchain from rust-toolchain.toml
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      # Default builds have no egui, so these feature paths are otherwise never exercised.
+      - name: Clippy debug-overlay
+        run: cargo clippy -p planetary-app --features debug-overlay --all-targets --locked -- -D warnings
+      - name: Test debug-overlay
+        run: cargo test -p planetary-app --features debug-overlay --locked
+
+  bench:
+    name: bench (non-blocking)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Locked decision: CI records criterion results; it never compares baselines or fails on timing.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned toolchain from rust-toolchain.toml
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      # Explicit --bench targets: `--benches` also hits libtest targets, which reject criterion flags.
+      - name: Criterion benches (quick)
+        run: cargo bench --workspace --bench spatial --bench select --bench mesh --bench stream --bench ecs --locked -- --noplot --quick
+      - name: Upload criterion output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: criterion
+          path: target/criterion
           if-no-files-found: ignore

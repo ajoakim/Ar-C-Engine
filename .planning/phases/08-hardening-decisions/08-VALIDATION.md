@@ -40,7 +40,7 @@ Stub derived from the "Validation Architecture" section of 08-RESEARCH.md. Plan 
 | Req | Behavior | Test Type | Automated Command | File Exists | Result |
 |-----|----------|-----------|-------------------|-------------|--------|
 | PLAN-08 | atmosphere colour monotone/finite, ring radius formula, no-NaN, fades to 0 below/above bands | unit | `cargo test -p planetary-app atmosphere --locked` | W0 (new `atmosphere.rs`, 08-10) | pending |
-| PLAN-08 | ring renders on a software adapter and is occluded by the planet disc | image-diff | `cargo test -p engine-render-wgpu --test image_diff` | W0 (08-10) | pending |
+| PLAN-08 | ring renders on a software adapter and is occluded by the planet disc | image-diff | `cargo test -p planetary-app --test atmosphere_ring` | W0 (08-10) | pending |
 | QA-01 | image tests render, compare to goldens with tolerance, skip with message / fail under `ARC_REQUIRE_ADAPTER` / `ARC_REQUIRE_GOLDENS` | integration | `cargo test -p engine-render-wgpu --test image_diff -- --nocapture` | W0 (08-03) | pending |
 | QA-01 | negative control: perturbed golden or shifted geometry is detected | integration | same | W0 (08-03) | pending |
 | QA-01 | benches compile and run | bench | `cargo bench --workspace --benches --locked -- --noplot --quick` | W0 (08-04, 08-05) | pending |
