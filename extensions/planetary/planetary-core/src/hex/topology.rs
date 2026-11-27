@@ -17,6 +17,52 @@ use crate::lod::{Footprint, LodModel};
 use crate::terrain::PlanetTerrain;
 use crate::topology::{CellMesh, IndexVariant, Piece, Topology};
 
+/// Slots of the per-thread footprint memo (a power of two).
+const FOOTPRINT_SLOTS: u64 = 1 << 14;
+
+thread_local! {
+    /// Direct-mapped memo of [`mapping::footprint`]: `(raw + 1, footprint)` per slot, `0` marks an
+    /// empty slot. Allocated on first use by the calling thread. `mapping::footprint` is a pure
+    /// function of the cell, so a hit returns exactly the value a miss computes: the memo changes
+    /// the cost of the call, never its result (07.1-27).
+    static FOOTPRINT_MEMO: core::cell::RefCell<Vec<(u64, Footprint)>> =
+        const { core::cell::RefCell::new(Vec::new()) };
+}
+
+/// Index of `raw` in the footprint memo (multiplicative hash, top bits).
+fn footprint_slot(raw: u64) -> usize {
+    let h = raw.wrapping_mul(0x9E37_79B9_7F4A_7C15) >> (64 - FOOTPRINT_SLOTS.trailing_zeros());
+    usize::try_from(h).unwrap_or(0)
+}
+
+/// [`mapping::footprint`] through the per-thread memo; bit-identical to the direct call.
+#[must_use]
+pub fn cached_footprint(c: CellId) -> Footprint {
+    let key = c.raw().wrapping_add(1);
+    let slot = footprint_slot(c.raw());
+    FOOTPRINT_MEMO.with(|m| {
+        let mut m = m.borrow_mut();
+        if m.is_empty() {
+            let empty = Footprint {
+                center: DVec3::ZERO,
+                cos_delta: 0.0,
+                sin_delta: 0.0,
+            };
+            m.resize(usize::try_from(FOOTPRINT_SLOTS).unwrap_or(0), (0, empty));
+        }
+        if let Some(entry) = m.get(slot)
+            && entry.0 == key
+        {
+            return entry.1;
+        }
+        let fp = mapping::footprint(c);
+        if let Some(entry) = m.get_mut(slot) {
+            *entry = (key, fp);
+        }
+        fp
+    })
+}
+
 /// Twelve pentagon roots; each cell is drawn as sector grids of side `n`.
 #[derive(Clone, Debug)]
 pub struct HexSphere {
@@ -93,7 +139,7 @@ impl Topology for HexSphere {
     }
 
     fn footprint(&self, c: CellId) -> Footprint {
-        mapping::footprint(c)
+        cached_footprint(c)
     }
 
     fn locate(&self, dir: DVec3, level: u8) -> CellId {

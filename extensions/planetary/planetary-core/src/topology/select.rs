@@ -8,8 +8,9 @@ use core::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet, BinaryHeap, VecDeque};
 
 use crate::lod::{
-    HeightRange, LodModel, LodParams, SelectStats, View, cell_bound, cell_distance, eye_in_cone,
-    frustum_visible, horizon_visible,
+    HeightRange, LodModel, LodParams, SelectSlack, SelectStats, View, cell_bound, cell_distance,
+    cone_margin_m, eye_in_cone, frustum_margin, frustum_visible, horizon_eye_cap, horizon_margin_m,
+    horizon_visible, sse_margin_m,
 };
 use crate::topology::{Piece, Topology};
 
@@ -19,6 +20,8 @@ pub struct CellSelection<C> {
     pub split: BTreeSet<C>,
     pub pieces: Vec<Piece<C>>,
     pub stats: SelectStats,
+    /// How far the view may change before this selection could change (07.1-27).
+    pub slack: SelectSlack,
 }
 
 /// Inserts every cell the closure rule requires until a fixpoint. Only inserts. Returns the number
@@ -60,6 +63,56 @@ fn range_for<T: Topology>(
         cur = topo.primary_parent(c);
     }
     model.height
+}
+
+/// Memo of the nearest resident ancestor-or-self per cell for one selection (07.1-27). The
+/// resident ranges do not change during a call, so a memoised answer is the answer the plain
+/// parent walk of [`range_for`] gives; it only avoids walking the same chain for every cell.
+struct RangeMemo<C> {
+    map: BTreeMap<C, Option<(HeightRange, u8)>>,
+    path: Vec<C>,
+}
+
+impl<C: Copy + Ord> RangeMemo<C> {
+    fn new() -> Self {
+        Self {
+            map: BTreeMap::new(),
+            path: Vec::new(),
+        }
+    }
+
+    /// Same value as `range_for(topo, model, id, resident_range)`.
+    fn range<T: Topology<Cell = C>>(
+        &mut self,
+        topo: &T,
+        model: &LodModel,
+        id: C,
+        resident_range: &dyn Fn(C) -> Option<HeightRange>,
+    ) -> HeightRange {
+        self.path.clear();
+        let mut found = None;
+        let mut cur = Some(id);
+        while let Some(c) = cur {
+            if let Some(m) = self.map.get(&c) {
+                found = *m;
+                break;
+            }
+            if let Some(r) = resident_range(c) {
+                found = Some((r, topo.level(c)));
+                self.map.insert(c, found);
+                break;
+            }
+            self.path.push(c);
+            cur = topo.primary_parent(c);
+        }
+        for &c in &self.path {
+            self.map.insert(c, found);
+        }
+        match found {
+            Some((r, level)) => model.derived_range(r, level),
+            None => model.height,
+        }
+    }
 }
 
 /// Why a cell cannot be seen.
@@ -225,6 +278,9 @@ pub struct Retained<C> {
     pub cells: Vec<C>,
     /// Candidates that did not fit the piece budget.
     pub rejected: u32,
+    /// The pieces of the returned split set when `cells` is not empty (07.1-27: the verification
+    /// of the retained set already computed them), else `None`.
+    pub pieces: Option<Vec<Piece<C>>>,
 }
 
 /// Keeps cells of `candidates` (the previous split set) that are culled this frame (outside the
@@ -248,6 +304,31 @@ pub fn retain_culled<T: Topology>(
     resident_range: &dyn Fn(T::Cell) -> Option<HeightRange>,
     split: &mut BTreeSet<T::Cell>,
 ) -> Retained<T::Cell> {
+    retain_culled_known(
+        topo,
+        model,
+        params,
+        view,
+        candidates,
+        resident_range,
+        split,
+        None,
+    )
+}
+
+/// [`retain_culled`] when the caller already knows the piece count of `split` (`base`, for
+/// example `CellSelection::pieces.len()`): it is not recomputed. `None` computes it.
+#[allow(clippy::too_many_arguments)]
+pub fn retain_culled_known<T: Topology>(
+    topo: &T,
+    model: &LodModel,
+    params: &LodParams,
+    view: &View,
+    candidates: &BTreeSet<T::Cell>,
+    resident_range: &dyn Fn(T::Cell) -> Option<HeightRange>,
+    split: &mut BTreeSet<T::Cell>,
+    base: Option<usize>,
+) -> Retained<T::Cell> {
     let mut cand: Vec<T::Cell> = candidates
         .iter()
         .copied()
@@ -257,6 +338,7 @@ pub fn retain_culled<T: Topology>(
         return Retained {
             cells: Vec::new(),
             rejected: 0,
+            pieces: None,
         };
     }
     cand.sort_by_key(|c| (topo.level(*c), topo.raw(*c)));
@@ -281,10 +363,11 @@ pub fn retain_culled<T: Topology>(
         return Retained {
             cells: Vec::new(),
             rejected: 0,
+            pieces: None,
         };
     }
     let mut buf: Vec<Piece<T::Cell>> = Vec::new();
-    let base = piece_count(topo, split, &mut buf);
+    let base = base.unwrap_or_else(|| piece_count(topo, split, &mut buf));
     let room = params.max_leaves.saturating_sub(base);
     // Per-split estimate: a split replaces one piece by its children.
     let mut take = 0usize;
@@ -311,6 +394,7 @@ pub fn retain_culled<T: Topology>(
             return Retained {
                 cells: kept,
                 rejected,
+                pieces: Some(buf),
             };
         }
         take /= 2;
@@ -318,6 +402,7 @@ pub fn retain_culled<T: Topology>(
     Retained {
         cells: Vec::new(),
         rejected: u32::try_from(kept.len()).unwrap_or(u32::MAX),
+        pieces: None,
     }
 }
 
@@ -336,6 +421,22 @@ pub fn select_cells<T: Topology>(
     prev_split: &BTreeSet<T::Cell>,
     resident_range: &dyn Fn(T::Cell) -> Option<HeightRange>,
 ) -> CellSelection<T::Cell> {
+    select_cells_with(topo, model, params, view, prev_split, resident_range, true)
+}
+
+/// [`select_cells`] with the decision margins optional. With `want_slack` false the margins are
+/// not computed (about 5 percent of a hex selection) and `CellSelection::slack` is the all-zero
+/// default, which allows no motion; everything else is identical.
+#[must_use]
+pub fn select_cells_with<T: Topology>(
+    topo: &T,
+    model: &LodModel,
+    params: &LodParams,
+    view: &View,
+    prev_split: &BTreeSet<T::Cell>,
+    resident_range: &dyn Fn(T::Cell) -> Option<HeightRange>,
+    want_slack: bool,
+) -> CellSelection<T::Cell> {
     let mut stats = SelectStats {
         tau_eff: params.tau_px,
         ..SelectStats::default()
@@ -345,21 +446,57 @@ pub fn select_cells<T: Topology>(
     let mut split: BTreeSet<T::Cell> = BTreeSet::new();
     let mut heap: BinaryHeap<(u64, Reverse<u64>)> = BinaryHeap::new();
 
+    let memo: core::cell::RefCell<RangeMemo<T::Cell>> = core::cell::RefCell::new(RangeMemo::new());
+    // Margins of every decision taken (07.1-27): minimum over all evaluated cells.
+    let mut slack = SelectSlack {
+        margin_eye: f64::INFINITY,
+        margin_plane: f64::INFINITY,
+        d_plane_max: 0.0,
+        eye_cap: horizon_eye_cap(view.eye, occluder),
+    };
+
     // Evaluates a cell: `Some(rho)` when it is a refinement candidate, `None` when culled.
-    let eval = |id: T::Cell, stats: &mut SelectStats| -> Option<f64> {
+    let eval = |id: T::Cell, stats: &mut SelectStats, slack: &mut SelectSlack| -> Option<f64> {
         stats.nodes_visited = stats.nodes_visited.saturating_add(1);
-        let range = range_for(topo, model, id, resident_range);
+        let range = memo.borrow_mut().range(topo, model, id, resident_range);
         let fp = topo.footprint(id);
+        let note_eye = |slack: &mut SelectSlack, m: f64| {
+            if m < slack.margin_eye || m.is_nan() {
+                slack.margin_eye = if m.is_nan() { 0.0 } else { m };
+            }
+        };
+        if want_slack {
+            note_eye(
+                slack,
+                horizon_margin_m(model.radius, view.eye, &fp, range, occluder),
+            );
+        }
         if !horizon_visible(model.radius, view.eye, &fp, range, occluder) {
             stats.culled_horizon += 1;
             return None;
         }
         // The cell under the camera is never culled by the frustum.
-        if !eye_in_cone(view.eye, &fp)
-            && !frustum_visible(view, &cell_bound(model.radius, &fp, range))
-        {
-            stats.culled_frustum += 1;
-            return None;
+        if want_slack {
+            note_eye(slack, cone_margin_m(view.eye, &fp));
+        }
+        if !eye_in_cone(view.eye, &fp) {
+            let b = cell_bound(model.radius, &fp, range);
+            if let Some(m) = frustum_margin(view, &b).filter(|_| want_slack) {
+                if m < slack.margin_plane || m.is_nan() {
+                    slack.margin_plane = if m.is_nan() { 0.0 } else { m };
+                }
+                let dx = b.center.x - view.eye.x;
+                let dy = b.center.y - view.eye.y;
+                let dz = b.center.z - view.eye.z;
+                let d = (dx * dx + dy * dy + dz * dz).sqrt();
+                if d > slack.d_plane_max || d.is_nan() {
+                    slack.d_plane_max = if d.is_nan() { f64::INFINITY } else { d };
+                }
+            }
+            if !frustum_visible(view, &b) {
+                stats.culled_frustum += 1;
+                return None;
+            }
         }
         let d = cell_distance(model.radius, view.eye, &fp, range);
         let d = if d > params.min_distance {
@@ -367,7 +504,11 @@ pub fn select_cells<T: Topology>(
         } else {
             params.min_distance
         };
-        Some(model.geometric_error(topo.level(id)) * view.proj_scale / d)
+        let num = model.geometric_error(topo.level(id)) * view.proj_scale;
+        if want_slack {
+            note_eye(slack, sse_margin_m(num, d, params.tau_px, low));
+        }
+        Some(num / d)
     };
 
     if params.max_level > 0 {
@@ -376,7 +517,7 @@ pub fn select_cells<T: Topology>(
                 stats.node_budget_hit = true;
                 break;
             }
-            if let Some(rho) = eval(id, &mut stats) {
+            if let Some(rho) = eval(id, &mut stats, &mut slack) {
                 heap.push((key_of(rho), Reverse(topo.raw(id))));
             }
         }
@@ -429,7 +570,7 @@ pub fn select_cells<T: Topology>(
                     break;
                 }
                 for &c in &children {
-                    if let Some(r) = eval(c, &mut stats) {
+                    if let Some(r) = eval(c, &mut stats, &mut slack) {
                         heap.push((key_of(r), Reverse(topo.raw(c))));
                     }
                 }
@@ -492,7 +633,7 @@ pub fn select_cells<T: Topology>(
         estimate = usize::try_from(est_after).unwrap_or(0);
         if grandchildren {
             for &c in &children {
-                if let Some(r) = eval(c, &mut stats) {
+                if let Some(r) = eval(c, &mut stats, &mut slack) {
                     heap.push((key_of(r), Reverse(topo.raw(c))));
                 }
             }
@@ -507,7 +648,7 @@ pub fn select_cells<T: Topology>(
         stats.leaf_budget_hit = true;
         let mut rhos: BTreeMap<T::Cell, u64> = BTreeMap::new();
         for &s in &split {
-            let range = range_for(topo, model, s, resident_range);
+            let range = memo.borrow_mut().range(topo, model, s, resident_range);
             let fp = topo.footprint(s);
             let d = cell_distance(model.radius, view.eye, &fp, range);
             let d = if d > params.min_distance {
@@ -540,11 +681,110 @@ pub fn select_cells<T: Topology>(
         "split not closed"
     );
 
-    piece_count(topo, &split, &mut pieces);
+    // `pieces` already belongs to the final split: it was filled by the budget check above or by
+    // the last evaluation of the trim loop condition (07.1-27: no recomputation).
     stats.leaves = pieces.len();
     CellSelection {
         split,
         pieces,
         stats,
+        slack: if want_slack {
+            slack
+        } else {
+            SelectSlack::default()
+        },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{CubeSphere, HexSphere};
+
+    fn splitmix(state: &mut u64) -> u64 {
+        *state = state.wrapping_add(0x9E37_79B9_7F4A_7C15);
+        let mut z = *state;
+        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        z ^ (z >> 31)
+    }
+
+    /// The memoised nearest-resident-ancestor range equals the plain parent walk for every cell,
+    /// whatever the order of the queries and whichever cells are resident.
+    fn memo_equals_walk<T: Topology>(topo: &T, model: &LodModel, seed: u64) {
+        let mut st = seed;
+        let mut cells: Vec<T::Cell> = Vec::new();
+        let mut kids = Vec::new();
+        let mut frontier: Vec<T::Cell> = topo.roots().to_vec();
+        for _ in 0..5 {
+            let mut next = Vec::new();
+            for &c in &frontier {
+                kids.clear();
+                topo.children(c, &mut kids);
+                next.extend(kids.iter().copied());
+            }
+            cells.extend(frontier.iter().copied());
+            frontier = next;
+        }
+        cells.extend(frontier.iter().copied());
+        // Roughly a third of the cells are resident with a range that depends on the cell.
+        let mut resident: BTreeMap<T::Cell, HeightRange> = BTreeMap::new();
+        for &c in &cells {
+            if splitmix(&mut st).is_multiple_of(3) {
+                let h = (splitmix(&mut st) % 4000) as f64;
+                resident.insert(
+                    c,
+                    HeightRange {
+                        min: h - 900.0,
+                        max: h,
+                    },
+                );
+            }
+        }
+        let lookup = |c: T::Cell| resident.get(&c).copied();
+        let mut memo = RangeMemo::new();
+        // Shuffled query order, each cell twice (a hit after a miss).
+        let mut order: Vec<usize> = (0..cells.len()).collect();
+        for i in (1..order.len()).rev() {
+            let j = (splitmix(&mut st) % (i as u64 + 1)) as usize;
+            order.swap(i, j);
+        }
+        for &i in order.iter().chain(order.iter()) {
+            let c = cells[i];
+            let a = memo.range(topo, model, c, &lookup);
+            let b = range_for(topo, model, c, &lookup);
+            assert_eq!(
+                (a.min.to_bits(), a.max.to_bits()),
+                (b.min.to_bits(), b.max.to_bits())
+            );
+        }
+        // No resident cell at all: the global range.
+        let none = |_: T::Cell| None;
+        let mut memo = RangeMemo::new();
+        for &c in &cells {
+            assert_eq!(memo.range(topo, model, c, &none), model.height);
+        }
+    }
+
+    fn model_for<T: Topology>(t: &T) -> LodModel {
+        LodModel {
+            radius: 6_371_000.0,
+            height: HeightRange {
+                min: -3800.0,
+                max: 6800.0,
+            },
+            residual: [120.0; 25],
+            cells_per_edge: 16,
+            sample_angle0: t.sample_angle0(),
+            kappa: 0.25,
+        }
+    }
+
+    #[test]
+    fn range_memo_equals_the_parent_walk_hex_and_cube() {
+        let h = HexSphere::new(16).unwrap();
+        memo_equals_walk(&h, &model_for(&h), 11);
+        let c = CubeSphere::new(16);
+        memo_equals_walk(&c, &model_for(&c), 12);
     }
 }

@@ -100,10 +100,12 @@ fn half_toward(x: CellId, pf: CellId) -> u16 {
 /// Drawn pieces of a closed split set, sorted by (raw, variant).
 pub fn pieces(split: &BTreeSet<CellId>, out: &mut Vec<Piece<CellId>>) {
     let first = out.len();
-    let mut drawn: BTreeSet<(CellId, u16)> = BTreeSet::new();
+    // Collected unsorted, then sorted and deduplicated: the same set of `(cell, variant)` pairs a
+    // `BTreeSet` would hold, without a tree insertion per piece.
+    let mut drawn: Vec<(CellId, u16)> = Vec::with_capacity(split.len() * 4 + 16);
     for root in CellId::level_iter(0) {
         if !split.contains(&root) {
-            drawn.insert((root, whole_variant(root)));
+            drawn.push((root, whole_variant(root)));
         }
     }
     let mut kids = Vec::with_capacity(7);
@@ -121,12 +123,14 @@ pub fn pieces(split: &BTreeSet<CellId>, out: &mut Vec<Piece<CellId>>) {
             ps.clear();
             parents(*x, &mut ps);
             if ps.len() < 2 || ps.iter().all(|q| split.contains(q)) {
-                drawn.insert((*x, whole_variant(*x)));
+                drawn.push((*x, whole_variant(*x)));
             } else {
-                drawn.insert((*x, half_toward(*x, pf)));
+                drawn.push((*x, half_toward(*x, pf)));
             }
         }
     }
+    drawn.sort_unstable();
+    drawn.dedup();
     out.extend(
         drawn
             .into_iter()
@@ -218,6 +222,62 @@ mod tests {
             assert!(a.iter().all(|s| !b.contains(s)));
             let all: BTreeSet<u8> = a.iter().chain(b).copied().collect();
             assert_eq!(all.len(), 6);
+        }
+    }
+
+    /// The set-based algorithm `pieces` replaced (a `BTreeSet` of `(cell, variant)` pairs).
+    fn pieces_reference(split: &BTreeSet<CellId>) -> Vec<Piece<CellId>> {
+        let mut drawn: BTreeSet<(CellId, u16)> = BTreeSet::new();
+        for root in CellId::level_iter(0) {
+            if !split.contains(&root) {
+                drawn.insert((root, whole_variant(root)));
+            }
+        }
+        for p in split {
+            let mut kids = Vec::new();
+            children(*p, &mut kids);
+            let Some(pf) = kids.first().copied() else {
+                continue;
+            };
+            for x in &kids {
+                if split.contains(x) {
+                    continue;
+                }
+                let mut ps = Vec::new();
+                parents(*x, &mut ps);
+                if ps.len() < 2 || ps.iter().all(|q| split.contains(q)) {
+                    drawn.insert((*x, whole_variant(*x)));
+                } else {
+                    drawn.insert((*x, half_toward(*x, pf)));
+                }
+            }
+        }
+        drawn
+            .into_iter()
+            .map(|(cell, variant)| Piece { cell, variant })
+            .collect()
+    }
+
+    #[test]
+    fn pieces_equal_the_set_based_reference_on_seeded_splits() {
+        let mut st = 0x07_1027_u64;
+        let mut next = || {
+            st = st.wrapping_add(0x9E37_79B9_7F4A_7C15);
+            let mut z = st;
+            z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+            z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+            z ^ (z >> 31)
+        };
+        for round in 0..60 {
+            let mut split: BTreeSet<CellId> = BTreeSet::new();
+            for _ in 0..(1 + round % 25) {
+                let level = u8::try_from(1 + next() % 6).unwrap();
+                let all: Vec<CellId> = CellId::level_iter(level).collect();
+                let c = all[usize::try_from(next() % all.len() as u64).unwrap()];
+                split.insert(c);
+            }
+            close(&mut split);
+            assert_eq!(pcs(&split), pieces_reference(&split), "round {round}");
         }
     }
 

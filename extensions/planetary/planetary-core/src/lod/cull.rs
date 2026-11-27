@@ -4,6 +4,8 @@
 //! (a cone around its center direction that contains the whole patch) extruded radially between
 //! a [`HeightRange`]; this is much tighter than a bounding sphere inflated by the global relief.
 
+use core::f64::consts::FRAC_PI_2;
+
 use engine_sdk::DVec3;
 
 use crate::lod::model::{Bound, View};
@@ -224,4 +226,142 @@ pub fn frustum_visible(view: &View, b: &Bound) -> bool {
         }
     }
     true
+}
+
+// ---------------------------------------------------------------------------------------------
+// Decision margins (07.1-27): how far the eye or the frustum planes may move before a test of the
+// selection could change its answer. Every function returns a LOWER bound (never an estimate); an
+// input it cannot bound yields 0, which forbids any skip. Exact ops only.
+
+/// Largest change of the direction angle of an eye at distance `r_e` that moves by `de` is
+/// `asin(de / r_e) <= FRAC_PI_2 * de / r_e` (`de <= r_e`), so an angle margin `a` is worth
+/// `a * r_e / FRAC_PI_2` metres of eye translation.
+fn angle_to_metres(a: f64, r_e: f64) -> f64 {
+    if a > 0.0 && r_e > 0.0 {
+        a * r_e / FRAC_PI_2
+    } else {
+        0.0
+    }
+}
+
+/// Metres of eye translation that cannot change whether the eye direction is inside the cone.
+/// `|cos| `-differences lower-bound angle differences (cos is 1-Lipschitz).
+#[must_use]
+pub fn cone_margin_m(eye: DVec3, fp: &Footprint) -> f64 {
+    let re2 = dot(eye, eye);
+    if re2 <= 0.0 || re2.is_nan() {
+        return 0.0;
+    }
+    let r_e = re2.sqrt();
+    let e = DVec3::new(eye.x / r_e, eye.y / r_e, eye.z / r_e);
+    let m = dot(e, fp.center) - fp.cos_delta;
+    angle_to_metres(if m < 0.0 { -m } else { m }, r_e)
+}
+
+/// Metres of eye translation that cannot change [`horizon_visible`] (including the cone test it
+/// contains), valid while the eye moves by at most `(|eye| - occluder_radius) / 2`.
+///
+/// Outside the cone the test compares the angle `phi` (eye direction to the nearest cone boundary)
+/// with `a_e + a_1`, `a_e = acos(occluder / r_e)`. A move of `de` changes `phi` by at most
+/// `FRAC_PI_2 * de / r_e` and `a_e` by at most `de * occluder / (r_lo * sqrt(r_lo^2 - occluder^2))`
+/// with `r_lo = (r_e + occluder) / 2` (the slope of `a_e` decreases with `r`); the angle gap is at
+/// least the cosine gap.
+#[must_use]
+pub fn horizon_margin_m(
+    radius: f64,
+    eye: DVec3,
+    fp: &Footprint,
+    r: HeightRange,
+    occluder_radius: f64,
+) -> f64 {
+    let r1 = radius + r.max;
+    if r1 <= occluder_radius {
+        return f64::INFINITY;
+    }
+    let re2 = dot(eye, eye);
+    if re2 <= 0.0 || re2.is_nan() {
+        return 0.0;
+    }
+    let r_e = re2.sqrt();
+    if r_e <= occluder_radius {
+        return 0.0;
+    }
+    let cone = cone_margin_m(eye, fp);
+    let e = DVec3::new(eye.x / r_e, eye.y / r_e, eye.z / r_e);
+    let (cos_t, cos_phi) = cone_angles(e, fp);
+    if cos_t >= fp.cos_delta {
+        return cone;
+    }
+    let cos_ae = occluder_radius / r_e;
+    let sin_ae = (1.0 - cos_ae * cos_ae).sqrt();
+    let cos_a1 = occluder_radius / r1;
+    let sin_a1 = (1.0 - cos_a1 * cos_a1).sqrt();
+    let cos_sum = cos_ae * cos_a1 - sin_ae * sin_a1;
+    let gap = cos_phi - cos_sum;
+    let gap = if gap < 0.0 { -gap } else { gap };
+    let r_lo = (r_e + occluder_radius) / 2.0;
+    let q = r_lo * r_lo - occluder_radius * occluder_radius;
+    if q <= 0.0 || q.is_nan() {
+        return 0.0;
+    }
+    let slope = FRAC_PI_2 / r_e + occluder_radius / (r_lo * q.sqrt());
+    let h = gap / slope;
+    if h < cone { h } else { cone }
+}
+
+/// Largest eye move for which the margins of [`horizon_margin_m`] hold (0 when the eye is not
+/// above the occluder).
+#[must_use]
+pub fn horizon_eye_cap(eye: DVec3, occluder_radius: f64) -> f64 {
+    let r_e = dot(eye, eye).sqrt();
+    if r_e > occluder_radius {
+        (r_e - occluder_radius) / 2.0
+    } else {
+        0.0
+    }
+}
+
+/// Margin of the frustum decision of `b`: how much every plane value may change before the answer
+/// of [`frustum_visible`] can change (plane-value units, metres for unit normals). Visible: the
+/// smallest `dist + radius`; culled: the best excluding plane's `-radius - dist`. `None` without a
+/// frustum.
+#[must_use]
+pub fn frustum_margin(view: &View, b: &Bound) -> Option<f64> {
+    let planes = view.frustum?;
+    let mut min_in = f64::INFINITY;
+    let mut max_out = f64::NEG_INFINITY;
+    for p in planes {
+        let dist = p[0] * b.center.x + p[1] * b.center.y + p[2] * b.center.z + p[3];
+        let inside = dist + b.radius;
+        if inside < min_in {
+            min_in = inside;
+        }
+        if -inside > max_out {
+            max_out = -inside;
+        }
+    }
+    let out = max_out > 0.0;
+    Some(if out { max_out } else { min_in })
+}
+
+/// Margin (metres of distance) of the screen-space-error decisions `rho > tau` and
+/// `rho > tau * (1 - hysteresis)` of a cell whose clamped distance is `d` and whose
+/// `geometric_error * proj_scale` is `num`: `rho = num / d`, so each test is a threshold on `d`.
+/// The distance to an extruded cone is exactly 1-Lipschitz in the eye, as is its clamp.
+#[must_use]
+pub fn sse_margin_m(num: f64, d: f64, tau: f64, low: f64) -> f64 {
+    let mut m = f64::INFINITY;
+    for x in [tau, low] {
+        if x > 0.0 {
+            let thr = num / x;
+            if !thr.is_finite() {
+                continue;
+            }
+            let gap = if d > thr { d - thr } else { thr - d };
+            if gap < m {
+                m = gap;
+            }
+        }
+    }
+    if m.is_nan() { 0.0 } else { m }
 }

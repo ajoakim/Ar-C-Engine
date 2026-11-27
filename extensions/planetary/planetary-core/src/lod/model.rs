@@ -197,6 +197,51 @@ impl View {
         })
     }
 
+    /// Largest change `alpha` of a plane normal between the two views (`|n_new - n_old|`, a chord,
+    /// the Lipschitz constant of the plane value in the distance from the eye), or `None` when
+    /// exactly one view has a frustum. `Some(0.0)` for two views without one.
+    #[must_use]
+    pub fn orientation_delta(&self, other: &View) -> Option<f64> {
+        match (self.frustum, other.frustum) {
+            (None, None) => Some(0.0),
+            (Some(a), Some(b)) => Some(plane_alpha(&a, &b)),
+            _ => None,
+        }
+    }
+
+    /// `None` when exactly one view has a frustum; `Some(None)` when neither has; otherwise
+    /// `Some(Some((alpha, shift)))` where `alpha` is [`View::orientation_delta`] and `shift` the
+    /// largest `|(n' - n) . e' + (d' - d)|` over the planes (`e'` the eye of `other`): the plane
+    /// value at the eye of `other`, so `|p'(x) - p(x)| <= shift + alpha * |x - e'|`.
+    #[must_use]
+    pub fn plane_change(&self, other: &View) -> Option<Option<(f64, f64)>> {
+        match (self.frustum, other.frustum) {
+            (None, None) => Some(None),
+            (Some(a), Some(b)) => {
+                let e = other.eye;
+                let mut shift = 0.0f64;
+                for (p, q) in a.iter().zip(b.iter()) {
+                    let s = (q[0] - p[0]) * e.x
+                        + (q[1] - p[1]) * e.y
+                        + (q[2] - p[2]) * e.z
+                        + (q[3] - p[3]);
+                    let s = if s < 0.0 { -s } else { s };
+                    if s.is_nan() || s > shift {
+                        shift = if s.is_nan() { f64::INFINITY } else { s };
+                    }
+                }
+                Some(Some((plane_alpha(&a, &b), shift)))
+            }
+            _ => None,
+        }
+    }
+
+    /// Whether the two views project alike (same `proj_scale`, bit for bit).
+    #[must_use]
+    pub fn same_projection(&self, other: &View) -> bool {
+        self.proj_scale.to_bits() == other.proj_scale.to_bits()
+    }
+
     /// Attaches frustum planes; non-finite planes are rejected (returns `self` unchanged).
     #[must_use]
     pub fn with_frustum(self, planes: [[f64; 4]; 6]) -> View {
@@ -208,4 +253,22 @@ impl View {
             ..self
         }
     }
+}
+
+/// Largest `|n_b - n_a|` over the six planes (infinite for NaN).
+fn plane_alpha(a: &[[f64; 4]; 6], b: &[[f64; 4]; 6]) -> f64 {
+    let mut alpha = 0.0f64;
+    for (p, q) in a.iter().zip(b.iter()) {
+        let dx = q[0] - p[0];
+        let dy = q[1] - p[1];
+        let dz = q[2] - p[2];
+        let n = (dx * dx + dy * dy + dz * dz).sqrt();
+        if n.is_nan() {
+            return f64::INFINITY;
+        }
+        if n > alpha {
+            alpha = n;
+        }
+    }
+    alpha
 }
