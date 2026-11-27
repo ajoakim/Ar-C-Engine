@@ -207,7 +207,7 @@ Plans:
 - [x] 07.1-22-PLAN.md — Morph targets: parent-mesh surface at the vertex direction for cube and hex (oracle, seam proof with negative controls)
 - [x] 07.1-23-PLAN.md — Cell payload v4, morph upload and byte budgets, ADR-0014
 - [x] 07.1-24-PLAN.md — Morph driving from the selector refine distance, child appears at morph 1, handover continuity proofs and benches
-- [ ] 07.1-25-PLAN.md — Scale and contrast: generator v2 ridge layer, bounds, colour ramp and slope rock, relief light, distance haze (precursor to Phase 8 atmosphere), ADR-0015
+- [x] 07.1-25-PLAN.md — Scale and contrast: generator v2 ridge layer, bounds, colour ramp and slope rock, relief light, distance haze (precursor to Phase 8 atmosphere), ADR-0015
 - [ ] 07.1-26-PLAN.md — Present mode setting, startup info and window title readout, strict flags, measured table, ADR-0016
 - [ ] 07.1-27-PLAN.md — Hex prepare speed: profile first, orientation-safe re-selection skip, equality proofs, stated targets
 - [ ] 07.1-18-PLAN.md — CHECKPOINT (last wave, depends on 17 and 19-27): full gate + human window flight with telemetry; the flight covers every Pending (human) item of plans 20-27
