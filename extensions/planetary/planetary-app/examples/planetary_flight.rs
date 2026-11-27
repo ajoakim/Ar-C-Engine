@@ -1,7 +1,11 @@
 //! Planetary reference app: orbit-to-surface flight over streamed terrain, SDK only.
 //!
-//! Controls: WASD/arrows move, E/Space up, Q/Ctrl down, Shift boost,
-//! hold right mouse button to look, Esc quits. With `--features debug-overlay` (windowed), F3
+//! Controls: WASD/arrows move (A/D strafe), E/Space up, Q/Ctrl down (along the camera up axis in
+//! free mode), Z/X roll left/right, F toggles free-flight / planet-aligned, Shift boost, hold
+//! right mouse button to look, Esc quits. Free-flight (full 6DOF, quaternion orientation, roll
+//! about the view axis) is the default; F levels the horizon and switches to planet-aligned
+//! flight (planet-up yaw, vertical thrust along planet up, pitch clamped near the surface).
+//! `--descent`/`--ascent` scripted flights are always planet-aligned and ignore these keys. With `--features debug-overlay` (windowed), F3
 //! toggles a read-only overlay: LOD histograms, streaming queue, memory and upload budgets,
 //! frame and prepare times.
 //!
@@ -225,6 +229,9 @@ fn parse_frame_latency(v: Option<String>) -> Option<FrameLatency> {
     FrameLatency::parse(&v?).ok()
 }
 
+/// Runtime controls line printed at startup.
+const CONTROLS: &str = "Controls: WASD/arrows move (A/D strafe), E/Space up, Q/Ctrl down (along the camera up axis in free mode), Z/X roll left/right, F toggles free-flight / planet-aligned, Shift boost, right mouse look, Esc exit";
+
 fn main() -> Result<(), SdkError> {
     let mut headless: Option<u32> = None;
     let mut descent = false;
@@ -390,9 +397,7 @@ fn main() -> Result<(), SdkError> {
         return Ok(());
     }
 
-    println!(
-        "Controls: WASD/arrows move, E/Space up, Q/Ctrl down, Shift boost, right mouse look, Esc exit"
-    );
+    println!("{CONTROLS}");
     settings.perf.console_summary = console;
     let app = PlanetaryApp::with_clock(settings, Box::new(WallClock::new()))?;
     run_app(
@@ -410,6 +415,13 @@ fn main() -> Result<(), SdkError> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn controls_text_documents_roll_and_toggle() {
+        for needle in ["Z/X", "roll", "F toggles", "planet-aligned"] {
+            assert!(super::CONTROLS.contains(needle), "{needle}");
+        }
+    }
+
     fn some(s: &str) -> Option<String> {
         Some(s.to_string())
     }

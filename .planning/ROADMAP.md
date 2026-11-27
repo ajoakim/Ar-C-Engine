@@ -57,7 +57,7 @@ Plans:
 
 Plans:
 - [x] 10-01-PLAN.md — Z/X/F key codes; pure f64 quaternion FreeFlight controller with drift, roll-axis, camera-relative and levelling tests (CAM-01..04, CAM-06)
-- [ ] 10-02-PLAN.md — Integrate into planetary_flight input handling, document default and F toggle, scripted descent unchanged (CAM-01..03, CAM-05, CAM-06)
+- [x] 10-02-PLAN.md — Integrate into planetary_flight input handling, document default and F toggle, scripted descent unchanged (CAM-01..03, CAM-05, CAM-06)
 - [ ] 10-03-PLAN.md — Full local gate, human flight checkpoint, requirement bookkeeping (CAM-01..06)
 
 **UI hint**: yes
@@ -104,7 +104,7 @@ Plans:
 |-------|-----------|----------------|--------|-----------|
 | 1-8 (incl. 7.1) | v1.0 | 90/90 | Complete | 2026-11-27 |
 | 9. Overlay, CI & Test Hygiene | v1.1 | 4/4 | Complete | 2026-11-27 |
-| 10. Free-Flight 6DOF Camera | v1.1 | 1/3 | In Progress | - |
+| 10. Free-Flight 6DOF Camera | v1.1 | 2/3 | In Progress | - |
 | 11. Terrain Relief & Normals | v1.1 | 0/TBD | Not started | - |
 | 12. LOD Detail Transition | v1.1 | 0/TBD | Not started | - |
 | 13. Validation & CI Debt Closure | v1.1 | 0/TBD | Not started | - |

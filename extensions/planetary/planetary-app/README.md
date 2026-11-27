@@ -14,7 +14,28 @@ A release build reuses `target/release` and needs about 3 GB of free disk. Keep 
 
 ## Controls
 
-WASD/arrows move, E/Space up, Q/Ctrl down, Shift boost, hold right mouse button to look, Esc quits.
+| Keys | Action |
+| --- | --- |
+| W/S, Up/Down | forward / back |
+| A/D, Left/Right | strafe left / right (camera right) |
+| E/Space, Q/Ctrl | up / down (camera up in free-flight, planet up when planet-aligned) |
+| Z/X roll | roll left / right about the view axis (free-flight) |
+| F toggles | free-flight / planet-aligned |
+| Shift | boost |
+| Right mouse + move | look |
+| Esc | quit |
+
+### Flight modes
+
+- default = free-flight: full 6DOF with quaternion orientation. Pitch, yaw and roll are all about
+  the camera axes; strafe and vertical thrust follow the camera right and up axes.
+- F toggles to planet-aligned: the horizon is levelled (view direction kept), yaw is about planet
+  up, vertical thrust follows planet up and pitch is clamped near the surface. F again returns to
+  free-flight. The change is printed as `flight mode: <name>` and logged.
+- The scripted `--descent` / `--ascent` flights stay planet-aligned and ignore these keys, so
+  the descent behaviour is unchanged (CAM-05).
+- The controller lives in `planetary-app` (`src/free_flight.rs`); no generic crate (engine-sdk,
+  planetary-terrain camera, conventional-3d) was changed (CAM-06).
 
 ## Flags
 
