@@ -1,7 +1,7 @@
 ---
 phase: 06-streaming-procedural-framework
 verified: 2026-11-25T00:00:00Z
-status: human_needed
+status: passed
 score: 4/4 roadmap criteria verified locally (SC4 cross-platform half pending)
 gaps: []
 human_verification:
@@ -43,3 +43,7 @@ None found in the inspected sources (no TODO stubs, no wall-clock).
 ROADMAP.md still shows the phase 6 plans unchecked ("[ ]"). This is a bookkeeping item for the orchestrator, not a code gap.
 
 _Verifier: Claude (gsd-verifier)_
+
+## Update 2026-11-27 (status human_needed -> passed)
+
+The original status above is kept as history. The cross-platform golden item is closed by hosted CI: `.planning/phases/08-hardening-decisions/08-CI-EVIDENCE.md` records runs 45947523739 and 46042013890 where the golden and streamed-procedural tests pass on ubuntu, windows and macos against the Windows-recorded constants (no cross-OS drift). SC4 is now verified on all three platforms.

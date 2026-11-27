@@ -1,7 +1,7 @@
 ---
 phase: 01-workspace-toolchain-guardrails
 verified: 2026-11-25T00:00:00Z
-status: human_needed
+status: passed
 score: 4/4 must-haves verified locally (hosted CI portion pending)
 human_verification:
   - test: "Push repo to a GitHub remote and run .github/workflows/ci.yml on ubuntu-latest and windows-latest"
@@ -36,3 +36,7 @@ human_verification:
 
 ## Gaps
 None.
+
+## Update 2026-11-27 (status human_needed -> passed)
+
+The original status above is kept as history. The hosted CI item is closed: GitHub Actions run 46042013890 (head c44af29) concluded success on ubuntu, windows and macos build jobs, cargo-deny and canary, including the inverted negative-fixture steps (evidence: `.planning/phases/08-hardening-decisions/08-11-SUMMARY.md` line 61 and `08-CI-EVIDENCE.md`). Linux build is therefore verified. Remaining stale item, not a gap: `01-VALIDATION.md` is still draft.

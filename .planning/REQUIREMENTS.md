@@ -53,23 +53,23 @@
 ### Planetary Extension
 
 - [x] **PLAN-01**: Planetary code lives only in extension crates; the conventional app builds and runs with those crates absent
-- [ ] **PLAN-02**: Planet surface is represented as an icosahedral hexagonal cell hierarchy (aperture 4, 12 pentagons) with stable packed cell IDs and a tested neighbour table; the cube-sphere is retained as the reference topology behind a `Topology` trait (Phase 7.1, ADR-0011)
-- [ ] **PLAN-03**: Planet cells form a hierarchy with level-difference-1 balance and screen-space-error LOD selection with hysteresis, tight bounds and horizon/frustum culling (cube quadtree built in Phase 7; hex hierarchy in Phase 7.1)
-- [ ] **PLAN-04**: Terrain LOD transitions are crack-free, including across icosahedron edges, vertices and pentagons, and across half-cell borders (cube-face edges and corners for the reference topology)
-- [ ] **PLAN-05**: Terrain is generated from layered planet-space generators so patch borders agree
-- [ ] **PLAN-06**: User can navigate with a planetary camera from orbit to surface
-- [ ] **PLAN-07**: A scripted orbit-to-surface descent holds the target frame-time budget without stalls
+- [x] **PLAN-02**: Planet surface is represented as an icosahedral hexagonal cell hierarchy (aperture 4, 12 pentagons) with stable packed cell IDs and a tested neighbour table; the cube-sphere is retained as the reference topology behind a `Topology` trait (Phase 7.1, ADR-0011)
+- [x] **PLAN-03**: Planet cells form a hierarchy with level-difference-1 balance and screen-space-error LOD selection with hysteresis, tight bounds and horizon/frustum culling (cube quadtree built in Phase 7; hex hierarchy in Phase 7.1)
+- [x] **PLAN-04**: Terrain LOD transitions are crack-free, including across icosahedron edges, vertices and pentagons, and across half-cell borders (cube-face edges and corners for the reference topology)
+- [x] **PLAN-05**: Terrain is generated from layered planet-space generators so patch borders agree
+- [x] **PLAN-06**: User can navigate with a planetary camera from orbit to surface
+- [x] **PLAN-07**: A scripted orbit-to-surface descent holds the target frame-time budget without stalls
 - [x] **PLAN-08**: Planet shows a minimal atmosphere (first item to cut if schedule slips). Delivered as an opaque limb-ring mesh plus clear-colour/fog changes, not a shader pass (ADR-0019); user accepted the ring
-- [ ] **HEX-01**: Planet can use an H3-inspired hex-grid topology on an icosahedron (half-cell scheme: each hex gives way to a centre hex plus six half-covered edge hexes, 12 pentagons) with stable packed cell IDs and tested parent/child/neighbor derivation, built with exact arithmetic only (ADR-0008)
+- [x] **HEX-01**: Planet can use an H3-inspired hex-grid topology on an icosahedron (half-cell scheme: each hex gives way to a centre hex plus six half-covered edge hexes, 12 pentagons) with stable packed cell IDs and tested parent/child/neighbor derivation, built with exact arithmetic only (ADR-0008)
 - [x] **HEX-02**: The hex drawn cut covers the sphere exactly once with balanced neighbors, and terrain is crack-free at cell borders, pentagons and mixed levels (seam and coverage proofs with negative controls)
 - [x] **HEX-03**: A `Topology` trait has the cube-sphere quadtree and the hex grid as implementations; the cube-sphere stays as test oracle and fallback until hex passes the full descent
-- [ ] **PERF-01**: Telemetry reports frame time (avg/p95/max), FPS, altitude, distance to surface and selection/streaming stats, with a CSV log and a headless descent benchmark at the real default parameters
+- [x] **PERF-01**: Telemetry reports frame time (avg/p95/max), FPS, altitude, distance to surface and selection/streaming stats, with a CSV log and a headless descent benchmark at the real default parameters
 - [x] **PERF-02**: The scripted orbit-to-surface descent at the real default LOD parameters streams detail in as the camera descends, aggregates on ascent, holds the frame budget and completes without a crash in debug and release
 
 ### Reference Apps & Quality
 
 - [x] **APP-01**: A conventional 3D reference app runs against the public SDK only
-- [ ] **APP-02**: A planetary reference app runs against the public SDK only
+- [x] **APP-02**: A planetary reference app runs against the public SDK only
 - [x] **QA-01**: Unit, integration, performance (criterion), and regression (image-diff on software adapter) tests exist and run in CI
 - [x] **QA-02**: Debug overlays show LOD and streaming/memory budget state
 - [x] **QA-03**: Architecture, assumptions, limitations, and SDK usage are documented
@@ -142,20 +142,20 @@
 | PROC-01 | Phase 6 | Complete |
 | PROC-02 | Phase 6 | Complete |
 | PLAN-01 | Phase 5 | Complete |
-| PLAN-02 | Phase 7 | Pending |
-| PLAN-03 | Phase 7 | Pending |
-| PLAN-04 | Phase 7 | Pending |
-| PLAN-05 | Phase 7 | Pending |
-| PLAN-06 | Phase 7 | Pending |
-| PLAN-07 | Phase 7 | Pending |
-| HEX-01 | Phase 7.1 | Pending |
+| PLAN-02 | Phase 7 (re-scoped to 7.1) | Complete (07.1-VERIFICATION, 2026-11-27) |
+| PLAN-03 | Phase 7 (re-scoped to 7.1) | Complete (07.1-VERIFICATION, 2026-11-27) |
+| PLAN-04 | Phase 7 (re-scoped to 7.1) | Complete (07.1-VERIFICATION, 2026-11-27) |
+| PLAN-05 | Phase 7 | Complete |
+| PLAN-06 | Phase 7 | Complete |
+| PLAN-07 | Phase 7 (re-scoped to 7.1) | Complete (07.1-VERIFICATION, 2026-11-27) |
+| HEX-01 | Phase 7.1 | Complete |
 | HEX-02 | Phase 7.1 | Complete |
 | HEX-03 | Phase 7.1 | Complete |
-| PERF-01 | Phase 7.1 | Pending |
+| PERF-01 | Phase 7.1 | Complete |
 | PERF-02 | Phase 7.1 | Complete |
 | PLAN-08 | Phase 8 | Complete (ring mesh, not a shader pass; ADR-0019) |
 | APP-01 | Phase 5 | Complete |
-| APP-02 | Phase 7 | Pending |
+| APP-02 | Phase 7 | Complete |
 | QA-01 | Phase 8 | Complete |
 | QA-02 | Phase 8 | Complete |
 | QA-03 | Phase 8 | Complete |

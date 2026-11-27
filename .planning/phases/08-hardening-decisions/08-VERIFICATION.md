@@ -1,7 +1,7 @@
 ---
 phase: 08-hardening-decisions
 verified: 2026-11-27T00:00:00Z
-status: human_needed
+status: passed
 score: 5/5 roadmap success criteria verified (code level); 2 human items not explicitly confirmed
 overrides_applied: 1
 overrides:
@@ -56,3 +56,7 @@ PLAN-08 (satisfied, ring-mesh deviation accepted), QA-01, QA-02, QA-03, WS-05: s
 ## Gaps
 
 None blocking. Status is human_needed only because the two items above (present-mode/title readout and F3 field-by-field) were never explicitly confirmed by the user.
+
+## Update 2026-11-27 (status human_needed -> passed)
+
+The original status above is kept as history. Both human items were later confirmed by the user, recorded in `08-VALIDATION.md` (manual verifications table): (1) present-mode readout, 07.1 caveat C2, confirmed from the user's startup-line paste for Immediate and Fifo (`fell_back: false`, 60 Hz refresh; window title is by design `alt | speed | hex Ln`); (2) F3 overlay confirmed from user screenshots (frame/prepare ms, selected/drawn, queue, uploads/starts, LOD histograms, values changing between hex L7 at 728.5 km and L16 at 974 m). Cosmetic findings (float counts, detail patches above the displayed cap) are in the post-Phase-8 visual feedback todo and are not gaps. The `overrides` entry (atmosphere ring, ADR-0019) is unchanged.
