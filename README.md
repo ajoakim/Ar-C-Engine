@@ -54,6 +54,13 @@ cargo run --release -p planetary-app --example planetary_flight -- --descent --f
 
 The full list of flags and the CSV columns is in [extensions/planetary/planetary-app/README.md](extensions/planetary/planetary-app/README.md).
 
+## Documentation
+
+- [Architecture overview](docs/architecture-overview.md): layers, crates, extension model, decision index
+- [SDK usage guide](docs/sdk-usage.md): building and running the examples, the `App` API, present mode, the F3 overlay, tests and benchmarks
+- [Assumptions](docs/assumptions.md) and [limitations](docs/limitations.md)
+- [Architecture Decision Records](docs/architecture/adr/README.md)
+
 ## Architecture
 
 - [Dependency direction](docs/architecture/dependency-direction.md)
