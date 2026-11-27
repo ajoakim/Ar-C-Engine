@@ -11,8 +11,11 @@
 //!
 //! Recommended: `cargo run --release -p planetary-app --example planetary_flight -- --descent --perf-log flight.csv`
 //!
-//! Usage: `planetary_flight [--topology <hex|cube>] [--debug-cells] [--headless <frames>] [--descent] [--ascent] [--frames <n>]
+//! Usage: `planetary_flight [--topology <hex|cube>] [--generator <1|2>] [--debug-cells] [--headless <frames>] [--descent] [--ascent] [--frames <n>]
 //! [--perf-log <file.csv>] [--no-console] [--bench-descent] [--budget-ms <ms>] [--strict]`
+//!
+//! `--generator <1|2>` selects the terrain generator version (default: the app default, v2); any other
+//! value is a usage error.
 //!
 //! `--topology` selects the planet: `hex` (default, icosahedral hexagonal cells, 16 cells per
 //! cell edge) or `cube` (cube-sphere reference, 32 cells per edge); any other value is a usage
@@ -61,8 +64,9 @@ use planetary_app::{
     ALTITUDE_BANDS, AppSettings, DescentScript, PlanetaryApp, TopologyKind, WallClock, band_of,
     spin_for_ms, summarize,
 };
+use planetary_core::TerrainParams;
 
-const USAGE: &str = "usage: planetary_flight [--topology <hex|cube>] [--debug-cells] [--headless <frames>] [--descent] [--ascent] [--frames <n>] [--perf-log <file.csv>] [--no-console] [--bench-descent] [--budget-ms <ms>] [--strict] [--bench-stream] [--fast] [--settle] [--no-adaptive] [--frame-ms <ms>] [--out <file.csv>] [--diagnostics] [--retain-frames <n>] [--present-mode <fifo|mailbox|immediate|auto>] [--frame-latency <1|2|3>] [--no-haze] [--no-atmosphere] [--always-reselect]";
+const USAGE: &str = "usage: planetary_flight [--topology <hex|cube>] [--debug-cells] [--headless <frames>] [--descent] [--ascent] [--frames <n>] [--perf-log <file.csv>] [--no-console] [--bench-descent] [--budget-ms <ms>] [--strict] [--bench-stream] [--fast] [--settle] [--no-adaptive] [--frame-ms <ms>] [--out <file.csv>] [--diagnostics] [--retain-frames <n>] [--present-mode <fifo|mailbox|immediate|auto>] [--frame-latency <1|2|3>] [--no-haze] [--no-atmosphere] [--always-reselect] [--generator <1|2>]";
 
 #[derive(Default, Clone, Copy)]
 struct BandMax {
@@ -246,6 +250,7 @@ fn main() -> Result<(), SdkError> {
     let mut adaptive = true;
     let mut topology = TopologyKind::Hex;
     let mut debug_cells = false;
+    let mut generator: Option<u32> = None;
     let mut present = PresentConfig::default();
     let mut haze = true;
     let mut atmosphere = true;
@@ -280,6 +285,14 @@ fn main() -> Result<(), SdkError> {
             }
             "--frame-latency" => {
                 present.frame_latency = parse_frame_latency(args.next()).ok_or_else(usage)?;
+            }
+            "--generator" => {
+                generator = Some(
+                    args.next()
+                        .and_then(|v| v.parse::<u32>().ok())
+                        .filter(|v| matches!(v, 1 | 2))
+                        .ok_or_else(usage)?,
+                );
             }
             "--no-haze" => haze = false,
             "--no-atmosphere" => atmosphere = false,
@@ -335,6 +348,12 @@ fn main() -> Result<(), SdkError> {
         TopologyKind::Cube => AppSettings::cube_default(),
     };
     settings.terrain.debug_cells = debug_cells;
+    if let Some(g) = generator {
+        settings.terrain.terrain = match g {
+            1 => TerrainParams::default(),
+            _ => TerrainParams::demo_v2(),
+        };
+    }
     settings.diagnostics = diagnostics;
     settings.haze = haze;
     settings.atmosphere = atmosphere;
@@ -449,6 +468,11 @@ mod tests {
         for n in ["1", "2", "3"] {
             assert!(super::parse_frame_latency(some(n)).is_some());
         }
+    }
+
+    #[test]
+    fn generator_flag_is_in_usage() {
+        assert!(super::USAGE.contains("--generator"));
     }
 
     #[test]
