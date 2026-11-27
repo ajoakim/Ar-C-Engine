@@ -8,43 +8,62 @@ An open-source, general-purpose 3D engine written in Rust, designed to support a
 
 The engine core must remain general-purpose and independent of any specialized capability (planetary rendering, physics, scripting, etc.) — specialized implementations are validated through demanding reference applications but never become assumptions embedded in the core.
 
+## Current State
+
+Shipped v1.0 (2026-11-27): about 55,300 lines of Rust across a tiered Cargo workspace (core, platform, render, world/spatial/assets, jobs/streaming/procedural, SDK, debug-ui, planetary extension), two SDK-only reference apps (conventional-3d, planetary-app) and ADRs 0001-0019. All 45 v1 requirements are complete; milestone accepted with tech debt (see `.planning/v1.0-MILESTONE-AUDIT.md`). The planetary reference runs on an H3-inspired hex topology with the cube-sphere kept as oracle.
+
 ## Requirements
 
 ### Validated
 
-(None yet — ship to validate)
+- ✓ Modular Rust workspace with enforced crate boundaries and dependency direction — v1.0
+- ✓ Engine lifecycle, configuration, module registration and minimal public SDK — v1.0
+- ✓ World/entity/transform/identity with multiple coordinate spaces and high-precision `WorldPos` — v1.0
+- ✓ Rendering framework with replaceable backend boundary, render graph and geometry-agnostic extraction — v1.0
+- ✓ Pluggable spatial interfaces with camera-relative transforms and origin rebasing — v1.0
+- ✓ Asset/resource lifecycle with stable IDs and CPU/GPU residency states — v1.0
+- ✓ Job scheduling and async streaming with priority, cancellation, coarse fallback and budgets — v1.0
+- ✓ Deterministic, independently seeded procedural generation framework — v1.0
+- ✓ Planetary extension (stable cell IDs, hex/cube topologies, planetary camera, orbit-to-surface) — v1.0
+- ✓ Screen-space-error terrain LOD, crack-free, never blocking render — v1.0
+- ✓ Two reference applications on the public SDK — v1.0
+- ✓ Diagnostics, tests (unit, integration, perf, image-diff) and ADRs for open decisions — v1.0
 
 ### Active
 
-- [ ] Establish a modular Rust workspace with clear crate boundaries and dependency direction favoring a small, stable engine core (Section 20.2)
-- [ ] Implement engine lifecycle (Initialize → Load → Running → Suspend → Shutdown), configuration, module registration, and a minimal public SDK
-- [ ] Implement world/scene/entity/transform/identity architecture supporting multiple coordinate spaces and high-precision positioning
-- [ ] Implement rendering framework with a replaceable backend boundary, render graph, and render-data extraction independent of geometry source
-- [ ] Implement spatial interfaces (query/visibility/region-lookup) behind pluggable backends, with camera-relative transforms and origin rebasing
-- [ ] Implement asset/resource lifecycle with stable identifiers, CPU/GPU residency states, and caching
-- [ ] Implement job scheduling and asynchronous streaming with priority, cancellation, coarse fallback, and memory budgets
-- [ ] Implement general-purpose procedural generation framework with deterministic, independently-seeded layers
-- [ ] Implement planetary extension as a separate module: cube-sphere topology, stable patch IDs, quadtree hierarchy, planetary camera with orbit-to-surface navigation
-- [ ] Implement screen-space-error terrain LOD with crack-free transitions, coarse fallback, and async generation/streaming that never blocks the render loop
-- [ ] Deliver two working reference applications (conventional 3D + planetary) built against the public SDK
-- [ ] Establish diagnostics, testing (unit/integration/reference/performance/regression), and ADRs for major technical decisions
+Next milestone not yet scoped; see "Next Milestone Goals". Run `/gsd-new-milestone`.
 
 ### Out of Scope (P0)
 
-- Editor / visual development environment — deferred to P2.5+ after runtime and SDK stabilize
+- Editor / visual development environment — deferred until runtime and SDK stabilize
 - Physics engine integration — future phase, optional capability
 - Gameplay scripting / scripting VM — future capability, not committed before evaluation
-- Large-scale ECS commitment — architecture must not prematurely commit to one ECS implementation
+- Large-scale ECS commitment — ADR-0017 spike did not justify adoption; revisit on evidence
 - Full geospatial data ingestion pipeline (NASA/USGS/Copernicus/etc.) — P2
 - Persistent world editing / modification overlays — P2
 - Full weather, day-night cycle, seasons, clouds — later phases
 - Plugin marketplace / dynamic plugin loading / external plugin ABI — deferred until a real requirement emerges
-- Ray tracing / advanced GPU-driven rendering — future rendering capabilities, not required for initial prototype
+- Ray tracing / advanced GPU-driven rendering — future rendering capabilities
 - Advanced simulation, comprehensive animation system — future phases
+
+## Next Milestone Goals
+
+From `.planning/todos/pending/2026-11-27-post-phase8-visual-feedback.md`:
+
+- LOD colour/detail transition: remove the blur-to-sharp pop at level changes (cross-fade or morph colour/detail, not only vertex geomorphing)
+- More terrain relief (hills, mountains) and height-based normals / bump shading
+- Free-flight camera degrees of freedom (roll, strafe, vertical, 6DOF)
+- Overlay fixes: integer counts, detail-patch used vs cap display
+
+Open tech debt to close:
+
+- IN-01 hard-coded toolchain version in CI; IN-02 overlay renderer ignores later format and scale changes; IN-03 image-diff tolerance can hide small regressions
+- 03-VALIDATION.md draft, and Nyquist validation gaps for phases 01-05
+- macOS image-diff goldens (no software adapter today); non-blocking bench job
 
 ## Context
 
-This project starts from a single source document: `HLD.md` (v2.0, ~2,257 lines), the High-Level Design authored as an architecture proposal and foundation for implementation. The repository contains no code yet — this is a greenfield start. The HLD's Section 22 ("First Coding-Agent Assignment") is the immediate implementation target: bootstrap a Rust workspace and deliver a working prototype (engine core, SDK foundation, rendering, spatial, planetary extension, terrain LOD, async generation/streaming, diagnostics, tests, docs) validated by two reference applications. Section 23 lists open technical decisions (rendering API, ECS, spatial backends, planet LOD/transition technique, etc.) that must be resolved through early P0 prototyping and benchmarking rather than assumed. Section 24's guiding statement: "Build a general-purpose engine that provides stable foundational capabilities and extensible interfaces. Validate those capabilities through demanding reference applications, beginning with planetary-scale rendering, while ensuring that specialized implementations remain independent of the engine core."
+This project starts from a single source document: `HLD.md` (v2.0, ~2,257 lines), the High-Level Design authored as an architecture proposal and foundation for implementation. The HLD's Section 22 ("First Coding-Agent Assignment") is the immediate implementation target: bootstrap a Rust workspace and deliver a working prototype (engine core, SDK foundation, rendering, spatial, planetary extension, terrain LOD, async generation/streaming, diagnostics, tests, docs) validated by two reference applications. Section 23 lists open technical decisions (rendering API, ECS, spatial backends, planet LOD/transition technique, etc.) that must be resolved through early P0 prototyping and benchmarking rather than assumed. Section 24's guiding statement: "Build a general-purpose engine that provides stable foundational capabilities and extensible interfaces. Validate those capabilities through demanding reference applications, beginning with planetary-scale rendering, while ensuring that specialized implementations remain independent of the engine core."
 
 ## Constraints
 
@@ -60,15 +79,17 @@ This project starts from a single source document: `HLD.md` (v2.0, ~2,257 lines)
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Use GSD (get-shit-done) as the multi-agent planning/execution workflow | User confirmed GSD is a good fit for phased, multi-agent development of this engine | — Pending |
-| Granularity: Standard (5-8 phases, 3-5 plans each) | Balanced phase size for a project of this scope | — Pending |
-| Execution: Parallel plans where independent | Speeds up independent deliverables (e.g., core vs. rendering vs. spatial) | — Pending |
-| Commit planning docs to git | Full traceability of planning artifacts | — Pending |
-| Research/Plan-check/Verifier agents enabled | Extra quality gates before/after each phase | — Pending |
-| Model profile: Balanced (Sonnet) | Good quality/cost ratio for most agents | — Pending |
-| Planet topology: H3-inspired hex grid (half-cell, 4-children nested scheme) instead of cube-sphere; real H3 rejected (non-nesting children leave ~7% gaps; needs trig) | User's original inspiration was Uber H3 (hex gives way to its parts on descent, aggregates on ascent). Research (HEX-TOPOLOGY.md) found a nested half-cell scheme that fits ADR-0008 exact arithmetic; cube-sphere kept behind a `Topology` trait as oracle/fallback; sphere spikes with a go/no-go gate before the full build; Nanite ideas borrowed (tight bounds, error rule, culling) but no cluster DAG yet. Decided 2026-11-25 after the Phase 7 flight found detail not streaming in | — Pending (Phase 7.1) |
-| Rendering API, ECS, spatial backends, planet LOD/transition technique | Deferred — must be decided via early P0 prototyping/benchmarking per HLD §23 | — Pending |
-| Hex planet topology: aperture-4 half-cell hierarchy on an icosahedron, gnomonic exact-op projection, `Topology` trait with cube-sphere as oracle (ADR-0011) | Hex cells give the visible LOD unit without H3 gaps or trigonometry in the deterministic path; proven by coverage and seam proofs and the full scripted descent at real defaults | Accepted (Phase 7.1) |
+| Use GSD (get-shit-done) as the multi-agent planning/execution workflow | User confirmed GSD is a good fit for phased, multi-agent development of this engine | ✓ Good (v1.0) |
+| Granularity: Standard (5-8 phases, 3-5 plans each) | Balanced phase size for a project of this scope | ✓ Good (v1.0) |
+| Execution: Parallel plans where independent | Speeds up independent deliverables (e.g., core vs. rendering vs. spatial) | ✓ Good (v1.0) |
+| Commit planning docs to git | Full traceability of planning artifacts | ✓ Good (v1.0) |
+| Research/Plan-check/Verifier agents enabled | Extra quality gates before/after each phase | ✓ Good (v1.0) |
+| Model profile: Balanced (Sonnet) | Good quality/cost ratio for most agents | ✓ Good (v1.0) |
+| Planet topology: H3-inspired hex grid (half-cell, 4-children nested scheme) instead of cube-sphere; real H3 rejected (non-nesting children leave ~7% gaps; needs trig) | User's original inspiration was Uber H3 (hex gives way to its parts on descent, aggregates on ascent). Research (HEX-TOPOLOGY.md) found a nested half-cell scheme that fits ADR-0008 exact arithmetic; cube-sphere kept behind a `Topology` trait as oracle/fallback; sphere spikes with a go/no-go gate before the full build; Nanite ideas borrowed (tight bounds, error rule, culling) but no cluster DAG yet. Decided 2026-11-25 after the Phase 7 flight found detail not streaming in | ✓ Good (v1.0, ADR-0011) |
+| Rendering API, ECS, spatial backends, planet LOD/transition technique | Decided via prototypes/benchmarks: wgpu (ADR-0005), hash-grid spatial (ADR-0006), no ECS in P0 (ADR-0017), geomorphing (ADR-0014) | ✓ Good (v1.0) |
+| Hex planet topology: aperture-4 half-cell hierarchy on an icosahedron, gnomonic exact-op projection, `Topology` trait with cube-sphere as oracle (ADR-0011) | Hex cells give the visible LOD unit without H3 gaps or trigonometry in the deterministic path; proven by coverage and seam proofs and the full scripted descent at real defaults | ✓ Good (v1.0) |
+| Atmosphere as limb-ring mesh, not shader pass (ADR-0019) | Cheapest minimal atmosphere meeting PLAN-08; user override accepted | ⚠️ Revisit if a true scattering pass is wanted |
+| egui debug overlay confined to debug-ui and an optional SDK feature (ADR-0018) | Diagnostics without egui leaking into core | ✓ Good (v1.0) |
 
 ## Evolution
 
@@ -88,4 +109,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-11-25 after initialization*
+*Last updated: 2026-11-27 after v1.0 milestone*

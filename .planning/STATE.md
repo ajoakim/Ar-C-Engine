@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: complete
-stopped_at: Phase 8 complete (12/12); 08-12 final gate and human flight done with caveats; Phase 07.1 complete 27/27
-last_updated: "2026-11-27T12:00:00.000Z"
+status: milestone_complete
+stopped_at: v1.0 milestone archived and tagged (local, not pushed)
+last_updated: "2026-11-27T20:00:00.000Z"
 last_activity: 2026-11-27
 progress:
   total_phases: 9
@@ -18,16 +18,16 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-11-25)
+See: .planning/PROJECT.md (updated 2026-11-27)
 
 **Core value:** The engine core stays general-purpose and independent of any specialized capability (planetary, physics, scripting).
-**Current focus:** Phase 8: Hardening & Decisions
+**Current focus:** v1.0 shipped; next milestone not yet defined (run /gsd-new-milestone)
 
 ## Current Position
 
-Phase: 8 (hardening & decisions) - complete with caveats
+Phase: none active. v1.0 milestone complete (9 phases, 90 plans, 45/45 requirements), archived in .planning/milestones/.
 Plan: 08-12 complete (12 of 12). Local gate green; human flight accepted: atmosphere ring accepted (ADR-0019), HLD.md left untracked. Caveats: F3 field check, plan 26 present-mode/title readout (C2) and numbers not explicitly confirmed. Visual feedback tracked in .planning/todos/pending/2026-11-27-post-phase8-visual-feedback.md. Not pushed.
-Status: Phase 8 complete
+Status: Milestone v1.0 complete (tag v1.0 local only, not pushed)
 Last activity: 2026-11-27
 
 Progress: [██████████] 100%
@@ -83,3 +83,12 @@ None yet.
 Last session: 2026-11-26T23:59:00.000Z
 Stopped at: Completed 08-12-PLAN.md
 Resume file: None
+
+## Deferred Items
+
+Items acknowledged and deferred at milestone close on 2026-11-27:
+
+| Category | Item | Status |
+|----------|------|--------|
+| todo | 2026-11-27-post-phase8-visual-feedback | pending (see PROJECT.md Next Milestone Goals) |
+| tech_debt | IN-01, IN-02, IN-03, 03-VALIDATION, Nyquist 01-05, macOS goldens | open (see v1.0-MILESTONE-AUDIT.md) |
