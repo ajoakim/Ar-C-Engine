@@ -308,8 +308,8 @@ impl AnyTerrain {
         each!(self, t => t.stream_budget())
     }
     #[cfg(feature = "debug-overlay")]
-    fn detail_budget_patches(&self) -> u64 {
-        each!(self, t => t.config().detail_budget_patches)
+    fn held_mesh_cap(&self) -> u64 {
+        each!(self, t => t.held_mesh_cap())
     }
     fn shutdown(self) {
         each!(self, t => t.shutdown());
@@ -593,7 +593,7 @@ impl PlanetaryApp {
             &self.terrain.drawn_levels(),
             &self.terrain.wanted_levels(),
             self.terrain.stream_budget(),
-            self.terrain.detail_budget_patches(),
+            self.terrain.held_mesh_cap(),
         )
     }
 

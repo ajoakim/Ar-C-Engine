@@ -28,7 +28,7 @@ pub fn build(
     drawn_levels: &[u8],
     wanted_levels: &[u8],
     budget: StreamBudget,
-    detail_budget_patches: u64,
+    held_mesh_cap: u64,
 ) -> DiagnosticsSnapshot {
     let mut s = DiagnosticsSnapshot::default()
         .histogram("LOD drawn", level_histogram(drawn_levels))
@@ -39,9 +39,9 @@ pub fn build(
         .gauge("queue in flight", sample.in_flight as f64)
         .gauge("queue awaiting upload", sample.awaiting_upload as f64)
         .budget(
-            "detail patches",
+            "held meshes (base+detail)",
             sample.held_meshes as f64,
-            detail_budget_patches as f64,
+            held_mesh_cap as f64,
         )
         .budget(
             "uploads/frame",
@@ -101,7 +101,7 @@ mod tests {
         assert_eq!(g("queue awaiting upload"), Some(2.0));
         let b = |name: &str| s.budgets.iter().find(|b| b.label == name).cloned().unwrap();
         assert_eq!(
-            (b("detail patches").used, b("detail patches").cap),
+            (b("held meshes (base+detail)").used, b("held meshes (base+detail)").cap),
             (750.0, 1500.0)
         );
         assert_eq!(
@@ -120,5 +120,22 @@ mod tests {
             build(&sample, &[2], &[], budget, 10)
         );
         assert!(level_histogram(&[]).is_empty());
+    }
+
+    #[test]
+    fn held_meshes_at_cap_is_not_over_cap() {
+        // Default cap is 526 base + 1500 detail = 2026; the flight showed 2026 held.
+        let (mut sample, budget) = inputs();
+        sample.held_meshes = 2026;
+        let s = build(&sample, &[], &[], budget, 2026);
+        let b = s
+            .budgets
+            .iter()
+            .find(|b| b.label == "held meshes (base+detail)")
+            .cloned()
+            .unwrap();
+        assert!(b.used <= b.cap);
+        assert_eq!(b.fraction(), 1.0);
+        assert!(s.budgets.iter().all(|b| b.label != "detail patches"));
     }
 }
