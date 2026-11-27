@@ -1,7 +1,9 @@
 //! Planetary reference app: orbit-to-surface flight over streamed terrain, SDK only.
 //!
 //! Controls: WASD/arrows move, E/Space up, Q/Ctrl down, Shift boost,
-//! hold right mouse button to look, Esc quits.
+//! hold right mouse button to look, Esc quits. With `--features debug-overlay` (windowed), F3
+//! toggles a read-only overlay: LOD histograms, streaming queue, memory and upload budgets,
+//! frame and prepare times.
 //!
 //! Recommended: `cargo run --release -p planetary-app --example planetary_flight -- --descent --perf-log flight.csv`
 //!

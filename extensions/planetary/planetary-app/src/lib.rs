@@ -374,6 +374,9 @@ pub struct PlanetaryApp {
     light: DirectionalLight,
     prev_pos: Option<DVec3>,
     pose_override: Option<(DVec3, engine_sdk::DQuat)>,
+    /// F3 toggles the read-only debug overlay (hidden at start).
+    #[cfg(feature = "debug-overlay")]
+    overlay_visible: bool,
 }
 
 /// Direction of the point the sun is anchored to: the end of the descent script, or the end of
@@ -454,6 +457,8 @@ impl PlanetaryApp {
             quit: false,
             prev_pos: None,
             pose_override: None,
+            #[cfg(feature = "debug-overlay")]
+            overlay_visible: false,
         })
     }
 
@@ -566,6 +571,13 @@ impl PlanetaryApp {
         )
     }
 
+    /// Whether the F3 overlay is currently shown.
+    #[cfg(feature = "debug-overlay")]
+    #[must_use]
+    pub fn overlay_visible(&self) -> bool {
+        self.overlay_visible
+    }
+
     #[must_use]
     pub fn camera(&self) -> &PlanetaryCamera {
         &self.camera
@@ -663,6 +675,16 @@ impl App for PlanetaryApp {
     }
 
     fn input(&mut self, event: &InputEvent, _scene: &mut SceneState) {
+        #[cfg(feature = "debug-overlay")]
+        if matches!(
+            event,
+            InputEvent::KeyPressed {
+                key: engine_sdk::KeyCode::F3,
+                repeat: false
+            }
+        ) {
+            self.overlay_visible = !self.overlay_visible;
+        }
         match *event {
             InputEvent::Resized { width, height } if height > 0 => {
                 self.viewport_h = height;
@@ -682,6 +704,11 @@ impl App for PlanetaryApp {
         ) {
             self.quit = true;
         }
+    }
+
+    #[cfg(feature = "debug-overlay")]
+    fn overlay_frame(&mut self) -> Option<engine_sdk::DiagnosticsSnapshot> {
+        self.overlay_visible.then(|| self.diagnostics_snapshot())
     }
 
     fn update(&mut self, dt: f64, scene: &mut SceneState) -> AppControl {

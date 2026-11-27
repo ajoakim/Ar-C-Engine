@@ -13,9 +13,10 @@ planetary-core = { path = "../planetary-core" }
 planetary-terrain = { path = "../planetary-terrain" }
 
 [features]
-# Debug overlay snapshot builder (off by default). The debug-ui painter and F3 wiring land in plan 08;
-# the APP-02 guard (tests/sdk_only.rs) keeps this crate SDK-only until then.
-debug-overlay = []
+# Read-only debug overlay (off by default), toggled with F3. The app only builds the snapshot;
+# the SDK feature `egui-overlay` owns debug-ui and the painter, so this crate stays SDK-only
+# (APP-02 guard, tests/sdk_only.rs) and names neither egui nor debug-ui.
+debug-overlay = ["engine-sdk/egui-overlay"]
 
 [lints]
 workspace = true

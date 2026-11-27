@@ -24,6 +24,7 @@ pub enum KeyCode {
     Space,
     Escape,
     Enter,
+    F3,
     ShiftLeft,
     ControlLeft,
     Other,
@@ -73,6 +74,7 @@ pub(crate) fn translate_physical_key(key: PhysicalKey) -> KeyCode {
             K::Space => KeyCode::Space,
             K::Escape => KeyCode::Escape,
             K::Enter => KeyCode::Enter,
+            K::F3 => KeyCode::F3,
             K::ShiftLeft => KeyCode::ShiftLeft,
             K::ControlLeft => KeyCode::ControlLeft,
             _ => KeyCode::Other,
@@ -147,6 +149,14 @@ pub(crate) fn translate_resize(size: PhysicalSize<u32>) -> InputEvent {
 mod tests {
     use super::*;
     use winit::keyboard::{KeyCode as WK, NativeKeyCode};
+
+    #[test]
+    fn input_maps_f3() {
+        assert_eq!(
+            translate_physical_key(PhysicalKey::Code(WK::F3)),
+            KeyCode::F3
+        );
+    }
 
     #[test]
     fn input_maps_wasd_and_escape() {
