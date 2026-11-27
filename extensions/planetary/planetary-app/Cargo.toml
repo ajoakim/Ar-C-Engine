@@ -14,3 +14,10 @@ planetary-terrain = { path = "../planetary-terrain" }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+name = "stream"
+harness = false

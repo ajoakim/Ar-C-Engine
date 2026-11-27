@@ -67,3 +67,21 @@ Bench: `extensions/planetary/planetary-core/benches/mesh.rs`. Production grids: 
 | mesh_build/cube_patch/level10_n32 | 1.60 ms | 1.56 ms - 1.62 ms |
 
 Observation: one mesh build is 1.6-2.8 ms single-threaded on this machine (hexagon 2.84 ms, pentagon 2.00 ms, cube patch 1.56-1.60 ms; patch level has no measurable effect, as expected since the grid size is fixed).
+
+## Streaming / prepare frames
+
+Bench: `extensions/planetary/planetary-app/benches/stream.rs`. The real `PlanetaryApp` on the SDK `NullBackend`, scripted 8 s orbit-to-surface descent at dt = 1/60 s, `settle_each_frame = true` (each frame waits for its terrain requests, so the sequence is deterministic; `PlanetaryApp::new` uses a `SimClock`). `run_stream` is not used because it is wall-clock paced. Settings: hex = `AppSettings::default()` (16 cells per side), cube = `AppSettings::cube_default()` (32 per edge). Each sample builds a fresh app and warms it untimed, then times 30 frames. `orbit_start` = frames 0-30 (includes the initial generation burst); `low_altitude` = frames 400-430 of 480 (last stretch of the descent). `sample_size(10)`; median of 3 runs, then (min - max).
+
+| case (30 frames) | median | range | per frame |
+|------------------|--------|-------|-----------|
+| hex / orbit_start | 293.0 ms | 291.4 - 294.8 ms | 9.8 ms |
+| hex / low_altitude | 394.4 ms | 391.9 - 395.3 ms | 13.1 ms |
+| cube / orbit_start | 246.7 ms | 245.9 - 247.6 ms | 8.2 ms |
+| cube / low_altitude | 290.4 ms | 288.8 - 291.5 ms | 9.7 ms |
+
+Observation: run-to-run spread is under 2 percent. The hex low-altitude frame (13.1 ms per frame) agrees with the roughly 14 ms figure cited in ADR-0015. Because workers are settled each frame these are CPU-cost numbers (select + generate + mesh + upload extraction), not a measure of streaming latency; the figure also includes `rt.frame` overhead on the null backend (no GPU work).
+
+## Caveats
+
+- `--quick` mode, 3 runs per bench, one machine, desktop OS with background processes. Numbers are for relative comparison and regression-spotting, not absolute budgets.
+- Cube and hex are configured with their respective app defaults (32 vs 16 cells per edge), so the cube-vs-hex rows are not like-for-like grid sizes.
