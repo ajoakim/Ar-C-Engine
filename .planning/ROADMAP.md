@@ -124,3 +124,10 @@ Plans:
 ## Backlog
 
 Candidates live in `.planning/todos/pending/`; the post-Phase-8 visual feedback todo is covered by Phases 9-12.
+
+### Phase 999.1: Planet generator from seed (BACKLOG)
+
+**Goal:** Create a planet from a seed with a size and mass, as an archetype (earth-like, rocky, gas giant, ice, hot/lava), with water and a config for mountain height and sharpness, with or without an atmosphere; later simulate a star system of one, two or three stars.
+**Requirements:** TBD (candidate milestone v1.2)
+**Plans:** 0 plans
+Detail: `.planning/todos/pending/2026-11-27-planet-generator-from-seed.md`
