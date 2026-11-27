@@ -400,34 +400,32 @@ fn main() -> Result<(), SdkError> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     fn some(s: &str) -> Option<String> {
         Some(s.to_string())
     }
 
     #[test]
     fn present_mode_flag_is_strict() {
-        assert_eq!(parse_present_mode(some("bogus")), None);
-        assert_eq!(parse_present_mode(None), None);
-        assert_eq!(parse_present_mode(some("Fifo")), None);
+        assert_eq!(super::parse_present_mode(some("bogus")), None);
+        assert_eq!(super::parse_present_mode(None), None);
+        assert_eq!(super::parse_present_mode(some("Fifo")), None);
         assert_eq!(
-            parse_present_mode(some("mailbox")),
-            Some(PresentModeSetting::Mailbox)
+            super::parse_present_mode(some("mailbox")),
+            Some(engine_sdk::PresentModeSetting::Mailbox)
         );
         assert_eq!(
-            parse_present_mode(some("auto")),
-            Some(PresentModeSetting::Auto)
+            super::parse_present_mode(some("auto")),
+            Some(engine_sdk::PresentModeSetting::Auto)
         );
     }
 
     #[test]
     fn frame_latency_flag_is_strict() {
-        assert!(parse_frame_latency(some("0")).is_none());
-        assert!(parse_frame_latency(some("4")).is_none());
-        assert!(parse_frame_latency(None).is_none());
+        assert!(super::parse_frame_latency(some("0")).is_none());
+        assert!(super::parse_frame_latency(some("4")).is_none());
+        assert!(super::parse_frame_latency(None).is_none());
         for n in ["1", "2", "3"] {
-            assert!(parse_frame_latency(some(n)).is_some());
+            assert!(super::parse_frame_latency(some(n)).is_some());
         }
     }
 
@@ -439,7 +437,7 @@ mod tests {
             "--no-haze",
             "--topology",
         ] {
-            assert!(USAGE.contains(f), "{f}");
+            assert!(super::USAGE.contains(f), "{f}");
         }
     }
 }
