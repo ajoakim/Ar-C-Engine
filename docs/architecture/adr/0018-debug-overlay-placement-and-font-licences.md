@@ -32,6 +32,7 @@ The Phase 8 debug overlay (QA-02) draws a `DiagnosticsSnapshot` with egui. Two c
 - Until plan 08-08 adds the painter, no crate depends on `egui-wgpu`, so `cargo deny check` prints a benign unused-wrapper warning for the `egui-wgpu` wrapper. This is a known transitional state and not a failure.
 - The allow list is wider by two font licences. Any further licence still needs its own explicit decision.
 - The SDK gains a feature-gated hand-off for overlay output; the default build is unchanged.
+- Plan 08-08 landed the painter. Hand-off as built: `App::overlay_frame` (SDK feature `egui-overlay`) returns a `DiagnosticsSnapshot`; the SDK (tier 5) owns the egui context, runs `debug_ui::frame_shapes`, and stages the result on `WgpuBackend::set_overlay` right before submit, so the overlay pass runs in the same encoder before present. `planetary-app` only produces the snapshot and keeps the APP-02 guard (no `debug-ui`/`egui` dependency). The unused `egui-wgpu` wrapper warning in `cargo deny check` is gone.
 
 ## Evidence
 
