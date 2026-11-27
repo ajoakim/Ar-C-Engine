@@ -97,21 +97,37 @@ pub fn frame_shapes(
     time: f64,
     snapshot: &DiagnosticsSnapshot,
 ) -> FrameShapes {
+    frame_shapes_observed(ctx, size, time, snapshot, |_| {})
+}
+
+/// [`frame_shapes`] that reports the clock egui sees at the start of each pass to `on_pass`.
+fn frame_shapes_observed(
+    ctx: &Context,
+    size: [f32; 2],
+    time: f64,
+    snapshot: &DiagnosticsSnapshot,
+    mut on_pass: impl FnMut(f64),
+) -> FrameShapes {
     let sane = |v: f32| if v.is_finite() && v > 1.0 { v } else { 1.0 };
     let screen = Rect::from_min_size(egui::Pos2::ZERO, Vec2::new(sane(size[0]), sane(size[1])));
     let time = if time.is_finite() { time } else { 0.0 };
     // egui lays a new window out invisibly on its first pass, so run two passes and keep the
-    // second one's shapes; texture deltas of both passes are merged for the painter.
+    // second one's shapes; texture deltas of both passes are merged for the painter. Both passes
+    // use the same `time`: offsetting the second by a fixed step would run egui's clock ahead of
+    // the caller's next frame whenever its dt is shorter than that step, so time went backwards.
     let mut textures_delta = egui::TexturesDelta::default();
     let mut pixels_per_point = 1.0;
     let mut primitives = Vec::new();
-    for pass in 0..2 {
+    for _pass in 0..2 {
         let input = RawInput {
             screen_rect: Some(screen),
-            time: Some(time + f64::from(pass) / 60.0),
+            time: Some(time),
             ..RawInput::default()
         };
-        let output = ctx.run_ui(input, |ui| overlay(ui.ctx(), snapshot));
+        let output = ctx.run_ui(input, |ui| {
+            on_pass(ui.ctx().input(|i| i.time));
+            overlay(ui.ctx(), snapshot);
+        });
         pixels_per_point = output.pixels_per_point;
         primitives = ctx.tessellate(output.shapes, pixels_per_point);
         textures_delta.append(output.textures_delta);
@@ -143,6 +159,26 @@ mod tests {
         let mut out = frame_shapes(&ctx, [800.0, 600.0], 0.0, &snapshot());
         assert!(!out.primitives.is_empty());
         out.textures_delta.clear();
+    }
+
+    #[test]
+    fn clock_never_goes_backwards_at_144hz() {
+        let ctx = Context::default();
+        let dt = 1.0 / 144.0;
+        let snap = snapshot();
+        let mut time = 0.0;
+        let mut last = f64::NEG_INFINITY;
+        let mut passes = 0;
+        for _ in 0..200 {
+            time += dt;
+            let mut out = frame_shapes_observed(&ctx, [800.0, 600.0], time, &snap, |t| {
+                assert!(t >= last, "egui clock went backwards: {last} -> {t}");
+                last = t;
+                passes += 1;
+            });
+            out.textures_delta.clear();
+        }
+        assert_eq!(passes, 400);
     }
 
     #[test]
