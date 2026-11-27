@@ -11,7 +11,7 @@
 - [x] **WS-02**: Workspace is split into coarse crates with documented dependency direction (core never depends on extensions)
 - [x] **WS-03**: CI fails if any core crate depends on an extension crate, or if wgpu/winit appear outside their designated crates
 - [x] **WS-04**: An ADR template exists and a conventions ADR fixes units (meters), axes, handedness, and depth range
-- [ ] **WS-05**: Open technical decisions (rendering API, ECS, spatial backend, LOD transition technique) are each recorded as ADRs backed by prototype or benchmark
+- [x] **WS-05**: Open technical decisions (rendering API, ECS, spatial backend, LOD transition technique) are each recorded as ADRs backed by prototype or benchmark
 
 ### Engine Core
 
@@ -118,7 +118,7 @@
 | WS-02 | Phase 1 | Complete |
 | WS-03 | Phase 1 | Complete |
 | WS-04 | Phase 1 | Complete |
-| WS-05 | Phase 8 | Pending |
+| WS-05 | Phase 8 | Complete |
 | CORE-01 | Phase 2 | Complete |
 | CORE-02 | Phase 2 | Complete |
 | CORE-03 | Phase 3 | Complete |

@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 8 in progress; 08-04 (criterion benches) complete; Phase 07.1 complete 27/27 (human flight approved with caveats)
+stopped_at: Phase 8 in progress; 08-05 (ECS spike, ADR-0017, ADR amendments) complete; Phase 07.1 complete 27/27 (human flight approved with caveats)
 last_updated: "2026-11-27T05:30:38.960Z"
 last_activity: 2026-11-27
 progress:
   total_phases: 9
   completed_phases: 8
   total_plans: 90
-  completed_plans: 80
+  completed_plans: 81
   percent: 88
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-11-25)
 ## Current Position
 
 Phase: 8 (hardening & decisions) - in progress
-Plan: 08-04 complete (08-01, 08-02, 08-03 done); 4 of 12 plans summarised. Phase 07.1 is complete 27/27 (human flight approved with caveats: visuals not definitive until meshes exist; plan 26 present-mode/title unexercised by human)
+Plan: 08-05 complete (08-01 to 08-04 done); 5 of 12 plans summarised. WS-05 decisions each cite a prototype or benchmark. Phase 07.1 is complete 27/27 (human flight approved with caveats: visuals not definitive until meshes exist; plan 26 present-mode/title unexercised by human)
 Status: Phase 8 executing
 Last activity: 2026-11-27
 
