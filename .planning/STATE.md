@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 07.1-26-PLAN.md
+stopped_at: Completed 07.1-27-PLAN.md
 last_updated: "2026-11-26T23:59:00.000Z"
 last_activity: 2026-11-26
 progress:
   total_phases: 9
   completed_phases: 6
   total_plans: 78
-  completed_plans: 76
-  percent: 97
+  completed_plans: 77
+  percent: 99
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-11-25)
 ## Current Position
 
 Phase: 07.1 (hex-grid planet topology & descent performance)
-Plan: 27 of 27 (Current Plan: 27, Total Plans in Phase: 27)
-Status: Ready to execute
+Plan: 27 of 27 complete (next: 07.1-18, the final gate with the human flight; Total Plans in Phase: 27)
+Status: Ready for the final gate
 Last activity: 2026-11-26
 
-Progress: [█████████░] 97%
+Progress: [█████████░] 99%
 
 ## Performance Metrics
 
@@ -64,6 +64,7 @@ Progress: [█████████░] 97%
 - 07.1-25: generator v2 (`generator_version`, ridge layer) is the app default; rock-slope thresholds calibrated to measured slopes (LO 1e-5, HI 1e-4); v2 costs about +23 % worker time (hex stream +23 %, descent p95 hex 13.7-15.4 ms), flagged for plan 26+.
 
 - 07.1-26: present mode setting (default Fifo/2) with pure fallback selection; startup info and title via SDK host; windowed run: Fifo frames 31 ms with 11 ms CPU (present-bound), Immediate 4.6 ms, Mailbox unsupported on the Arc B580; default unchanged (ADR-0016).
+- 07.1-27: hex prepare profiled per scope (footprint 2.8 us/call was the cost); per-thread footprint memo, range memo, faster pieces and request planning, provably safe selection reuse (SelectSlack), all output-identical with equality tests; hex worst-band prepare p95 9.8-11.1 -> 3.6-3.75 ms, descent p95 10.9 -> 4.1 ms; no bound or default changed; frames-to-detail gain on adaptive runs only (generator-bound otherwise).
 
 ### Pending Todos
 
@@ -77,5 +78,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-11-26T23:59:00.000Z
-Stopped at: Completed 07.1-26-PLAN.md
+Stopped at: Completed 07.1-27-PLAN.md
 Resume file: None
