@@ -6,6 +6,7 @@
 
 pub mod atmosphere;
 pub mod descent;
+pub mod free_flight;
 pub mod overlay_snapshot;
 pub mod stream_bench;
 pub mod telemetry;
