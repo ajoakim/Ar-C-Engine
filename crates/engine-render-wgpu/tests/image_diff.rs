@@ -85,8 +85,10 @@ fn compare(
     let mut bad = 0usize;
     let mut diff = vec![0u8; want];
     for (i, (a, g)) in actual
-        .chunks_exact(4)
-        .zip(golden.chunks_exact(4))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(golden.as_chunks::<4>().0.iter())
         .enumerate()
     {
         let d = (0..4).map(|c| a[c].abs_diff(g[c])).max().unwrap_or(0);
