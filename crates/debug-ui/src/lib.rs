@@ -23,8 +23,21 @@ pub struct FrameShapes {
     pub pixels_per_point: f32,
 }
 
-/// Text for a value; non-finite values print as `n/a`.
-fn fmt_value(v: f64) -> String {
+/// Text for a gauge or budget number: whole numbers print as integers (`593`), fractional ones
+/// keep two decimals, non-finite values print `n/a`. A ratio that is exactly `1.0` therefore
+/// prints as `1`; times use [`fmt_ms`] and always keep decimals.
+fn fmt_count(v: f64) -> String {
+    if !v.is_finite() {
+        "n/a".to_string()
+    } else if v.fract() == 0.0 && v.abs() < 1e15 {
+        format!("{}", v as i64)
+    } else {
+        format!("{v:.2}")
+    }
+}
+
+/// Text for a duration in milliseconds: always two decimals, non-finite prints `n/a`.
+fn fmt_ms(v: f64) -> String {
     if v.is_finite() {
         format!("{v:.2}")
     } else {
@@ -32,23 +45,33 @@ fn fmt_value(v: f64) -> String {
     }
 }
 
+/// Header line of the panel (frame and prepare times).
+fn header_text(snapshot: &DiagnosticsSnapshot) -> String {
+    format!(
+        "frame {} ms  prepare {} ms",
+        fmt_ms(snapshot.frame_ms),
+        fmt_ms(snapshot.prepare_ms)
+    )
+}
+
+/// Text of one gauge row.
+fn gauge_text(label: &str, value: f64) -> String {
+    format!("{label}: {}", fmt_count(value))
+}
+
 /// Draw the snapshot into `ui`: frame/prepare ms, gauges, one progress bar per budget and one
 /// bar histogram per histogram. Non-finite numbers are sanitised, never laid out.
 pub fn panel(ui: &mut Ui, snapshot: &DiagnosticsSnapshot) {
-    ui.label(format!(
-        "frame {} ms  prepare {} ms",
-        fmt_value(snapshot.frame_ms),
-        fmt_value(snapshot.prepare_ms)
-    ));
+    ui.label(header_text(snapshot));
     for (label, value) in &snapshot.gauges {
-        ui.label(format!("{label}: {}", fmt_value(*value)));
+        ui.label(gauge_text(label, *value));
     }
     for budget in &snapshot.budgets {
         let text = format!(
             "{}: {} / {}",
             budget.label,
-            fmt_value(budget.used),
-            fmt_value(budget.cap)
+            fmt_count(budget.used),
+            fmt_count(budget.cap)
         );
         // `fraction()` is finite and within [0, 1] by construction.
         ui.add(egui::ProgressBar::new(budget.fraction() as f32).text(text));
@@ -89,27 +112,40 @@ pub fn overlay(ctx: &Context, snapshot: &DiagnosticsSnapshot) {
 }
 
 /// Run one headless egui frame of the overlay and tessellate it. `size` is the screen size in
-/// points and `time` the frame time in seconds; both are sanitised when not finite.
+/// physical pixels, `scale_factor` the window scale (pixels per point; invalid values fall back
+/// to 1.0, capped at 8.0) and `time` the frame time in seconds; all are sanitised when not
+/// finite.
 #[must_use]
 pub fn frame_shapes(
     ctx: &Context,
     size: [f32; 2],
+    scale_factor: f32,
     time: f64,
     snapshot: &DiagnosticsSnapshot,
 ) -> FrameShapes {
-    frame_shapes_observed(ctx, size, time, snapshot, |_| {})
+    frame_shapes_observed(ctx, size, scale_factor, time, snapshot, |_| {})
 }
 
 /// [`frame_shapes`] that reports the clock egui sees at the start of each pass to `on_pass`.
 fn frame_shapes_observed(
     ctx: &Context,
     size: [f32; 2],
+    scale_factor: f32,
     time: f64,
     snapshot: &DiagnosticsSnapshot,
     mut on_pass: impl FnMut(f64),
 ) -> FrameShapes {
     let sane = |v: f32| if v.is_finite() && v > 1.0 { v } else { 1.0 };
-    let screen = Rect::from_min_size(egui::Pos2::ZERO, Vec2::new(sane(size[0]), sane(size[1])));
+    let scale = if scale_factor.is_finite() && scale_factor > 0.0 {
+        scale_factor.min(8.0)
+    } else {
+        1.0
+    };
+    ctx.set_pixels_per_point(scale);
+    let screen = Rect::from_min_size(
+        egui::Pos2::ZERO,
+        Vec2::new(sane(size[0]) / scale, sane(size[1]) / scale),
+    );
     let time = if time.is_finite() { time } else { 0.0 };
     // egui lays a new window out invisibly on its first pass, so run two passes and keep the
     // second one's shapes; texture deltas of both passes are merged for the painter. Both passes
@@ -146,7 +182,7 @@ mod tests {
     fn snapshot() -> DiagnosticsSnapshot {
         let mut s = DiagnosticsSnapshot::default()
             .gauge("drawn", 120.0)
-            .budget("detail patches", 900.0, 1500.0)
+            .budget("held meshes (base+detail)", 900.0, 1500.0)
             .histogram("LOD drawn", vec![0, 3, 9, 27]);
         s.frame_ms = 8.3;
         s.prepare_ms = 1.2;
@@ -156,7 +192,7 @@ mod tests {
     #[test]
     fn non_empty_snapshot_tessellates() {
         let ctx = Context::default();
-        let mut out = frame_shapes(&ctx, [800.0, 600.0], 0.0, &snapshot());
+        let mut out = frame_shapes(&ctx, [800.0, 600.0], 1.0, 0.0, &snapshot());
         assert!(!out.primitives.is_empty());
         out.textures_delta.clear();
     }
@@ -171,7 +207,7 @@ mod tests {
         let mut passes = 0;
         for _ in 0..200 {
             time += dt;
-            let mut out = frame_shapes_observed(&ctx, [800.0, 600.0], time, &snap, |t| {
+            let mut out = frame_shapes_observed(&ctx, [800.0, 600.0], 1.0, time, &snap, |t| {
                 assert!(t >= last, "egui clock went backwards: {last} -> {t}");
                 last = t;
                 passes += 1;
@@ -194,8 +230,58 @@ mod tests {
             .histogram("long", vec![1; 10_000]);
         s.frame_ms = f64::NEG_INFINITY;
         s.prepare_ms = f64::NAN;
-        let mut out = frame_shapes(&ctx, [f32::NAN, f32::INFINITY], f64::NAN, &s);
+        let mut out = frame_shapes(&ctx, [f32::NAN, f32::INFINITY], f32::NAN, f64::NAN, &s);
         assert!(!out.primitives.is_empty());
         out.textures_delta.clear();
+    }
+
+    #[test]
+    fn counts_are_integers_times_keep_decimals() {
+        assert_eq!(fmt_count(593.0), "593");
+        assert_eq!(fmt_count(0.0), "0");
+        assert_eq!(fmt_count(2.5), "2.50");
+        assert_eq!(fmt_count(-3.0), "-3");
+        assert_eq!(fmt_count(f64::NAN), "n/a");
+        assert_eq!(fmt_count(f64::INFINITY), "n/a");
+        let big = fmt_count(1e20);
+        assert!(big.contains('.'), "large values must not use a lossy cast: {big}");
+        assert_eq!(fmt_ms(8.3), "8.30");
+        assert_eq!(fmt_ms(8.0), "8.00");
+        assert_eq!(fmt_ms(f64::NAN), "n/a");
+    }
+
+    #[test]
+    fn row_text_uses_integer_counts() {
+        assert_eq!(gauge_text("selected", 593.0), "selected: 593");
+        assert_eq!(header_text(&snapshot()), "frame 8.30 ms  prepare 1.20 ms");
+    }
+
+    #[test]
+    fn scale_factor_scales_layout_and_ppp() {
+        let first_x = |scale: f32, size: [f32; 2]| {
+            let ctx = Context::default();
+            let mut out = frame_shapes(&ctx, size, scale, 0.0, &snapshot());
+            out.textures_delta.clear();
+            let x = out
+                .primitives
+                .iter()
+                .find_map(|p| match &p.primitive {
+                    egui::epaint::Primitive::Mesh(m) => m.vertices.first().map(|v| v.pos.x),
+                    egui::epaint::Primitive::Callback(_) => None,
+                })
+                .expect("a mesh");
+            (out.pixels_per_point, x)
+        };
+        let (p1, x1) = first_x(1.0, [800.0, 600.0]);
+        let (p2, x2) = first_x(2.0, [1600.0, 1200.0]);
+        assert!((p1 - 1.0).abs() < 1e-6);
+        assert!((p2 - 2.0).abs() < 1e-6);
+        // Tessellated vertices are in points (the painter multiplies by pixels_per_point), so
+        // the same 800x600-point screen gives the same point layout at both scales.
+        assert!((x2 - x1).abs() < 0.5, "x1 {x1} x2 {x2}");
+        for bad in [f32::NAN, 0.0, -2.0, f32::INFINITY] {
+            let (p, _) = first_x(bad, [800.0, 600.0]);
+            assert!((p - 1.0).abs() < 1e-6, "scale {bad} -> ppp {p}");
+        }
     }
 }
