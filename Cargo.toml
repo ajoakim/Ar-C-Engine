@@ -66,3 +66,9 @@ slotmap = "1.1.1"
 uuid = { version = "1.29.3", default-features = false, features = ["v5"] }
 gltf = { version = "1.4.1", default-features = false, features = ["import", "utils", "names"] }
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg"] }
+# Phase 8: dev/bench/overlay only; egui-wgpu only in engine-render-wgpu (deny.toml), hecs only in spikes/ecs-bench
+png = "0.18.1"
+criterion = { version = "0.8.2", default-features = false, features = ["cargo_bench_support"] }
+egui = { version = "0.37.0", default-features = false, features = ["default_fonts"] }
+egui-wgpu = { version = "0.37.0", default-features = false }
+hecs = "0.11.2"
