@@ -224,7 +224,20 @@ Plans:
   3. CI runs unit, integration, criterion performance, and image-diff regression tests on a software adapter
   4. Architecture, assumptions, limitations and SDK usage docs exist
   5. ADRs for rendering API, ECS, spatial backend and LOD transition technique each cite a prototype or benchmark
-**Plans**: TBD
+**Plans**: 12 plans
+Plans:
+- [ ] 08-01-PLAN.md — Confirm hosted CI green on pushed 07.1 commits, record cross-OS goldens, fix failures
+- [ ] 08-02-PLAN.md — Carry-overs (07-VERIFICATION, STATE) and workspace dependency pins
+- [ ] 08-03-PLAN.md — Software-adapter constructor, image-diff harness, goldens, CI image job
+- [ ] 08-04-PLAN.md — Criterion benches (spatial, selection, mesh, streaming)
+- [ ] 08-05-PLAN.md — ecs-bench spike, ADR-0017, amendments to ADR 0005/0006/0010
+- [ ] 08-06-PLAN.md — DiagnosticsSnapshot, debug-ui crate, planetary snapshot builder
+- [ ] 08-07-PLAN.md — Overlay policy: font licences, egui-wgpu wrapper, xtask R2 fixture, ADR-0018
+- [ ] 08-08-PLAN.md — egui-wgpu painter, SDK hand-off, F3 overlay
+- [ ] 08-09-PLAN.md — Architecture, assumptions, limitations, SDK usage docs
+- [ ] 08-10-PLAN.md — Minimal atmosphere limb ring, ADR-0019 (cuttable)
+- [ ] 08-11-PLAN.md — Non-blocking bench job, hosted goldens, CI evidence
+- [ ] 08-12-PLAN.md — Final gate, human flight, HLD.md decision, bookkeeping
 **UI hint**: yes
 
 ## Progress
