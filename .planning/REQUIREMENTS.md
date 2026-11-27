@@ -37,11 +37,11 @@ Scope rule for every requirement below: planetary-specific work (terrain generat
 
 ### DEBT: Tech-debt sweep
 
-- [ ] **DEBT-01**: (IN-01) CI derives the expected Rust toolchain version from `rust-toolchain.toml` instead of a hard-coded `1.99.0` string; bumping the toolchain needs one edit.
-- [ ] **DEBT-02**: (IN-02) The overlay renderer is rebuilt when the surface format changes (and the font atlas re-uploaded), and an optional window scale factor can be passed so the overlay is not tiny on HiDPI windows.
-- [ ] **DEBT-03**: (IN-03) Image-diff tolerance uses an absolute bad-pixel cap (or tighter fraction) so a small-feature regression fails, and a negative control proves a small change is caught while the max-delta report is kept.
-- [ ] **DEBT-04**: Overlay counts (selected, queue pending, detail patches, etc.) render as integers; only genuinely fractional values (times, ratios) show decimals.
-- [ ] **DEBT-05**: The "detail patches used / cap" overlay line is explained and fixed: either the cap is enforced and used never exceeds it, or the label states the cap is soft and what the two numbers mean; a test pins the behaviour.
+- [x] **DEBT-01**: (IN-01) CI derives the expected Rust toolchain version from `rust-toolchain.toml` instead of a hard-coded `1.99.0` string; bumping the toolchain needs one edit.
+- [x] **DEBT-02**: (IN-02) The overlay renderer is rebuilt when the surface format changes (and the font atlas re-uploaded), and an optional window scale factor can be passed so the overlay is not tiny on HiDPI windows.
+- [x] **DEBT-03**: (IN-03) Image-diff tolerance uses an absolute bad-pixel cap (or tighter fraction) so a small-feature regression fails, and a negative control proves a small change is caught while the max-delta report is kept.
+- [x] **DEBT-04**: Overlay counts (selected, queue pending, detail patches, etc.) render as integers; only genuinely fractional values (times, ratios) show decimals.
+- [x] **DEBT-05**: The "detail patches used / cap" overlay line is explained and fixed: either the cap is enforced and used never exceeds it, or the label states the cap is soft and what the two numbers mean; a test pins the behaviour.
 - [ ] **DEBT-06**: `03-VALIDATION.md` is completed: Wave 0 rows resolved against the current tests, `nyquist_compliant` and `wave_0_complete` set truthfully.
 - [ ] **DEBT-07**: Nyquist validation gaps for phases 01 and 02 are audited and filled (tests added or a recorded justification per gap), VALIDATION.md frontmatter updated.
 - [ ] **DEBT-08**: Nyquist validation gaps for phases 04 and 05 are audited and filled likewise.
@@ -75,11 +75,11 @@ Deferred, not in v1.1.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DEBT-01 | Phase 9 | Pending |
-| DEBT-02 | Phase 9 | Pending |
-| DEBT-03 | Phase 9 | Pending |
-| DEBT-04 | Phase 9 | Pending |
-| DEBT-05 | Phase 9 | Pending |
+| DEBT-01 | Phase 9 | Complete |
+| DEBT-02 | Phase 9 | Complete |
+| DEBT-03 | Phase 9 | Complete |
+| DEBT-04 | Phase 9 | Complete |
+| DEBT-05 | Phase 9 | Complete |
 | CAM-01 | Phase 10 | Pending |
 | CAM-02 | Phase 10 | Pending |
 | CAM-03 | Phase 10 | Pending |

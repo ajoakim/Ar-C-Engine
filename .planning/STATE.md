@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-11-27)
 
 ## Current Position
 
-Phase: Not started (roadmap created, next: Phase 9)
-Plan: 09-01, 09-02 and 09-03 complete (3/4 in Phase 9)
-Status: Executing Phase 9
-Last activity: 2026-11-27 — Completed 09-01 (CI toolchain single-sourced, image-diff absolute pixel cap)
+Phase: 9 (Overlay, CI & Test Hygiene) - complete; next: Phase 10
+Plan: 09-01..09-04 complete (4/4 in Phase 9)
+Status: Phase 9 complete (gate green)
+Last activity: 2026-11-27 - Completed 09-04 (full local gate green, DEBT-01..05 closed)
 
 ## Performance Metrics
 

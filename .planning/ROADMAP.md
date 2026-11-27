@@ -18,7 +18,7 @@ Phases 1-8 plus inserted Phase 7.1, 90 plans, 45/45 requirements. Full details: 
 
 **Milestone Goal:** Make the planetary reference look and fly better (seamless LOD detail transitions, real terrain relief with lit normals, 6DOF free flight) while closing the v1.0 tech debt, without adding planetary assumptions to the engine core.
 
-- [ ] **Phase 9: Overlay, CI & Test Hygiene** - Close IN-01..03 and fix overlay count formatting and the detail-patch cap display
+- [x] **Phase 9: Overlay, CI & Test Hygiene** - Close IN-01..03 and fix overlay count formatting and the detail-patch cap display
 - [ ] **Phase 10: Free-Flight 6DOF Camera** - Roll, strafe and vertical movement in the planetary example without breaking orbit-to-surface flight
 - [ ] **Phase 11: Terrain Relief & Normals** - Generator v3 with hills and mountains plus height-derived normals and bump shading
 - [ ] **Phase 12: LOD Detail Transition** - Remove the blur-then-sharpen pop at level changes with a blended colour/detail transition
@@ -42,7 +42,7 @@ Plans:
 - [x] 09-01-PLAN.md — CI derives toolchain from rust-toolchain.toml; image-diff absolute bad-pixel cap + small-change negative control (DEBT-01, DEBT-03)
 - [x] 09-02-PLAN.md — Held-mesh overlay line uses the true base+detail cap, pinned by tests (DEBT-05)
 - [x] 09-03-PLAN.md — Integer counts, painter rebuild on format change, window scale factor (DEBT-02, DEBT-04)
-- [ ] 09-04-PLAN.md — Full local gate and requirement bookkeeping (DEBT-01..05)
+- [x] 09-04-PLAN.md — Full local gate and requirement bookkeeping (DEBT-01..05)
 
 ### Phase 10: Free-Flight 6DOF Camera
 **Goal**: The user can fly the planetary example freely in all six degrees of freedom, which also makes judging the later visual work easier
@@ -97,7 +97,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 1-8 (incl. 7.1) | v1.0 | 90/90 | Complete | 2026-11-27 |
-| 9. Overlay, CI & Test Hygiene | v1.1 | 3/4 | In Progress | - |
+| 9. Overlay, CI & Test Hygiene | v1.1 | 4/4 | Complete | 2026-11-27 |
 | 10. Free-Flight 6DOF Camera | v1.1 | 0/TBD | Not started | - |
 | 11. Terrain Relief & Normals | v1.1 | 0/TBD | Not started | - |
 | 12. LOD Detail Transition | v1.1 | 0/TBD | Not started | - |
