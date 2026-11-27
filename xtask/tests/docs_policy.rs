@@ -342,3 +342,134 @@ fn phase8_amendments_cite_evidence() {
     let readme = read("docs/architecture/adr/README.md");
     require("docs/architecture/adr/README.md", &readme, "LOD transition");
 }
+
+#[test]
+fn architecture_overview_and_sdk_usage_present() {
+    let fo = "docs/architecture-overview.md";
+    let overview = read(fo);
+    for lit in [
+        "## Layers",
+        "engine-core",
+        "planetary",
+        "dependency-direction.md",
+        "ADR-0002",
+        "ADR-0018",
+        "ecs-bench",
+        "debug-ui",
+    ] {
+        require(fo, &overview, lit);
+    }
+    // The published overview must stand alone: it never cites the untracked design document.
+    assert!(
+        !overview.contains("HLD"),
+        "{fo} must not depend on or cite HLD.md"
+    );
+    // Every ADR in the index is reachable from the overview.
+    for n in 1..=18 {
+        require(fo, &overview, &format!("ADR-{n:04}"));
+    }
+
+    let fs = "docs/sdk-usage.md";
+    let sdk = read(fs);
+    for lit in [
+        "## Running the examples",
+        "triangle",
+        "basic_scene",
+        "planetary_flight",
+        "gpu_frame",
+        "F3",
+        "frame_with",
+        "overlay_frame",
+        "egui-overlay",
+        "debug-overlay",
+        "PresentConfig",
+        "ARC_REQUIRE_ADAPTER",
+        "ARC_UPDATE_GOLDENS",
+    ] {
+        require(fs, &sdk, lit);
+    }
+    assert!(
+        !sdk.contains("HLD"),
+        "{fs} must not depend on or cite HLD.md"
+    );
+}
+
+/// Names the SDK guide relies on must still exist in the source (drift guard).
+#[test]
+fn sdk_usage_names_exist_in_source() {
+    let app = read("crates/engine-sdk/src/app.rs");
+    for lit in ["fn gpu_frame", "fn overlay_frame", "pub trait App"] {
+        require("crates/engine-sdk/src/app.rs", &app, lit);
+    }
+    let rt = read("crates/engine-sdk/src/runtime.rs");
+    require("crates/engine-sdk/src/runtime.rs", &rt, "pub fn frame_with");
+    let run = read("crates/engine-sdk/src/run.rs");
+    require("crates/engine-sdk/src/run.rs", &run, "pub fn run_app");
+    let flight = read("extensions/planetary/planetary-app/examples/planetary_flight.rs");
+    let doc = read("docs/sdk-usage.md");
+    // Every flag named in the example's usage string is in the guide's flag list.
+    let usage = flight
+        .lines()
+        .find(|l| l.starts_with("const USAGE"))
+        .expect("USAGE const");
+    for flag in usage.split("--").skip(1) {
+        let name: String = flag
+            .chars()
+            .take_while(|c| c.is_ascii_alphanumeric() || *c == '-')
+            .collect();
+        require("docs/sdk-usage.md", &doc, &format!("--{name}"));
+    }
+}
+
+#[test]
+fn assumptions_and_limitations_present() {
+    let fa = "docs/assumptions.md";
+    let assumptions = read(fa);
+    for lit in [
+        "## Assumptions",
+        "Rust",
+        "wgpu",
+        "determinism",
+        "ADR-0004",
+        "ADR-0008",
+    ] {
+        require(fa, &assumptions, lit);
+    }
+    let fl = "docs/limitations.md";
+    let limits = read(fl);
+    for lit in [
+        "Wayland",
+        "f32",
+        "unmorphed",
+        "macOS",
+        "ECS",
+        "haze",
+        "complete-with-caveats",
+        "Fifo",
+        "plan 11",
+        "plan 12",
+        "ADR-0006",
+        "ADR-0017",
+        "ADR-0018",
+    ] {
+        require(fl, &limits, lit);
+    }
+    for (f, t) in [(fa, &assumptions), (fl, &limits)] {
+        assert!(!t.contains("HLD"), "{f} must not cite HLD.md");
+    }
+}
+
+#[test]
+fn readme_links_documentation_set() {
+    let readme = read("README.md");
+    for lit in [
+        "## Documentation",
+        "docs/architecture-overview.md",
+        "docs/assumptions.md",
+        "docs/limitations.md",
+        "docs/sdk-usage.md",
+        "docs/architecture/adr/README.md",
+    ] {
+        require("README.md", &readme, lit);
+    }
+}
