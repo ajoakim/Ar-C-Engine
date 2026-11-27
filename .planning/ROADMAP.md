@@ -53,7 +53,13 @@ Plans:
   2. A long scripted sequence of roll, pitch and yaw inputs leaves the camera orientation normalised and drift-free (unit test passes)
   3. The existing orbit-to-surface flight and scripted descent behave as before, with a documented toggle or default between free-flight and planet-aligned orientation
   4. `check-deps` and the sdk-only guard stay green: no planetary concept appears in any generic crate
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 10-01-PLAN.md — Z/X/F key codes; pure f64 quaternion FreeFlight controller with drift, roll-axis, camera-relative and levelling tests (CAM-01..04, CAM-06)
+- [ ] 10-02-PLAN.md — Integrate into planetary_flight input handling, document default and F toggle, scripted descent unchanged (CAM-01..03, CAM-05, CAM-06)
+- [ ] 10-03-PLAN.md — Full local gate, human flight checkpoint, requirement bookkeeping (CAM-01..06)
+
 **UI hint**: yes
 
 ### Phase 11: Terrain Relief & Normals
