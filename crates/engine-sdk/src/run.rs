@@ -34,6 +34,8 @@ struct Host<A: App> {
     error: Option<SdkError>,
     present: PresentConfig,
     window: Option<PlatformWindow>,
+    #[cfg(feature = "egui-overlay")]
+    overlay: crate::overlay::OverlayHost,
 }
 
 impl<A: App> Host<A> {
@@ -83,7 +85,16 @@ impl<A: App> PlatformHandler for Host<A> {
         let Some(rt) = self.runtime.as_mut() else {
             return LoopControl::Continue;
         };
-        match rt.frame(&mut self.app, dt) {
+        #[cfg(feature = "egui-overlay")]
+        let result = {
+            let overlay = &mut self.overlay;
+            rt.frame_with(&mut self.app, dt, |backend, app| {
+                overlay.stage(backend, app, dt);
+            })
+        };
+        #[cfg(not(feature = "egui-overlay"))]
+        let result = rt.frame(&mut self.app, dt);
+        match result {
             Ok(control) => {
                 if let (Some(title), Some(window)) = (rt.take_window_title(), self.window.as_ref())
                 {
@@ -127,6 +138,8 @@ pub fn run_app<A: App>(app: A, config: AppConfig) -> Result<(), SdkError> {
         error: None,
         present: config.present,
         window: None,
+        #[cfg(feature = "egui-overlay")]
+        overlay: crate::overlay::OverlayHost::default(),
     };
     match engine_platform::run(config.window, &mut host) {
         Ok(()) => {}

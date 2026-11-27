@@ -51,6 +51,7 @@ engine-streaming = { path = "crates/engine-streaming" }
 engine-render = { path = "crates/engine-render" }
 engine-render-wgpu = { path = "crates/engine-render-wgpu" }
 engine-sdk = { path = "crates/engine-sdk" }
+debug-ui = { path = "crates/debug-ui" }
 cargo_metadata = "0.23.1"
 glam = "0.34.3"
 tracing = "0.1.44"

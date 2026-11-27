@@ -10,6 +10,8 @@
 
 mod app;
 mod error;
+#[cfg(feature = "egui-overlay")]
+mod overlay;
 mod run;
 mod runtime;
 

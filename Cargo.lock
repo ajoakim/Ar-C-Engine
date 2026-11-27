@@ -783,6 +783,8 @@ dependencies = [
 name = "engine-sdk"
 version = "0.1.0"
 dependencies = [
+ "debug-ui",
+ "egui",
  "engine-assets",
  "engine-core",
  "engine-diagnostics",

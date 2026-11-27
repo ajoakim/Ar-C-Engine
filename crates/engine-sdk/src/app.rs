@@ -349,6 +349,15 @@ pub trait App {
     ) -> Result<(), SdkError> {
         Ok(())
     }
+
+    /// Debug overlay hand-off (feature `egui-overlay`): called once per frame after
+    /// [`App::update`], just before submit. Return the snapshot to draw as a read-only overlay, or
+    /// `None` to draw nothing. The SDK owns the egui context and the painter; the app never names
+    /// egui or GPU types. Default: `None`.
+    #[cfg(feature = "egui-overlay")]
+    fn overlay_frame(&mut self) -> Option<engine_diagnostics::DiagnosticsSnapshot> {
+        None
+    }
 }
 
 #[cfg(test)]

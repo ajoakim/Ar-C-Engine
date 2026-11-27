@@ -94,6 +94,21 @@ impl<B: RenderBackend> Runtime<B> {
     /// # Errors
     /// Propagates engine, math and render errors.
     pub fn frame(&mut self, app: &mut dyn App, dt: f64) -> Result<AppControl, SdkError> {
+        self.frame_with(app, dt, |_, _| {})
+    }
+
+    /// Like [`Runtime::frame`], but calls `before_submit` with the backend and app right before
+    /// the packet is submitted (not called when the frame exits early or the target is empty).
+    /// `run_app` uses it to stage the debug overlay.
+    ///
+    /// # Errors
+    /// Propagates engine, math and render errors.
+    pub fn frame_with(
+        &mut self,
+        app: &mut dyn App,
+        dt: f64,
+        before_submit: impl FnOnce(&mut B, &mut dyn App),
+    ) -> Result<AppControl, SdkError> {
         let control = app.update(dt, &mut self.scene);
         if control == AppControl::Exit {
             return Ok(AppControl::Exit);
@@ -125,6 +140,7 @@ impl<B: RenderBackend> Runtime<B> {
         let packet =
             self.compiled
                 .build_frame_packet(&scene, &self.pipelines, self.scene.clear_color)?;
+        before_submit(&mut self.backend, app);
         self.backend.submit(&packet)?;
         self.frame_index += 1;
         Ok(AppControl::Continue)
