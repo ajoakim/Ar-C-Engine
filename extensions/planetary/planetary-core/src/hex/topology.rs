@@ -30,6 +30,11 @@ thread_local! {
 }
 
 /// Index of `raw` in the footprint memo (multiplicative hash, top bits).
+/// Sample spacing angle at level 0 of a hex sphere with sector side `n` (`Topology::sample_angle0`).
+pub(crate) fn hex_sample_angle0(n: u32) -> f64 {
+    (8.0 * PI / (10.0 * 3f64.sqrt())).sqrt() / (3f64.sqrt() * f64::from(n))
+}
+
 fn footprint_slot(raw: u64) -> usize {
     let h = raw.wrapping_mul(0x9E37_79B9_7F4A_7C15) >> (64 - FOOTPRINT_SLOTS.trailing_zeros());
     usize::try_from(h).unwrap_or(0)
@@ -147,7 +152,7 @@ impl Topology for HexSphere {
     }
 
     fn sample_angle0(&self) -> f64 {
-        (8.0 * PI / (10.0 * 3f64.sqrt())).sqrt() / (3f64.sqrt() * f64::from(self.n))
+        hex_sample_angle0(self.n)
     }
 
     fn pieces(&self, split: &BTreeSet<CellId>, out: &mut Vec<Piece<CellId>>) {

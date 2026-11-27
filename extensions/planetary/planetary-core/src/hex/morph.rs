@@ -20,6 +20,7 @@ use engine_sdk::DVec3;
 use super::cell_id::CellId;
 use super::mapping::{CellFrame, LatticePoint, sample_dir};
 use super::mesh::{diag_grid, grid_index, outer_skirt_index, sector_vertices};
+use super::topology::hex_sample_angle0;
 use crate::mesh::{uv_at_level, uv_sampled};
 use crate::morph::{
     EDGE_SNAP_M, MorphHit, MorphStats, MorphTargets, project_to_triangle, resolve_hit,
@@ -122,7 +123,13 @@ impl<'a> ParentGrid<'a> {
             .ok()
             .map(|x| self.own_lookup[x].1 as usize);
         let v = if let Some(g) = found {
-            let uv = uv_at_level(self.terrain, self.own.uvs[g], self.level, self.own.dirs[g]);
+            let uv = uv_at_level(
+                self.terrain,
+                self.own.uvs[g],
+                self.level,
+                self.own.dirs[g],
+                hex_sample_angle0(self.n),
+            );
             (self.own.pos[g], uv, self.own.dirs[g])
         } else {
             stats.parent_samples += 1;
@@ -131,7 +138,7 @@ impl<'a> ParentGrid<'a> {
             let r = self.terrain.params().radius + smp.height;
             (
                 DVec3::new(d.x * r, d.y * r, d.z * r),
-                uv_sampled(self.terrain, smp, self.level, d),
+                uv_sampled(self.terrain, smp, self.level, d, hex_sample_angle0(self.n)),
                 d,
             )
         };

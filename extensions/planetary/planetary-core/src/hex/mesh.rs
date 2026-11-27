@@ -23,8 +23,9 @@ use super::cell_id::CellId;
 use super::mapping::{CellFrame, MAX_SECTOR_N, cell_sample_point, sample_dir};
 use super::morph::{HexOwn, hex_morph_targets};
 use super::pieces::{VARIANT_FULL_HEX, VARIANT_FULL_PENTAGON, half_variant, variant_sectors};
+use super::topology::hex_sample_angle0;
 use crate::lod::LodModel;
-use crate::mesh::{SKIRT_MARGIN, apply_surface_v2, border_normal_f64, uv_of};
+use crate::mesh::{SKIRT_MARGIN, apply_surface_v2, border_normal_at, uv_of};
 use crate::morph::identity_morph;
 use crate::terrain::PlanetTerrain;
 use crate::topology::{CellMesh, IndexVariant};
@@ -89,7 +90,12 @@ fn frame_vertex(
 
 /// Normal of a vertex on the border of a sector grid (face- and cell-independent).
 fn border_normal(terrain: &PlanetTerrain, level: u8, d: DVec3) -> DVec3 {
-    border_normal_f64(terrain, level, d)
+    border_normal_at(
+        terrain,
+        level,
+        d,
+        hex_sample_angle0(terrain.cells_per_edge()),
+    )
 }
 
 /// Position of a skirt vertex hanging `depth` below the surface position `p` along `d`.

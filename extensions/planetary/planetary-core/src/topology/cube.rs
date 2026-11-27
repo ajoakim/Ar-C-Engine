@@ -210,7 +210,13 @@ fn parent_level_uv(
             data.dirs[k],
         )
     } else {
-        uv_at_level(terrain, uv, c.level().saturating_sub(1), data.dirs[k])
+        uv_at_level(
+            terrain,
+            uv,
+            c.level().saturating_sub(1),
+            data.dirs[k],
+            FRAC_PI_2 / f64::from(n),
+        )
     }
 }
 
@@ -238,7 +244,7 @@ fn parent_vertex(
     let r = terrain.params().radius + smp.height;
     (
         DVec3::new(d.x * r, d.y * r, d.z * r),
-        uv_sampled(terrain, smp, p.level(), d),
+        uv_sampled(terrain, smp, p.level(), d, FRAC_PI_2 / f64::from(n)),
     )
 }
 

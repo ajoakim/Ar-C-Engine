@@ -160,6 +160,43 @@ pub fn border_normal_f64(terrain: &PlanetTerrain, level: u8, d: DVec3) -> DVec3 
         nrm
     }
 }
+
+/// Border normal with the stencil step supplied (generator v3): identical stencil to
+/// [`border_normal_f64`] but `delta` is the true grid angle of the topology at this level.
+#[must_use]
+pub fn border_normal_step_f64(terrain: &PlanetTerrain, d: DVec3, delta: f64) -> DVec3 {
+    let (ax, ay, az) = (d.x.abs(), d.y.abs(), d.z.abs());
+    let e = if ax <= ay && ax <= az {
+        DVec3::new(1.0, 0.0, 0.0)
+    } else if ay <= az {
+        DVec3::new(0.0, 1.0, 0.0)
+    } else {
+        DVec3::new(0.0, 0.0, 1.0)
+    };
+    let c = vcross(d, e);
+    let t1 = vnormalize(c.x, c.y, c.z);
+    let t2 = vcross(d, t1);
+    let a = vsub(tap(terrain, d, t1, delta), tap(terrain, d, t1, -delta));
+    let b = vsub(tap(terrain, d, t2, delta), tap(terrain, d, t2, -delta));
+    let c = vcross(a, b);
+    let nrm = vnormalize(c.x, c.y, c.z);
+    if nrm.x * d.x + nrm.y * d.y + nrm.z * d.z < 0.0 {
+        DVec3::new(-nrm.x, -nrm.y, -nrm.z)
+    } else {
+        nrm
+    }
+}
+
+/// Version-gated border normal: [`border_normal_f64`] below generator v3, else the stencil with
+/// step `sample_angle0 / 2^level` (`sample_angle0` of the topology, `Topology::sample_angle0`).
+#[must_use]
+pub fn border_normal_at(terrain: &PlanetTerrain, level: u8, d: DVec3, sample_angle0: f64) -> DVec3 {
+    if terrain.params().generator_version < 3 {
+        border_normal_f64(terrain, level, d)
+    } else {
+        border_normal_step_f64(terrain, d, sample_angle0 / f64::from(1u32 << level))
+    }
+}
 // BORDER-CRITICAL END
 
 pub(crate) fn uv_of(terrain: &PlanetTerrain, s: TerrainSample) -> [f32; 2] {
@@ -197,6 +234,24 @@ pub fn ramp_value(mask: f64, normal: DVec3, dir: DVec3) -> f64 {
     0.4 * (1.0 - m) + 0.6 * rock_t
 }
 
+/// Slope below which a generator-v3 vertex is not rock. Calibrated on the plan 11-03 land slopes
+/// (cube L8 p50 2.06 deg: `1 - cos` = 6.5e-4; p90 14 deg: 0.030; p99 27 deg: 0.11): LO sits
+/// below the hills/plains boundary, HI near the mountain slope.
+pub const ROCK_SLOPE_LO_V3: f64 = 0.01;
+/// Slope at and above which a generator-v3 vertex is fully rock.
+pub const ROCK_SLOPE_HI_V3: f64 = 0.10;
+
+/// Generator v3 counterpart of [`ramp_value`] with [`ROCK_SLOPE_LO_V3`] / [`ROCK_SLOPE_HI_V3`].
+/// Only `+ - * /` (ADR-0008 exact-op).
+#[must_use]
+pub fn ramp_value_v3(mask: f64, normal: DVec3, dir: DVec3) -> f64 {
+    let slope = 1.0 - (normal.x * dir.x + normal.y * dir.y + normal.z * dir.z);
+    let t = (slope - ROCK_SLOPE_LO_V3) / (ROCK_SLOPE_HI_V3 - ROCK_SLOPE_LO_V3);
+    let rock_t = t.clamp(0.0, 1.0);
+    let m = mask.clamp(0.0, 1.0);
+    0.4 * (1.0 - m) + 0.6 * rock_t
+}
+
 /// Texel-centre row coordinate of ramp value `q`: `(0.5 + 7 q) / 8`.
 #[must_use]
 pub fn ramp_row(q: f64) -> f64 {
@@ -206,8 +261,13 @@ pub fn ramp_row(q: f64) -> f64 {
 /// Surface attribute v2: keeps `uv.x` (normalised height) and replaces `uv.y` (the mask in v1)
 /// by the dry-to-rock ramp row. `uv` is the v1 attribute of the vertex.
 #[must_use]
-pub(crate) fn uv_v2(uv: [f32; 2], normal: DVec3, dir: DVec3) -> [f32; 2] {
-    let q = ramp_value(f64::from(uv[1]), normal, dir);
+pub(crate) fn uv_v2(uv: [f32; 2], normal: DVec3, dir: DVec3, generator_version: u32) -> [f32; 2] {
+    let mask = f64::from(uv[1]);
+    let q = if generator_version >= 3 {
+        ramp_value_v3(mask, normal, dir)
+    } else {
+        ramp_value(mask, normal, dir)
+    };
     [uv[0], ramp_row(q) as f32]
 }
 
@@ -231,7 +291,7 @@ pub(crate) fn apply_surface_v2(
         return;
     }
     for ((uv, n), d) in uvs.iter_mut().zip(normals).zip(dirs) {
-        *uv = uv_v2(*uv, *n, *d);
+        *uv = uv_v2(*uv, *n, *d, terrain.params().generator_version);
     }
 }
 
@@ -242,8 +302,9 @@ pub(crate) fn uv_sampled(
     s: TerrainSample,
     level: u8,
     dir: DVec3,
+    angle0: f64,
 ) -> [f32; 2] {
-    uv_at_level(terrain, uv_of(terrain, s), level, dir)
+    uv_at_level(terrain, uv_of(terrain, s), level, dir, angle0)
 }
 
 /// The v1 attribute (`uv.y` = mask) of the vertex at `dir`, given its built attribute `uv` (whose
@@ -261,14 +322,16 @@ pub(crate) fn uv_at_level(
     uv: [f32; 2],
     level: u8,
     dir: DVec3,
+    angle0: f64,
 ) -> [f32; 2] {
     if terrain.params().generator_version < 2 {
         return uv;
     }
     uv_v2(
         v1_uv(terrain, uv, dir),
-        border_normal_f64(terrain, level, dir),
+        border_normal_at(terrain, level, dir, angle0),
         dir,
+        terrain.params().generator_version,
     )
 }
 
@@ -279,7 +342,12 @@ pub(crate) fn uv_with_normal(
     normal: DVec3,
     dir: DVec3,
 ) -> [f32; 2] {
-    uv_v2(v1_uv(terrain, uv, dir), normal, dir)
+    uv_v2(
+        v1_uv(terrain, uv, dir),
+        normal,
+        dir,
+        terrain.params().generator_version,
+    )
 }
 
 /// Builds the mesh of `id`; identical to `build_patch_cancellable` that is never cancelled.
@@ -369,7 +437,12 @@ pub(crate) fn build_patch_data(
     for j in 0..w {
         for i in 0..w {
             let nrm = if i == 0 || j == 0 || i == n || j == n {
-                border_normal_f64(terrain, id.level(), dirs[at(i, j)])
+                border_normal_at(
+                    terrain,
+                    id.level(),
+                    dirs[at(i, j)],
+                    FRAC_PI_2 / f64::from(n),
+                )
             } else {
                 let a = vsub(pos[at(i + 1, j)], pos[at(i - 1, j)]);
                 let b = vsub(pos[at(i, j + 1)], pos[at(i, j - 1)]);
