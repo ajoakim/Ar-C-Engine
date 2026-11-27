@@ -117,12 +117,15 @@ jobs:
           - os: ubuntu-latest
             wgpu_backend: vulkan   # lavapipe via mesa-vulkan-drivers
             require_adapter: "1"
+            require_goldens: "1"
           - os: windows-latest
             wgpu_backend: dx12     # WARP is built in
             require_adapter: "1"
+            require_goldens: "1"
           - os: macos-latest
             wgpu_backend: metal
             require_adapter: ""    # no software Metal adapter exists: skip-allowed
+            require_goldens: ""    # never required on macOS (no goldens)
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     env:
@@ -154,18 +157,21 @@ jobs:
         if: github.event_name != 'workflow_dispatch' || !inputs.update_goldens
         env:
           ARC_REQUIRE_ADAPTER: ${{ matrix.require_adapter }}
+          ARC_REQUIRE_GOLDENS: ${{ matrix.require_goldens }}
         run: cargo test -p engine-render-wgpu --locked --test image_diff -- --nocapture --test-threads=1
       # egui-overlay feature path: also runs the overlay_corner golden and overlay_corner_differs.
       - name: Verify image diffs (egui-overlay feature)
         if: github.event_name != 'workflow_dispatch' || !inputs.update_goldens
         env:
           ARC_REQUIRE_ADAPTER: ${{ matrix.require_adapter }}
+          ARC_REQUIRE_GOLDENS: ${{ matrix.require_goldens }}
         run: cargo test -p engine-render-wgpu --locked --features egui-overlay --test image_diff -- --nocapture --test-threads=1
       # atmosphere_ring lives in planetary-app (plan 08-10), same skip/require env semantics.
       - name: Verify atmosphere_ring image
         if: github.event_name != 'workflow_dispatch' || !inputs.update_goldens
         env:
           ARC_REQUIRE_ADAPTER: ${{ matrix.require_adapter }}
+          ARC_REQUIRE_GOLDENS: ${{ matrix.require_goldens }}
         run: cargo test -p planetary-app --locked --test atmosphere_ring -- --nocapture --test-threads=1
       - name: Upload image-diff artifacts
         if: always()
