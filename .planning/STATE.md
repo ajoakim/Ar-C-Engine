@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 8 in progress; 08-10 (minimal atmosphere limb ring, ADR-0019) complete, PLAN-08 awaiting plan 12 human flight; 08-11 and 08-12 remain; Phase 07.1 complete 27/27 (human flight approved with caveats)
+stopped_at: Phase 8 in progress; 08-11 (non-blocking bench job, hosted goldens, CI evidence) complete, run 46042013890 green; only 08-12 (final gate, human flight, HLD.md decision) remains; Phase 07.1 complete 27/27
 last_updated: "2026-11-27T05:30:38.960Z"
 last_activity: 2026-11-27
 progress:
   total_phases: 9
   completed_phases: 8
   total_plans: 90
-  completed_plans: 85
-  percent: 89
+  completed_plans: 86
+  percent: 90
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-11-25)
 ## Current Position
 
 Phase: 8 (hardening & decisions) - in progress
-Plan: 08-10 complete (08-01 to 08-09 done); 10 of 12 plans summarised. Minimal atmosphere (opaque limb ring plus sun-tinted sky, ADR-0019) is in planetary-app, on by default, --no-atmosphere switches it off; PLAN-08 stays open until the plan 12 human flight judges the look and decides accept-or-defer. Plan 11 must add the atmosphere_ring test to the CI image job and hosted goldens. Phase 07.1 is complete 27/27 (human flight approved with caveats)
+Plan: 08-11 complete (08-01 to 08-11 done); 11 of 12 plans summarised. Hosted CI (run 46042013890 on c44af29) is green: image-diff on lavapipe and WARP with Linux and Windows goldens and ARC_REQUIRE_GOLDENS=1, macOS skip, feature-paths green, non-blocking bench job uploads criterion. QA-01 complete. Post-push evidence and summary commits are local only (not pushed). PLAN-08 stays open until the plan 12 human flight. Phase 07.1 is complete 27/27
 Status: Phase 8 executing
 Last activity: 2026-11-27
 
-Progress: [█████████░] 89%
+Progress: [█████████░] 90%
 
 ## Performance Metrics
 

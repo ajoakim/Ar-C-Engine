@@ -70,7 +70,7 @@
 
 - [x] **APP-01**: A conventional 3D reference app runs against the public SDK only
 - [ ] **APP-02**: A planetary reference app runs against the public SDK only
-- [ ] **QA-01**: Unit, integration, performance (criterion), and regression (image-diff on software adapter) tests exist and run in CI
+- [x] **QA-01**: Unit, integration, performance (criterion), and regression (image-diff on software adapter) tests exist and run in CI
 - [ ] **QA-02**: Debug overlays show LOD and streaming/memory budget state
 - [x] **QA-03**: Architecture, assumptions, limitations, and SDK usage are documented
 
@@ -156,7 +156,7 @@
 | PLAN-08 | Phase 8 | Pending |
 | APP-01 | Phase 5 | Complete |
 | APP-02 | Phase 7 | Pending |
-| QA-01 | Phase 8 | Pending |
+| QA-01 | Phase 8 | Complete |
 | QA-02 | Phase 8 | Pending |
 | QA-03 | Phase 8 | Complete |
 
