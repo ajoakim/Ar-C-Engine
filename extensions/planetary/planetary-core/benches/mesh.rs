@@ -21,6 +21,7 @@ fn terrain(n: u32, version: u32) -> PlanetTerrain {
     let params = match version {
         1 => TerrainParams::default(),
         2 => TerrainParams::demo_v2(),
+        3 => TerrainParams::demo_v3(),
         _ => unreachable!("unknown generator version"),
     };
     PlanetTerrain::new(SEED, params, n).expect("terrain")
@@ -38,7 +39,7 @@ fn bench_mesh(c: &mut Criterion) {
 
     let mut g = c.benchmark_group("mesh_build");
     g.sample_size(20);
-    for version in [1u32, 2] {
+    for version in [1u32, 2, 3] {
         let t = terrain(n_hex, version);
         let hex = HexSphere::new(n_hex).expect("hex");
         let model = LodModel::for_topology(&t, DEFAULT_KAPPA, hex.sample_angle0());

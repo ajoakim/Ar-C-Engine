@@ -11,10 +11,10 @@
 //!
 //! Recommended: `cargo run --release -p planetary-app --example planetary_flight -- --descent --perf-log flight.csv`
 //!
-//! Usage: `planetary_flight [--topology <hex|cube>] [--generator <1|2>] [--debug-cells] [--headless <frames>] [--descent] [--ascent] [--frames <n>]
+//! Usage: `planetary_flight [--topology <hex|cube>] [--generator <1|2|3>] [--debug-cells] [--headless <frames>] [--descent] [--ascent] [--frames <n>]
 //! [--perf-log <file.csv>] [--no-console] [--bench-descent] [--budget-ms <ms>] [--strict]`
 //!
-//! `--generator <1|2>` selects the terrain generator version (default: the app default, v2); any other
+//! `--generator <1|2|3>` selects the terrain generator version (default: the app default, v2; 3 is demo_v3); any other
 //! value is a usage error.
 //!
 //! `--topology` selects the planet: `hex` (default, icosahedral hexagonal cells, 16 cells per
@@ -66,7 +66,7 @@ use planetary_app::{
 };
 use planetary_core::TerrainParams;
 
-const USAGE: &str = "usage: planetary_flight [--topology <hex|cube>] [--debug-cells] [--headless <frames>] [--descent] [--ascent] [--frames <n>] [--perf-log <file.csv>] [--no-console] [--bench-descent] [--budget-ms <ms>] [--strict] [--bench-stream] [--fast] [--settle] [--no-adaptive] [--frame-ms <ms>] [--out <file.csv>] [--diagnostics] [--retain-frames <n>] [--present-mode <fifo|mailbox|immediate|auto>] [--frame-latency <1|2|3>] [--no-haze] [--no-atmosphere] [--always-reselect] [--generator <1|2>]";
+const USAGE: &str = "usage: planetary_flight [--topology <hex|cube>] [--debug-cells] [--headless <frames>] [--descent] [--ascent] [--frames <n>] [--perf-log <file.csv>] [--no-console] [--bench-descent] [--budget-ms <ms>] [--strict] [--bench-stream] [--fast] [--settle] [--no-adaptive] [--frame-ms <ms>] [--out <file.csv>] [--diagnostics] [--retain-frames <n>] [--present-mode <fifo|mailbox|immediate|auto>] [--frame-latency <1|2|3>] [--no-haze] [--no-atmosphere] [--always-reselect] [--generator <1|2|3>]";
 
 #[derive(Default, Clone, Copy)]
 struct BandMax {
@@ -290,7 +290,7 @@ fn main() -> Result<(), SdkError> {
                 generator = Some(
                     args.next()
                         .and_then(|v| v.parse::<u32>().ok())
-                        .filter(|v| matches!(v, 1 | 2))
+                        .filter(|v| matches!(v, 1..=3))
                         .ok_or_else(usage)?,
                 );
             }
@@ -351,7 +351,8 @@ fn main() -> Result<(), SdkError> {
     if let Some(g) = generator {
         settings.terrain.terrain = match g {
             1 => TerrainParams::default(),
-            _ => TerrainParams::demo_v2(),
+            2 => TerrainParams::demo_v2(),
+            _ => TerrainParams::demo_v3(),
         };
     }
     settings.diagnostics = diagnostics;
@@ -473,6 +474,7 @@ mod tests {
     #[test]
     fn generator_flag_is_in_usage() {
         assert!(super::USAGE.contains("--generator"));
+        assert!(super::USAGE.contains("<1|2|3>"));
     }
 
     #[test]
