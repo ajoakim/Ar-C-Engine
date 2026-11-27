@@ -101,7 +101,10 @@ mod tests {
         assert_eq!(g("queue awaiting upload"), Some(2.0));
         let b = |name: &str| s.budgets.iter().find(|b| b.label == name).cloned().unwrap();
         assert_eq!(
-            (b("held meshes (base+detail)").used, b("held meshes (base+detail)").cap),
+            (
+                b("held meshes (base+detail)").used,
+                b("held meshes (base+detail)").cap
+            ),
             (750.0, 1500.0)
         );
         assert_eq!(

@@ -244,7 +244,10 @@ mod tests {
         assert_eq!(fmt_count(f64::NAN), "n/a");
         assert_eq!(fmt_count(f64::INFINITY), "n/a");
         let big = fmt_count(1e20);
-        assert!(big.contains('.'), "large values must not use a lossy cast: {big}");
+        assert!(
+            big.contains('.'),
+            "large values must not use a lossy cast: {big}"
+        );
         assert_eq!(fmt_ms(8.3), "8.30");
         assert_eq!(fmt_ms(8.0), "8.00");
         assert_eq!(fmt_ms(f64::NAN), "n/a");
