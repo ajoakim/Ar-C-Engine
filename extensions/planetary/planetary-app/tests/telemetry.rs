@@ -45,6 +45,7 @@ fn csv_columns_match_header() {
     assert_eq!(row.split(',').count(), n);
     assert_eq!(csv_columns(), n);
     assert!(csv_header().starts_with("frame,sim_time_s,frame_ms"));
+    assert!(csv_header().contains("gpu_frame_ms,prep_select_ms,prep_closure_ms,prep_score_ms,prep_cull_ms,prep_setbuild_ms,prep_requests_ms,reselect_skipped,prep_lookups,altitude_m"));
     let churn = [
         "level_changes",
         "drawn_appeared",
@@ -148,4 +149,24 @@ fn morph_columns_are_fed_from_the_terrain_report() {
         assert!((0.0..=1.0).contains(&s.handover_gap_max));
         assert_eq!(s.morph_first_frame_defects, 0);
     }
+}
+
+#[test]
+fn scope_columns_are_fed_in_scope_order_and_deterministic() {
+    let s = FrameSample {
+        prep_scope_ms: [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+        ..FrameSample::default()
+    };
+    let row = csv_row(&s);
+    let cols: Vec<&str> = csv_header().split(',').collect();
+    let cells: Vec<&str> = row.split(',').collect();
+    let at = cols.iter().position(|c| *c == "prep_select_ms").unwrap();
+    assert_eq!(
+        &cells[at..at + 6],
+        &["1.000", "2.000", "3.000", "4.000", "5.000", "6.000"]
+    );
+    // Under the simulated clock every scope costs a deterministic number of ticks.
+    let a = run();
+    assert!(a.iter().skip(2).all(|f| f.prep_scope_ms[0] > 0.0));
+    assert_eq!(a, run());
 }

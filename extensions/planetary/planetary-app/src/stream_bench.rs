@@ -44,6 +44,10 @@ pub struct StreamFrame {
     pub partition: bool,
     /// Measured prepare plus gpu_frame cost (ms) of the frame (telemetry clock).
     pub cost_ms: f64,
+    /// Prepare time (ms) per scope (`Scope::index` order) and in total (last element).
+    pub prep_ms: [f64; 7],
+    /// The selection was reused this frame (07.1-27).
+    pub reselect_skipped: bool,
     /// Adaptive budget caps in force (uploads, starts, requests).
     pub caps: (u32, u32, u32),
     /// True when drawn equals wanted exactly (converged).
@@ -138,6 +142,13 @@ pub fn run_stream(
             draws,
             draw_items: rep.draw_items,
             partition: drawn.is_empty() || app.drawn_is_partition(),
+            reselect_skipped: rep.reselect_skipped,
+            prep_ms: app.telemetry().last().map_or([0.0; 7], |t| {
+                let mut o = [0.0; 7];
+                o[..6].copy_from_slice(&t.prep_scope_ms);
+                o[6] = t.prepare_ms;
+                o
+            }),
             cost_ms: app
                 .telemetry()
                 .last()
@@ -192,6 +203,8 @@ pub struct StreamMetrics {
     pub p95_lag: i32,
     /// Per altitude band: (max lag, p95 lag, frames).
     pub band_lag: Vec<(i32, i32, usize)>,
+    /// Per altitude band: (average, p95) prepare ms per scope and in total (last element).
+    pub band_prep: Vec<[(f64, f64); 7]>,
     /// Max over levels of frames from first wanted-at-camera to first drawn-at-camera.
     pub max_frames_to_detail: u64,
     /// Level that produced `max_frames_to_detail`.
@@ -246,6 +259,7 @@ pub fn analyze(run: &StreamRun) -> StreamMetrics {
     let f = &run.frames;
     let mut m = StreamMetrics {
         band_lag: vec![(0, 0, 0); ALTITUDE_BANDS.len()],
+        band_prep: vec![[(0.0, 0.0); 7]; ALTITUDE_BANDS.len()],
         partition_every_frame: true,
         ..StreamMetrics::default()
     };
@@ -280,6 +294,23 @@ pub fn analyze(run: &StreamRun) -> StreamMetrics {
             if r.drawn_level < r.wanted_level - 1 {
                 over1 += 1;
             }
+        }
+    }
+    for (b, row) in m.band_prep.iter_mut().enumerate() {
+        let sel: Vec<&StreamFrame> = f
+            .iter()
+            .skip(WARM_UP)
+            .filter(|r| band_of(r.altitude_m) == b)
+            .collect();
+        for (k, slot) in row.iter_mut().enumerate() {
+            let mut v: Vec<f64> = sel.iter().map(|r| r.prep_ms[k]).collect();
+            if v.is_empty() {
+                continue;
+            }
+            v.sort_by(f64::total_cmp);
+            let avg = v.iter().sum::<f64>() / v.len() as f64;
+            let rank = (v.len() * 95).div_ceil(100).max(1);
+            *slot = (avg, v[rank - 1]);
         }
     }
     m.max_lag = lags.iter().copied().max().unwrap_or(0);
@@ -422,6 +453,19 @@ pub fn report_text(label: &str, m: &StreamMetrics) -> String {
     for (i, (label, _, _)) in ALTITUDE_BANDS.iter().enumerate() {
         let (mx, p95, n) = m.band_lag[i];
         s.push_str(&format!("  {label}: frames {n} lag max {mx} p95 {p95}\n"));
+    }
+    s.push_str(
+        "prepare ms per band, avg/p95: total | select closure score cull setbuild requests
+",
+    );
+    for (i, (label, _, _)) in ALTITUDE_BANDS.iter().enumerate() {
+        let r = &m.band_prep[i];
+        s.push_str(&format!(
+            "  {label}: {:.2}/{:.2} | {:.2}/{:.2} {:.2}/{:.2} {:.2}/{:.2} {:.2}/{:.2} {:.2}/{:.2} {:.2}/{:.2}
+",
+            r[6].0, r[6].1, r[0].0, r[0].1, r[1].0, r[1].1, r[2].0, r[2].1, r[3].0, r[3].1,
+            r[4].0, r[4].1, r[5].0, r[5].1
+        ));
     }
     s
 }

@@ -273,8 +273,8 @@ impl AnyTerrain {
     fn setup(&mut self, r: &mut Resources<'_>, s: &mut SceneState) -> Result<(), SdkError> {
         each!(self, t => t.setup(r, s))
     }
-    fn prepare(&mut self, v: &View) {
-        each!(self, t => t.prepare(v));
+    fn prepare_with(&mut self, v: &View, probe: &mut dyn planetary_terrain::ScopeProbe) {
+        each!(self, t => t.prepare_with(v, probe));
     }
     fn gpu_frame(&mut self, r: &mut Resources<'_>, s: &mut SceneState) -> Result<(), SdkError> {
         each!(self, t => t.gpu_frame(r, s))
@@ -296,6 +296,9 @@ impl AnyTerrain {
     }
     fn shutdown(self) {
         each!(self, t => t.shutdown());
+    }
+    fn wanted_split_raw(&self) -> Vec<u64> {
+        each!(self, t => t.wanted_split().iter().map(|&c| t.topology().raw(c)).collect())
     }
     fn drawn_raw(&self) -> Vec<u64> {
         each!(self, t => t.drawn().iter().map(|&c| t.topology().raw(c)).collect())
@@ -365,6 +368,7 @@ pub struct PlanetaryApp {
     haze: bool,
     light: DirectionalLight,
     prev_pos: Option<DVec3>,
+    pose_override: Option<(DVec3, engine_sdk::DQuat)>,
 }
 
 /// Direction of the point the sun is anchored to: the end of the descent script, or the end of
@@ -444,6 +448,7 @@ impl PlanetaryApp {
             last_view: View::new(pos, viewport_h, TAN_HALF_FOV_Y),
             quit: false,
             prev_pos: None,
+            pose_override: None,
         })
     }
 
@@ -457,6 +462,18 @@ impl PlanetaryApp {
     #[must_use]
     pub fn surface_radius_at(&self, dir: DVec3) -> f64 {
         self.terrain.surface_radius_at(dir)
+    }
+
+    /// Raw ids of the split set the last frame selected, ascending.
+    #[must_use]
+    pub fn wanted_split_raw(&self) -> Vec<u64> {
+        self.terrain.wanted_split_raw()
+    }
+
+    /// Forces the camera pose every update (before the script or the interactive camera), for
+    /// deterministic test paths such as seeded random flights. `None` restores normal control.
+    pub fn set_pose_override(&mut self, pose: Option<(DVec3, engine_sdk::DQuat)>) {
+        self.pose_override = pose;
     }
 
     /// Raw ids of the drawn cells, ascending.
@@ -652,7 +669,9 @@ impl App for PlanetaryApp {
         if dt.is_finite() && dt > 0.0 {
             self.time += dt;
         }
-        if let Some(script) = self.script {
+        if let Some((pos, rot)) = self.pose_override {
+            self.camera.set_pose(pos, rot);
+        } else if let Some(script) = self.script {
             let (pos, rot) = script.pose_at(self.time, &|d| self.terrain.surface_radius_at(d));
             self.camera.set_pose(pos, rot);
         } else {
@@ -682,7 +701,7 @@ impl App for PlanetaryApp {
         }
         if let Some(view) = self.last_view {
             self.telemetry.begin_phase();
-            self.terrain.prepare(&view);
+            self.terrain.prepare_with(&view, &mut self.telemetry);
             self.telemetry.end_prepare();
         }
         let frames_done = self.exit_after_frames.is_some_and(|n| self.frames >= n);
@@ -752,6 +771,8 @@ impl App for PlanetaryApp {
             morph_first_frame_defects: r.morph_first_frame_defects,
             handover_gap_max: r.handover_gap_max,
             multi_level_handovers: r.multi_level_handovers,
+            reselect_skipped: r.reselect_skipped,
+            prep_lookups: r.range_lookups,
             ..FrameSample::default()
         };
         self.telemetry.record(sample);

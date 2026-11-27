@@ -7,6 +7,8 @@ use std::collections::VecDeque;
 use std::io::Write;
 use std::path::PathBuf;
 
+use planetary_terrain::{Scope, ScopeProbe};
+
 /// Number of most recent samples kept in memory.
 pub const RECENT_CAP: usize = 600;
 
@@ -80,6 +82,13 @@ pub struct FrameSample {
     pub frame_ms: f64,
     pub prepare_ms: f64,
     pub gpu_frame_ms: f64,
+    /// Prepare time per scope (ms), indexed by `Scope::index`: select, closure, score, cull,
+    /// set build, requests.
+    pub prep_scope_ms: [f64; 6],
+    /// The terrain selection was reused this frame instead of recomputed (07.1-27).
+    pub reselect_skipped: bool,
+    /// Resident-range probes of the terrain selection this frame (`TerrainReport::range_lookups`).
+    pub prep_lookups: u32,
     /// `|eye| - surface_radius_at(dir)`.
     pub altitude_m: f64,
     /// `|eye| - nominal radius`.
@@ -177,12 +186,20 @@ pub fn band_of(altitude_m: f64) -> usize {
         .unwrap_or(ALTITUDE_BANDS.len() - 1)
 }
 
-const COLUMNS: [&str; 46] = [
+const COLUMNS: [&str; 54] = [
     "frame",
     "sim_time_s",
     "frame_ms",
     "prepare_ms",
     "gpu_frame_ms",
+    "prep_select_ms",
+    "prep_closure_ms",
+    "prep_score_ms",
+    "prep_cull_ms",
+    "prep_setbuild_ms",
+    "prep_requests_ms",
+    "reselect_skipped",
+    "prep_lookups",
     "altitude_m",
     "nominal_altitude_m",
     "center_distance_m",
@@ -229,19 +246,27 @@ const COLUMNS: [&str; 46] = [
 /// CSV header line (no newline).
 #[must_use]
 pub fn csv_header() -> &'static str {
-    "frame,sim_time_s,frame_ms,prepare_ms,gpu_frame_ms,altitude_m,nominal_altitude_m,center_distance_m,nodes_visited,leaves,wanted_leaves,drawn_leaves,held_meshes,pending,in_flight,awaiting_upload,started,completions,uploads,uploaded_bytes,evicted,cancelled,destroyed,upload_rejects,pending_requests,draw_items,culled_draws,tau_eff,forced_splits,trimmed_splits,culled_horizon,culled_frustum,node_budget_hit,leaf_budget_hit,level_changes,drawn_appeared,drawn_disappeared,cull_toggles,overlap_pairs,flipflops,flipflops_unexplained,morph_min,morph_mean,morph_first_frame_defects,handover_gap_max,multi_level_handovers"
+    "frame,sim_time_s,frame_ms,prepare_ms,gpu_frame_ms,prep_select_ms,prep_closure_ms,prep_score_ms,prep_cull_ms,prep_setbuild_ms,prep_requests_ms,reselect_skipped,prep_lookups,altitude_m,nominal_altitude_m,center_distance_m,nodes_visited,leaves,wanted_leaves,drawn_leaves,held_meshes,pending,in_flight,awaiting_upload,started,completions,uploads,uploaded_bytes,evicted,cancelled,destroyed,upload_rejects,pending_requests,draw_items,culled_draws,tau_eff,forced_splits,trimmed_splits,culled_horizon,culled_frustum,node_budget_hit,leaf_budget_hit,level_changes,drawn_appeared,drawn_disappeared,cull_toggles,overlap_pairs,flipflops,flipflops_unexplained,morph_min,morph_mean,morph_first_frame_defects,handover_gap_max,multi_level_handovers"
 }
 
 /// One CSV row (no newline).
 #[must_use]
 pub fn csv_row(s: &FrameSample) -> String {
     format!(
-        "{},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{:.3},{},{},{},{},{},{},{},{},{},{},{},{},{},{:.4},{:.4},{},{:.4},{}",
+        "{},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{:.3},{},{},{},{},{},{},{},{},{},{},{},{},{},{:.4},{:.4},{},{:.4},{}",
         s.frame,
         s.sim_time_s,
         s.frame_ms,
         s.prepare_ms,
         s.gpu_frame_ms,
+        s.prep_scope_ms[0],
+        s.prep_scope_ms[1],
+        s.prep_scope_ms[2],
+        s.prep_scope_ms[3],
+        s.prep_scope_ms[4],
+        s.prep_scope_ms[5],
+        u8::from(s.reselect_skipped),
+        s.prep_lookups,
         s.altitude_m,
         s.nominal_altitude_m,
         s.center_distance_m,
@@ -304,6 +329,8 @@ pub struct Telemetry {
     console: bool,
     phase_start_ns: u64,
     prepare_ms: f64,
+    scope_start_ns: [u64; 6],
+    scope_ns: [u64; 6],
     gpu_start_ns: u64,
     rows: u64,
     since_console: usize,
@@ -331,6 +358,8 @@ impl Telemetry {
             console: settings.console_summary,
             phase_start_ns: now,
             prepare_ms: 0.0,
+            scope_start_ns: [0; 6],
+            scope_ns: [0; 6],
             gpu_start_ns: now,
             rows: 0,
             since_console: 0,
@@ -359,6 +388,10 @@ impl Telemetry {
         let now = self.clock.now_ns();
         sample.gpu_frame_ms = ns_to_ms(now.saturating_sub(self.gpu_start_ns));
         sample.prepare_ms = self.prepare_ms;
+        for (o, ns) in sample.prep_scope_ms.iter_mut().zip(self.scope_ns) {
+            *o = ns_to_ms(ns);
+        }
+        self.scope_ns = [0; 6];
         let frame_start = self.last_frame_end_ns.unwrap_or(self.phase_start_ns);
         sample.frame_ms = ns_to_ms(now.saturating_sub(frame_start));
         self.last_frame_end_ns = Some(now);
@@ -442,6 +475,20 @@ impl Telemetry {
         if let Some(w) = self.csv.as_mut() {
             let _ = w.flush();
         }
+    }
+}
+
+/// Scoped prepare timing over the telemetry clock (the only wall-clock reader).
+impl ScopeProbe for Telemetry {
+    fn begin(&mut self, scope: Scope) {
+        self.scope_start_ns[scope.index()] = self.clock.now_ns();
+    }
+
+    fn end(&mut self, scope: Scope) {
+        let i = scope.index();
+        let now = self.clock.now_ns();
+        self.scope_ns[i] =
+            self.scope_ns[i].saturating_add(now.saturating_sub(self.scope_start_ns[i]));
     }
 }
 
