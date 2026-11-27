@@ -75,7 +75,7 @@ Plans:
 - [x] 03-04-PLAN.md — engine-render: Camera, camera-relative extract, render graph, 6.4e6 m precision tests (wave 3)
 - [x] 03-05-PLAN.md — engine-render-wgpu: WgpuBackend, WGSL pipeline, reverse-Z, surface handling (wave 3)
 - [x] 03-06-PLAN.md — engine-sdk: App, Runtime, run_app, headless tests, triangle example (wave 4)
-- [ ] 03-07-PLAN.md — Phase gate + MANUAL triangle window smoke run (wave 5, human verify)
+- [x] 03-07-PLAN.md — Phase gate + MANUAL triangle window smoke run (wave 5, human verify)
 **UI hint**: yes
 
 ### Phase 4: World, Spatial & Assets
@@ -248,7 +248,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. Workspace, Toolchain & Guardrails | 4/4 | Complete    | 2026-11-25 |
 | 2. Foundation | 6/6 | Complete    | 2026-11-25 |
-| 3. Platform, Render Backend & Vertical Slice | 6/7 | Complete    | 2026-11-26 |
+| 3. Platform, Render Backend & Vertical Slice | 7/7 | Complete    | 2026-11-26 |
 | 4. World, Spatial & Assets | 8/8 | Complete    | 2026-11-26 |
 | 5. Conventional Reference App | 10/10 | Complete    | 2026-11-26 |
 | 6. Streaming & Procedural Framework | 6/6 | Complete    | 2026-11-26 |
