@@ -6,8 +6,9 @@
 //! and must exceed the same bound.
 
 use engine_sdk::DVec3;
+use engine_sdk::procedural::fbm_3d;
 use engine_sdk::procedural::splitmix64;
-use planetary_core::terrain::{CREASE_EPS, compose_v3, hills_at, mountains_at, smoothstep};
+use planetary_core::terrain::{compose_v3, hills_at, smoothstep};
 use planetary_core::{PlanetTerrain, TerrainParams, base_at, detail_at, mask_at, ridge_at};
 
 const SEED: u64 = 0x0007_5EED_2026_0011;
@@ -63,8 +64,9 @@ fn sites(t: &PlanetTerrain) -> Vec<DVec3> {
     out
 }
 
-/// Height with the pre-11-06C shapes: `|x|` crease in the mountains term (recovered from the
-/// rounded value by inverting [`CREASE_EPS`]) and the unrounded v2 ridge shape.
+/// Height with the pre-11-06C shapes: `|x|` crease in the mountains term (rebuilt directly from
+/// the fbm; the 11-06D range-height and crest gain are not needed to expose the crease) and the
+/// unrounded v2 ridge shape.
 fn old_height(t: &PlanetTerrain, d: DVec3) -> f64 {
     let p = t.params();
     let s = t.seeds();
@@ -73,12 +75,9 @@ fn old_height(t: &PlanetTerrain, d: DVec3) -> f64 {
     let mask = mask_at(s.mask, p, d);
     let ridge = ridge_at(s.ridge, p, d);
     let hills = hills_at(s.hills, p, d);
-    let r_new = (mountains_at(s.mountains, p, d) / p.mountains_amplitude).sqrt();
-    let ax_round = 1.0 - r_new;
-    let ax = ((ax_round + CREASE_EPS) * (ax_round + CREASE_EPS) - CREASE_EPS * CREASE_EPS)
-        .max(0.0)
-        .sqrt();
-    let r_old = 1.0 - ax;
+    let f = p.mountains_frequency;
+    let v = fbm_3d(s.mountains, d.x * f, d.y * f, d.z * f, p.mountains_octaves);
+    let r_old = 1.0 - (2.0 * v - 1.0).abs();
     let mtn = p.mountains_amplitude * (r_old * r_old);
     compose_v3(p, base, detail, mask, ridge, hills, mtn)
 }

@@ -5,7 +5,9 @@ use core::f64::consts::FRAC_PI_2;
 use engine_sdk::DVec3;
 
 use crate::lod::cull::HeightRange;
-use crate::terrain::PlanetTerrain;
+use crate::terrain::{
+    MOUNTAIN_SHAPE_SLOPE, PlanetTerrain, RANGE_HEIGHT_FREQS, RANGE_HEIGHT_GAIN, RANGE_HEIGHT_LO,
+};
 
 /// Default fraction of the cell size used as the geometric error.
 pub const DEFAULT_KAPPA: f64 = 0.25;
@@ -88,11 +90,17 @@ impl LodModel {
     /// - Hills `h = A_h (2 f - 1)`: `|h| <= A_h`, `|dh| <= 2 A_h V_h`. The factor `1 - 0.6 g`
     ///   lies in `[0.4, 1]` and changes by `0.6 |dg|`. The product changes by at most
     ///   `A_h (2 V_h + 0.6 |dg|)`.
-    /// - Mountains `m = A_m r * r`, `r = 1 - |2 f - 1|` in `[0, 1]`: `r` is 2-Lipschitz in `f`
-    ///   and `r1 * r1 - r2 * r2 = (r1 + r2)(r1 - r2)` with `r1 + r2 <= 2`, so `|dm| <= 4 A_m
-    ///   V_m'`; also `m` lies in `[0, A_m]`, so `|dm| <= A_m` and the change is at most
-    ///   `A_m min(4 V_m', 1)`. With the gate factor in `[0, 1]`, `|d(m g)| <= A_m (min(4 V_m',
-    ///   1) + |dg|)`.
+    /// - Mountains `m = A_m M r * r` (11-06D), `r = 1 - round_abs(2 f - 1)` in `[0, 1]`,
+    ///   `M = range_height_at` in `[lo, 1]`. With `u = round_abs(x)`, `u' = x / sqrt(x^2 + e^2)`
+    ///   in `[-1, 1]`: `d(r r)/df = -4 r u'`, so `r r` is `4 c`-Lipschitz in `f` with
+    ///   `c = max (1 - u) u' = MOUNTAIN_SHAPE_SLOPE` (0.785 rounded up to 0.8; the generic bound
+    ///   would be 4). `r r` is `C1` and flat where `r = 0`, so the mean value theorem applies.
+    ///   `M` is a clamped affine map of the mean of three one-octave fields, so
+    ///   `|dM| <= (1 - lo) G mean(V_i)` with `G` the range-height gain.
+    ///   `d(M r r) = M d(r r) + r r dM`, `M <= 1`, `r r <= 1`, so `|dm| <= A_m (4 c V_m' +
+    ///   (1 - lo) G mean(V_i))`; also `m` lies in `[0, A_m]` (since `M <= 1`), so the change is at
+    ///   most `A_m min(4 c V_m' + (1 - lo) G mean(V_i), 1)`. With the gate factor in `[0, 1]`,
+    ///   `|d(m g)| <= A_m (min(..., 1) + |dg|)`.
     /// - Span: both heights lie in `[sea, top]`, so no change exceeds `top - sea`; the v3
     ///   residual is capped there (v1/v2 are left as they were).
     #[must_use]
@@ -149,8 +157,17 @@ impl LodModel {
                 let vh = fbm_variation(p.hills_frequency, p.hills_octaves, s);
                 let vmt = fbm_variation(p.mountains_frequency, p.mountains_octaves, s);
                 let hills = p.hills_amplitude * rs * (2.0 * vh + 0.6 * dg);
-                let mountains = p.mountains_amplitude * rs * (4.0 * vmt).min(1.0)
-                    + p.mountains_amplitude * rs * dg;
+                // Range height M in [LO, 1] is (1 - LO) * GAIN-Lipschitz in the mean of three
+                // one-octave fields, so |dM| <= (1 - LO) * GAIN * mean(V_i).
+                let vrange = RANGE_HEIGHT_FREQS
+                    .iter()
+                    .map(|f| fbm_variation(*f, 1, s))
+                    .sum::<f64>()
+                    / 3.0;
+                let dm = (1.0 - RANGE_HEIGHT_LO) * RANGE_HEIGHT_GAIN * vrange;
+                let mountains =
+                    p.mountains_amplitude * rs * (4.0 * MOUNTAIN_SHAPE_SLOPE * vmt + dm).min(1.0)
+                        + p.mountains_amplitude * rs * dg;
                 model.residual[level] += hills + mountains;
                 let span = model.height.max - model.height.min;
                 if model.residual[level] > span {

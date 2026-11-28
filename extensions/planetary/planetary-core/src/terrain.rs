@@ -8,7 +8,7 @@ use std::fmt;
 
 use engine_sdk::DVec3;
 use engine_sdk::procedural::{
-    Generator, LayerStack, Params, ProcError, StableId, fbm_3d, layer_seed,
+    Generator, LayerStack, Params, ProcError, StableId, fbm_3d, layer_seed, splitmix64,
 };
 
 use crate::mapping::{is_valid_cells_per_edge, vertex_dir};
@@ -88,11 +88,11 @@ impl Default for TerrainParams {
             hills_amplitude: 600.0,
             hills_frequency: 200.0,
             hills_octaves: 4,
-            mountains_amplitude: 3900.0,
+            mountains_amplitude: 4700.0,
             mountains_frequency: 470.0,
             mountains_octaves: 5,
-            range_gate_lo: 0.44,
-            range_gate_hi: 0.74,
+            range_gate_lo: 0.42,
+            range_gate_hi: 0.72,
             relief_scale: 1.0,
         }
     }
@@ -110,7 +110,7 @@ impl TerrainParams {
     }
 
     /// Generator version 3: `demo_v2` plus hills and mountains layers. All v3 constants
-    /// (ridge 1800 m / 3 octaves, hills 600 m f200 x4, mountains 3900 m f470 x5, gate 0.44..0.74;
+    /// (ridge 1800 m / 3 octaves, hills 600 m f200 x4, mountains 4700 m f470 x5 times the range-height multiplier, gate 0.42..0.72;
     /// the v3 ridge and mountains shapes use the rounded crease, 11-06C)
     /// are calibrated by `tests/relief_v3.rs` at `relief_scale` 1.0 (the optional exaggeration).
     #[must_use]
@@ -346,13 +346,56 @@ pub fn hills_at(seed: u64, p: &TerrainParams, d: DVec3) -> f64 {
     p.hills_amplitude * (2.0 * v - 1.0)
 }
 
-/// `mountains_amplitude * r * r` with `r = 1 - round_abs(2 * fbm - 1)`; gated in [`compose_v3`].
+/// `max over x in [-1, 1] of (1 - round_abs(x)) * round_abs'(x)`, rounded up (0.785 at about
+/// `|x| = 0.2`; `tests/height_dist_v3.rs` checks it on a fine grid). `d(r * r)/df = -4 r round_abs'`
+/// with `r = 1 - round_abs(2 f - 1)`, so `r * r` is `4 * MOUNTAIN_SHAPE_SLOPE`-Lipschitz in the fbm
+/// value `f`, tighter than the generic 4 (ADR-0020 item 9).
+pub const MOUNTAIN_SHAPE_SLOPE: f64 = 0.8;
+/// Frequencies of the three independent range-height fields (one octave each): about 160 km,
+/// 55 km and 20 km features, so heights vary between ranges, within a range and between
+/// neighbouring crests.
+pub const RANGE_HEIGHT_FREQS: [f64; 3] = [40.0, 120.0, 320.0];
+/// Lower bound of the range-height multiplier; the upper bound is 1.
+pub const RANGE_HEIGHT_LO: f64 = 0.35;
+/// Slope of the range-height transform before the clamp
+/// (`RANGE_HEIGHT_CENTER + gain * (avg - 0.5)`).
+pub const RANGE_HEIGHT_GAIN: f64 = 1.8;
+/// Where the mean of the three fields (0.5) lands before the clamp. Above 0.5 puts more of the
+/// mountain region near full height, so the steepest slopes (slope p99) stay inside the band
+/// without raising the amplitude.
+pub const RANGE_HEIGHT_CENTER: f64 = 0.55;
+
+/// Range-height multiplier in `[RANGE_HEIGHT_LO, 1]`: the mean of three independent one-octave
+/// value-noise fields (a sum of independent fields, so approximately normal by the central limit
+/// theorem), stretched about 0.5 by `RANGE_HEIGHT_GAIN`, shifted to `RANGE_HEIGHT_CENTER` and clamped to `[0, 1]`, then mapped
+/// linearly. A pure function of the direction (the three fields use seeds derived from `seed`).
+/// It is `(1 - LO) * GAIN`-Lipschitz in the mean of the three field values.
 #[must_use]
-pub fn mountains_at(seed: u64, p: &TerrainParams, d: DVec3) -> f64 {
+pub fn range_height_at(seed: u64, d: DVec3) -> f64 {
+    let mut sum = 0.0;
+    for (i, f) in RANGE_HEIGHT_FREQS.iter().enumerate() {
+        let sd = splitmix64(seed ^ (0x5241_4E47_0000_0000 + i as u64));
+        sum += fbm_3d(sd, d.x * f, d.y * f, d.z * f, 1);
+    }
+    let a = sum / 3.0;
+    let t = (RANGE_HEIGHT_CENTER + RANGE_HEIGHT_GAIN * (a - 0.5)).clamp(0.0, 1.0);
+    RANGE_HEIGHT_LO + (1.0 - RANGE_HEIGHT_LO) * t
+}
+
+/// Mountains shape in `[0, 1]` before the amplitude: `r * r` with `r = 1 - round_abs(2 f - 1)`
+/// (as in 11-06C), times [`range_height_at`].
+#[must_use]
+pub fn mountains_shape(seed: u64, p: &TerrainParams, d: DVec3) -> f64 {
     let f = p.mountains_frequency;
     let v = fbm_3d(seed, d.x * f, d.y * f, d.z * f, p.mountains_octaves);
     let r = 1.0 - round_abs(2.0 * v - 1.0);
-    p.mountains_amplitude * (r * r)
+    r * r * range_height_at(seed, d)
+}
+
+/// `mountains_amplitude * mountains_shape`; gated in [`compose_v3`].
+#[must_use]
+pub fn mountains_at(seed: u64, p: &TerrainParams, d: DVec3) -> f64 {
+    p.mountains_amplitude * mountains_shape(seed, p, d)
 }
 
 /// Crease rounding width of the v3 ridge and mountains shapes (ADR-0020, 11-06C).

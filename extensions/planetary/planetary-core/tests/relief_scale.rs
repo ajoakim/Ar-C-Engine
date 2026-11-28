@@ -48,10 +48,11 @@ fn v3_fingerprint(p: TerrainParams) -> u64 {
     h.finish()
 }
 
-/// Recorded at relief 1.0 (`TerrainParams::demo_v3()`). Re-recorded by 11-06C (rounded crease
-/// shape, mountains amplitude 3500 -> 3900 m); the 11-06B value was 0x1b54_f6eb_f399_a5d9.
+/// Recorded at relief 1.0 (`TerrainParams::demo_v3()`). Re-recorded by 11-06D (range-height
+/// multiplier, mountains amplitude 3900 -> 4700 m, gate 0.44..0.74 -> 0.42..0.72); the 11-06C value was
+/// 0x6112_42bd_bf33_ae2a and the 11-06B value 0x1b54_f6eb_f399_a5d9.
 /// Guards that `relief_scale` 1.0 stays an exact no-op, not a v3 golden (v3 is still unflown).
-const V3_FINGERPRINT_BEFORE: u64 = 0x6112_42bd_bf33_ae2a;
+const V3_FINGERPRINT_BEFORE: u64 = 0x786b_bfbf_93f3_04fe;
 
 fn scaled(scale: f64) -> TerrainParams {
     TerrainParams {
