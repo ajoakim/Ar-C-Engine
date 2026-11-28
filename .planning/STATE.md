@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-11-27)
 
 ## Current Position
 
-Phase: 11 (Terrain Relief & Normals) - in progress (5/13 plans)
-Plan: 11-06C complete (gap fix: rounded crease in v3 mountains/ridge shapes against sawtooth at high relief; mountains amplitude 3900 m); terrain.rs changed again, so the user must re-fly the 11-06 checkpoint (--generator 3 --relief 1, 2, 3)
+Phase: 11 (Terrain Relief & Normals) - in progress (5/14 plans)
+Plan: 11-06D complete (gap fix: bell-shaped v3 mountain heights via a range-height multiplier, peaks no longer all equal; mountains amplitude 4700 m, gate 0.42..0.72; app ambient 0.10); terrain.rs changed again, so the user must re-fly the 11-06 checkpoint (--generator 3 --relief 1, 2, 3)
 Status: Executing Phase 11
-Last activity: 2026-11-27 - Completed 11-06C (crease rounding for v3, crease regression test)
+Last activity: 2026-11-27 - Completed 11-06D (v3 height distribution, range-height multiplier, ambient)
 
 ## Performance Metrics
 
@@ -80,7 +80,7 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-11-26T23:59:00.000Z
-Stopped at: Completed 11-06C-PLAN.md; awaiting user re-flight of 11-06
+Stopped at: Completed 11-06D-PLAN.md; awaiting user re-flight of 11-06
 Resume file: None
 
 ## Deferred Items

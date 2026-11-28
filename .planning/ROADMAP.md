@@ -72,7 +72,7 @@ Plans:
   3. The terrain shader uses those normals so relief is visible under directional light, covered by an image-diff golden
   4. Measured worker time and hex descent p95 stay within the stated bounds against the v2 baseline, and rendering still never blocks on generation
   5. After a human flight confirms the relief, v3 is the app default and an ADR records layers, normals method and measured cost
-**Plans**: 13 plans
+**Plans**: 14 plans
 
 Plans:
 - [x] 11-01-PLAN.md — Generator-version axis on the mesh bench, `--generator` flag, v2 mesh byte golden, mesh ratio script, v2 baselines (TERR-02, TERR-05)
@@ -83,6 +83,7 @@ Plans:
 - [x] 11-06A-PLAN.md — Gap fix (inserted): sun follows the camera in free flight, startup readout of generator/topology/sun elevation (TERR-04)
 - [x] 11-06B-PLAN.md — Gap fix (inserted): `relief_scale` exaggeration for generator v3 (user decision 2026-11-27, supersedes D-02), `--relief` flag, cost table; voids the earlier flight approval (TERR-01, TERR-05)
 - [x] 11-06C-PLAN.md — Gap fix (inserted): rounded crease in the v3 mountains and ridge shapes (sawtooth at high relief), crease regression test, mountains amplitude 3900 m; voids the earlier flight approval (TERR-01, TERR-03)
+- [x] 11-06D-PLAN.md — Gap fix (inserted): bell-shaped v3 mountain heights (range-height multiplier, peaks no longer all equal), distribution test with old-shape control, LodModel terms, app ambient 0.10; voids the earlier flight approval (TERR-01)
 - [ ] 11-06-PLAN.md — Pre-flight cost evidence, ADR-0020 draft, human flight of v3 with hash-bound verdict line (TERR-05, TERR-06)
 - [ ] 11-07-PLAN.md — Pin v3 goldens, make v3 the app default after approval, accept ADR-0020 (TERR-01, TERR-02, TERR-06)
 - [ ] 11-08-PLAN.md — Terrain relief image-diff golden through LitTextured and CI wiring (TERR-04)
@@ -121,7 +122,7 @@ Plans:
 | 1-8 (incl. 7.1) | v1.0 | 90/90 | Complete | 2026-11-27 |
 | 9. Overlay, CI & Test Hygiene | v1.1 | 4/4 | Complete | 2026-11-27 |
 | 10. Free-Flight 6DOF Camera | v1.1 | 3/3 | Complete | 2026-11-27 |
-| 11. Terrain Relief & Normals | v1.1 | 5/13 | In progress | - |
+| 11. Terrain Relief & Normals | v1.1 | 5/14 | In progress | - |
 | 12. LOD Detail Transition | v1.1 | 0/TBD | Not started | - |
 | 13. Validation & CI Debt Closure | v1.1 | 0/TBD | Not started | - |
 
