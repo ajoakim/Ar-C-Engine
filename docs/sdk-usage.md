@@ -57,6 +57,8 @@ cargo run --release -p planetary-app --example planetary_flight -- --bench-desce
 | `--retain-frames <n>` | Frames a culled split cell stays split (default 8, 0 disables) |
 | `--present-mode <fifo\|mailbox\|immediate\|auto>` | Surface present mode (default `fifo`) |
 | `--frame-latency <1\|2\|3>` | Maximum frames in flight (default 2) |
+| `--generator <1\|2\|3>` | Terrain generator version (default 2; 3 adds hills and mountains, ADR-0020) |
+| `--relief <scale>` | Relief exaggeration for generator 3 (0.1 to 8, default 1.0; ignored below 3) |
 | `--no-haze` | Turn the altitude haze and sky colour off |
 | `--no-atmosphere` | Keep the plain haze but drop the sun-tinted sky and the limb ring (ADR-0019) |
 | `--always-reselect` | Run the LOD selection every frame (same result, slower; for comparisons) |
