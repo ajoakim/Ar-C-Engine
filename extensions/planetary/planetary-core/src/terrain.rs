@@ -26,6 +26,10 @@ pub const HILLS_LAYER: &str = "planet.hills";
 /// Large-scale mountain layer gated by the mask (generator version 3 only).
 pub const MOUNTAINS_LAYER: &str = "planet.mountains";
 pub const V3_LAYER_VERSION: u32 = 3;
+/// Smallest accepted [`TerrainParams::relief_scale`].
+pub const RELIEF_SCALE_MIN: f64 = 0.1;
+/// Largest accepted [`TerrainParams::relief_scale`].
+pub const RELIEF_SCALE_MAX: f64 = 8.0;
 
 /// Terrain configuration (meters). See [`TerrainParams::validate`] for the accepted ranges.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -57,6 +61,11 @@ pub struct TerrainParams {
     /// Range gate: `smoothstep(range_gate_lo, range_gate_hi, mask)` (generator version 3 only).
     pub range_gate_lo: f64,
     pub range_gate_hi: f64,
+    /// Relief exaggeration (generator version 3 only; ignored below 3): multiplies the ridge,
+    /// hills and mountains amplitudes and nothing else. 1.0 is the calibrated Earth-like relief
+    /// and is bit-identical to the output before this field existed. Accepted range
+    /// [`RELIEF_SCALE_MIN`]..=[`RELIEF_SCALE_MAX`] (user decision 2026-11-27, ADR-0020).
+    pub relief_scale: f64,
 }
 
 impl Default for TerrainParams {
@@ -84,6 +93,7 @@ impl Default for TerrainParams {
             mountains_octaves: 5,
             range_gate_lo: 0.44,
             range_gate_hi: 0.74,
+            relief_scale: 1.0,
         }
     }
 }
@@ -101,7 +111,7 @@ impl TerrainParams {
 
     /// Generator version 3: `demo_v2` plus hills and mountains layers. All v3 constants
     /// (ridge 1800 m / 3 octaves, hills 600 m f200 x4, mountains 3500 m f470 x5, gate 0.44..0.74)
-    /// are calibrated by `tests/relief_v3.rs`; there is no vertical-exaggeration parameter.
+    /// are calibrated by `tests/relief_v3.rs` at `relief_scale` 1.0 (the optional exaggeration).
     #[must_use]
     pub fn demo_v3() -> Self {
         Self {
@@ -116,11 +126,12 @@ impl TerrainParams {
     #[must_use]
     pub fn max_relief(&self) -> f64 {
         if self.generator_version >= 3 {
+            let s = self.relief_scale;
             return self.base_amplitude
                 + self.detail_amplitude
-                + self.ridge_amplitude
-                + self.hills_amplitude
-                + self.mountains_amplitude;
+                + self.ridge_amplitude * s
+                + self.hills_amplitude * s
+                + self.mountains_amplitude * s;
         }
         if self.generator_version >= 2 {
             self.base_amplitude + self.detail_amplitude + self.ridge_amplitude
@@ -180,12 +191,18 @@ impl TerrainParams {
                 self.mountains_frequency,
                 self.range_gate_lo,
                 self.range_gate_hi,
+                self.relief_scale,
             ];
             if v3.iter().any(|v| !v.is_finite()) {
                 return Err(TerrainError::InvalidParams("non-finite parameter"));
             }
             if self.hills_amplitude < 0.0 || self.mountains_amplitude < 0.0 {
                 return Err(TerrainError::InvalidParams("amplitude must be >= 0"));
+            }
+            if !(RELIEF_SCALE_MIN..=RELIEF_SCALE_MAX).contains(&self.relief_scale) {
+                return Err(TerrainError::InvalidParams(
+                    "relief_scale must be in 0.1..=8.0",
+                ));
             }
             if !(0.0 <= self.range_gate_lo
                 && self.range_gate_lo < self.range_gate_hi
@@ -346,7 +363,8 @@ pub fn smoothstep(a: f64, b: f64, x: f64) -> f64 {
 }
 
 /// Generator v3 composition: the v2 sum plus `hills * (1 - 0.6 g) + mountains * g`, with
-/// `g = smoothstep(range_gate_lo, range_gate_hi, mask)`, floored at sea level.
+/// `g = smoothstep(range_gate_lo, range_gate_hi, mask)`, floored at sea level. `ridge`, `hills`
+/// and `mtn` are multiplied by `relief_scale` first (exact at 1.0).
 #[must_use]
 pub fn compose_v3(
     p: &TerrainParams,
@@ -359,6 +377,8 @@ pub fn compose_v3(
 ) -> f64 {
     let w = 0.25 + 0.75 * mask;
     let g = smoothstep(p.range_gate_lo, p.range_gate_hi, mask);
+    let s = p.relief_scale;
+    let (ridge, hills, mtn) = (ridge * s, hills * s, mtn * s);
     (base + detail * w + ridge * w + hills * (1.0 - 0.6 * g) + mtn * g).max(p.sea_level)
 }
 

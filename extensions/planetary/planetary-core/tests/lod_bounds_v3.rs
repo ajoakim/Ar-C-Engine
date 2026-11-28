@@ -206,6 +206,31 @@ fn v3_relief_bound_over_direction_pairs_cube_and_hex() {
     relief_bound_pairs(&hex, &t, 42);
 }
 
+/// The same 2000-pair soundness check with the relief exaggeration at 1, 2 and 3 (ADR-0020):
+/// the residual and global height range must scale with `relief_scale`.
+#[test]
+fn v3_relief_bound_holds_at_relief_scales_1_2_3_cube_and_hex() {
+    for scale in [1.0, 2.0, 3.0] {
+        let p = TerrainParams {
+            relief_scale: scale,
+            ..TerrainParams::demo_v3()
+        };
+        let t = PlanetTerrain::new(SEED, p, N).expect("terrain v3 scaled");
+        let [(_, cube), (_, hex)] = models(&t);
+        assert!(cube.height.max >= p.max_relief() - 1e-9, "scale {scale}");
+        relief_bound_pairs(&cube, &t, 41);
+        relief_bound_pairs(&hex, &t, 42);
+        let mut rng = Rng(34);
+        for _ in 0..20_000 {
+            let h = t.height_at_dir(rng.dir());
+            assert!(
+                h >= cube.height.min && h <= cube.height.max,
+                "scale {scale}"
+            );
+        }
+    }
+}
+
 /// Looseness `residual / measured max` for levels 4..=12 of `t`, per topology.
 fn looseness(t: &PlanetTerrain) -> Vec<(&'static str, Vec<(f64, f64)>)> {
     models(t)

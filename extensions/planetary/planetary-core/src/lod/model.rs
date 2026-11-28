@@ -126,6 +126,13 @@ impl LodModel {
             model.residual[level] = 2.0 * p.base_amplitude * vb
                 + 2.0 * p.detail_amplitude * vd
                 + 0.75 * p.detail_amplitude * vm;
+            // Relief exaggeration (v3 only) multiplies the ridge, hills and mountains terms, which
+            // are linear in their amplitudes, so each bound scales by the same factor.
+            let rs = if p.generator_version >= 3 {
+                p.relief_scale
+            } else {
+                1.0
+            };
             if p.generator_version >= 2 {
                 // Generator v2 adds `ridge_amplitude * r * r * w` (`w = 0.25 + 0.75 * mask`) and
                 // the detail term stays `detail * w`. `r = 1 - |2 f - 1|` is 2-Lipschitz in the
@@ -133,7 +140,7 @@ impl LodModel {
                 // varies by at most `4 V_r`. `w <= 1` and varies by `0.75 V_m`, with
                 // `r * r <= 1`: the product varies by at most `A_r * (4 V_r + 0.75 V_m)`.
                 let vr = fbm_variation(p.ridge_frequency, p.ridge_octaves, s);
-                model.residual[level] += p.ridge_amplitude * (4.0 * vr + 0.75 * vm);
+                model.residual[level] += p.ridge_amplitude * rs * (4.0 * vr + 0.75 * vm);
             }
             if p.generator_version >= 3 {
                 // See the "Generator v3" section of the `from_terrain` documentation.
@@ -141,9 +148,9 @@ impl LodModel {
                 let dg = (lip * vm).min(1.0);
                 let vh = fbm_variation(p.hills_frequency, p.hills_octaves, s);
                 let vmt = fbm_variation(p.mountains_frequency, p.mountains_octaves, s);
-                let hills = p.hills_amplitude * (2.0 * vh + 0.6 * dg);
-                let mountains =
-                    p.mountains_amplitude * (4.0 * vmt).min(1.0) + p.mountains_amplitude * dg;
+                let hills = p.hills_amplitude * rs * (2.0 * vh + 0.6 * dg);
+                let mountains = p.mountains_amplitude * rs * (4.0 * vmt).min(1.0)
+                    + p.mountains_amplitude * rs * dg;
                 model.residual[level] += hills + mountains;
                 let span = model.height.max - model.height.min;
                 if model.residual[level] > span {
