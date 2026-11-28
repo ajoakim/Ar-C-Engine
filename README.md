@@ -5,7 +5,7 @@ A general-purpose 3D engine in Rust with a strictly layered core and pluggable e
 - **Conventional 3D** (`extensions/conventional-3d`): lit meshes, materials, glTF, fly camera. Builds and runs with every planetary crate removed (enforced in CI).
 - **Planetary** (`extensions/planetary`): a streamed, procedurally generated planet you can fly down to from orbit, with level-of-detail terrain on a hex-grid topology inspired by Uber's H3.
 
-> **Status: early development.** Phases 1-7 and 7.1 (hex-grid planet, descent performance) are complete, with caveats recorded in the phase validation. Phase 8 (hardening: F3 debug overlay, atmosphere limb ring, CI image-diff tests and benchmarks, docs and decision ADRs) is complete, with caveats recorded in `.planning/phases/08-hardening-decisions/08-VALIDATION.md`; post-flight visual feedback is tracked as a follow-up todo. The v1.0 milestone audit found all 45 requirements satisfied, with remaining tech debt (review warnings, validation paperwork) listed in `.planning/v1.0-MILESTONE-AUDIT.md`. APIs will change. Hosted CI for Linux, macOS and Windows is configured, but local verification has been Windows-first. See [.planning/ROADMAP.md](.planning/ROADMAP.md).
+> **Status: early development.** Phases 1-7 and 7.1 (hex-grid planet, descent performance) are complete, with caveats recorded in the phase validation. Phase 8 (hardening: F3 debug overlay, atmosphere limb ring, CI image-diff tests and benchmarks, docs and decision ADRs) is complete, with caveats recorded in `.planning/phases/08-hardening-decisions/08-VALIDATION.md`; post-flight visual feedback is tracked as a follow-up todo. The v1.0 milestone audit found all 45 requirements satisfied, with remaining tech debt (review warnings, validation paperwork) listed in `.planning/v1.0-MILESTONE-AUDIT.md`. Milestone v1.1 (visual fidelity and flight) is in progress: Phases 9 (overlay, CI and test hygiene) and 10 (6DOF camera) are complete, and Phase 11 (generator v3 terrain relief) is under way, with LOD detail transition and validation cleanup to follow. APIs will change. Hosted CI for Linux, macOS and Windows is configured, but local verification has been Windows-first. See [.planning/ROADMAP.md](.planning/ROADMAP.md).
 
 ## Highlights
 
@@ -19,6 +19,8 @@ A general-purpose 3D engine in Rust with a strictly layered core and pluggable e
 - Present-mode control and a live window-title readout of altitude, speed, level and frame time (ADR-0016).
 - Debug overlay: press F3 (build with `--features debug-overlay`) for the LOD histogram, selected/drawn counts, streaming queue, memory and upload budgets and frame/prepare times (ADR-0018).
 - Minimal atmosphere: a sun-tinted sky plus an opaque limb-ring mesh around the planet, on by default; `--no-atmosphere` turns it off (ADR-0019; a ring mesh rather than a shader pass).
+- Free-flight 6DOF camera: roll with Z/X, camera-relative strafe and vertical thrust, and F to toggle between free-flight and planet-aligned orientation; the scripted descent is unchanged.
+- Terrain relief (in progress): generator v3 adds hills and mountains at several scales, selectable with `--generator 3` (v2 stays the default until the v3 flight approval; ADR-0020 is a draft).
 - Regression and performance tests: image-diff goldens rendered on software adapters in CI, and criterion benches (non-blocking CI job).
 - Telemetry: frame time, altitude, selection and streaming stats, per-scope prepare timings, morph and handover statistics, CSV log, and headless descent and streaming benchmarks.
 
@@ -50,6 +52,9 @@ cargo run --release -p planetary-app --example planetary_flight -- --descent --p
 
 # Headless descent benchmark with per-altitude-band frame-time statistics
 cargo run --release -p planetary-app --example planetary_flight -- --bench-descent
+
+# Free flight: roll Z/X, F toggles free-flight and planet-aligned; try the v3 relief generator
+cargo run --release -p planetary-app --example planetary_flight -- --generator 3
 
 # Debug overlay (F3) and atmosphere flag
 cargo run --release -p planetary-app --example planetary_flight --features debug-overlay
