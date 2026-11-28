@@ -36,3 +36,18 @@ Then v1.2 and later, by dependency:
 7. Clouds: an independent layer like the atmosphere ring; static or slow drift; after oceans and atmosphere flag.
 8. Archetypes: rocky, ice, hot/lava, gas giant (virtual surface at a pressure depth); after profile, oceans, biomes, clouds exist.
 9. Star systems with one to three stars: last, builds on archetypes.
+
+## Open asset library (user request, 2026-11-27)
+
+User words: "we need a open texture library for terrain, also open meshes for various trees and fauna".
+
+Candidate sources (verify the licence on each asset page at download time; do not trust this list blindly):
+- Terrain/material textures (PBR: albedo, normal, roughness, height): ambientCG (CC0), Poly Haven (CC0).
+- Trees, plants, rocks, animals as low-poly glTF/GLB: Quaternius (CC0), Kenney (CC0 nature and animal kits), Poly Pizza (mixed CC0 and CC-BY, check each).
+- Avoid: CC-BY-NC and CC-BY-ND (not usable in an open-source engine that may be used commercially), anything with unclear provenance, and Sketchfab models unless CC0 or CC-BY with attribution recorded.
+
+Asset policy to decide in the milestone discuss step:
+- Prefer CC0 only; allow CC-BY only with an attribution entry. Add `assets/LICENSES.md` (per asset: source URL, author, licence, date fetched, checksum) and a docs_policy-style test that every file under assets/ has an entry.
+- Keep assets out of the engine core crates; they live with the planetary extension or an `assets/` folder; size budget (git LFS or download script instead of committing large textures).
+- Format: textures as KTX2 or PNG (ktx2 is in v1.1 Future), meshes as glTF 2.0 (the engine already loads glTF via conventional-3d). Trees as instanced meshes need the instanced draw path (step 6 in the proposed order).
+- Fauna implies animation (skinning) which is out of scope for P0 unless a milestone adds it; start with static meshes.
