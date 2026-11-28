@@ -48,8 +48,10 @@ pub const SPACE_COLOR: [f32; 4] = [0.02, 0.02, 0.05, 1.0];
 pub const SUN_ELEVATION_DEG: f64 = 35.0;
 /// Light intensity multiplier of the relief light.
 pub const LIGHT_INTENSITY: f32 = 1.8;
-/// Ambient light level (all channels).
-pub const LIGHT_AMBIENT: f32 = 0.025;
+/// Ambient light level (all channels). Raised from 0.025 (11-06D): slopes facing away from the sun
+/// were pitch black; 0.10 keeps them readable. No golden renders with this light (the
+/// atmosphere_ring golden uses `DirectionalLight::default()`).
+pub const LIGHT_AMBIENT: f32 = 0.10;
 
 /// Distance haze and sky colour for one altitude.
 #[derive(Clone, Copy, Debug, PartialEq)]
