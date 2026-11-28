@@ -88,7 +88,7 @@ impl Default for TerrainParams {
             hills_amplitude: 600.0,
             hills_frequency: 200.0,
             hills_octaves: 4,
-            mountains_amplitude: 3500.0,
+            mountains_amplitude: 3900.0,
             mountains_frequency: 470.0,
             mountains_octaves: 5,
             range_gate_lo: 0.44,
@@ -110,7 +110,8 @@ impl TerrainParams {
     }
 
     /// Generator version 3: `demo_v2` plus hills and mountains layers. All v3 constants
-    /// (ridge 1800 m / 3 octaves, hills 600 m f200 x4, mountains 3500 m f470 x5, gate 0.44..0.74)
+    /// (ridge 1800 m / 3 octaves, hills 600 m f200 x4, mountains 3900 m f470 x5, gate 0.44..0.74;
+    /// the v3 ridge and mountains shapes use the rounded crease, 11-06C)
     /// are calibrated by `tests/relief_v3.rs` at `relief_scale` 1.0 (the optional exaggeration).
     #[must_use]
     pub fn demo_v3() -> Self {
@@ -345,13 +346,40 @@ pub fn hills_at(seed: u64, p: &TerrainParams, d: DVec3) -> f64 {
     p.hills_amplitude * (2.0 * v - 1.0)
 }
 
-/// `mountains_amplitude * r * r` with `r = 1 - |2 * fbm - 1|`; gated in [`compose_v3`].
+/// `mountains_amplitude * r * r` with `r = 1 - round_abs(2 * fbm - 1)`; gated in [`compose_v3`].
 #[must_use]
 pub fn mountains_at(seed: u64, p: &TerrainParams, d: DVec3) -> f64 {
     let f = p.mountains_frequency;
     let v = fbm_3d(seed, d.x * f, d.y * f, d.z * f, p.mountains_octaves);
-    let r = 1.0 - (2.0 * v - 1.0).abs();
+    let r = 1.0 - round_abs(2.0 * v - 1.0);
     p.mountains_amplitude * (r * r)
+}
+
+/// Crease rounding width of the v3 ridge and mountains shapes (ADR-0020, 11-06C).
+pub const CREASE_EPS: f64 = 0.1;
+
+/// Smooth `|x|`: `sqrt(x * x + eps^2) - eps`. It is 1-Lipschitz like `abs`, zero at zero and
+/// at most `|x|`, so `r = 1 - round_abs(x)` stays in `[0, 1]` for `|x| <= 1`. Only exact IEEE
+/// operations (`*`, `+`, `-`, `sqrt`), so it is bit-identical across platforms.
+#[must_use]
+pub fn round_abs(x: f64) -> f64 {
+    (x * x + CREASE_EPS * CREASE_EPS).sqrt() - CREASE_EPS
+}
+
+/// Generator v3 ridge shape: [`ridge_shape`] with the `|x|` crease rounded by [`round_abs`].
+/// [`ridge_shape`] itself stays untouched for generator v2.
+#[must_use]
+pub fn ridge_shape_v3(seed: u64, p: &TerrainParams, d: DVec3) -> f64 {
+    let f = p.ridge_frequency;
+    let v = fbm_3d(seed, d.x * f, d.y * f, d.z * f, p.ridge_octaves);
+    let r = 1.0 - round_abs(2.0 * v - 1.0);
+    r * r
+}
+
+/// `ridge_amplitude * ridge_shape_v3`; the v3 counterpart of [`ridge_at`].
+#[must_use]
+pub fn ridge_at_v3(seed: u64, p: &TerrainParams, d: DVec3) -> f64 {
+    p.ridge_amplitude * ridge_shape_v3(seed, p, d)
 }
 
 /// Polynomial smoothstep (comparisons and arithmetic only); requires `b > a`.
@@ -397,7 +425,7 @@ impl PlanetTerrain {
         let detail = detail_at(self.seeds.detail, p, d);
         let mask = mask_at(self.seeds.mask, p, d);
         let height = if p.generator_version >= 3 {
-            let ridge = ridge_at(self.seeds.ridge, p, d);
+            let ridge = ridge_at_v3(self.seeds.ridge, p, d);
             let hills = hills_at(self.seeds.hills, p, d);
             let mtn = mountains_at(self.seeds.mountains, p, d);
             compose_v3(p, base, detail, mask, ridge, hills, mtn)
@@ -542,7 +570,11 @@ impl Generator for RidgeLayer {
     }
     fn generate(&self, id: StableId, seed: u64, _params: &Params, out: &mut [f64]) {
         let p = self.params;
-        fill_patch(id.0, self.cells_per_edge, out, |d| ridge_at(seed, &p, d));
+        if p.generator_version >= 3 {
+            fill_patch(id.0, self.cells_per_edge, out, |d| ridge_at_v3(seed, &p, d));
+        } else {
+            fill_patch(id.0, self.cells_per_edge, out, |d| ridge_at(seed, &p, d));
+        }
     }
 }
 

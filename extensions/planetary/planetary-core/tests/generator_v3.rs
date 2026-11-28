@@ -4,9 +4,10 @@
 
 use engine_sdk::DVec3;
 use engine_sdk::procedural::{Fnv1a64, Params, StableId, canonical_bits, layer_seed};
-use planetary_core::terrain::{HILLS_LAYER, MOUNTAINS_LAYER, hills_at, mountains_at};
+use planetary_core::terrain::{HILLS_LAYER, MOUNTAINS_LAYER, hills_at, mountains_at, ridge_at_v3};
 use planetary_core::{
-    Face, PatchId, PlanetTerrain, RIDGE_LAYER, TerrainError, TerrainParams, ridge_at, vertex_dir,
+    Face, PatchId, PlanetTerrain, RIDGE_LAYER, TerrainError, TerrainParams, base_at, compose_v2,
+    detail_at, mask_at, vertex_dir,
 };
 
 const WORLD_SEED: u64 = 0x0007_5EED_2026_0001;
@@ -59,22 +60,36 @@ fn inert_v3() -> TerrainParams {
 
 #[test]
 fn v3_without_new_layers_equals_v2() {
-    let v2 = terrain_v2();
+    // The v3 ridge uses the rounded crease shape (11-06C), so with zero hills and mountains v3
+    // equals the v2 composition of the same base, detail, mask and the v3 ridge value.
     let v3 = PlanetTerrain::new(WORLD_SEED, inert_v3(), N).unwrap();
+    let p = *v3.params();
+    let seeds = v3.seeds();
+    let expect = |d: DVec3| {
+        let (base, detail, mask) = (
+            base_at(seeds.base, &p, d),
+            detail_at(seeds.detail, &p, d),
+            mask_at(seeds.mask, &p, d),
+        );
+        let ridge = ridge_at_v3(seeds.ridge, &p, d);
+        (compose_v2(&p, base, detail, mask, ridge), mask)
+    };
     for id in patches() {
-        let a = v2.patch_samples(id);
         let b = v3.patch_samples(id);
-        assert_eq!(a.len(), b.len());
-        for (x, y) in a.iter().zip(&b) {
-            assert_eq!(x.height.to_bits(), y.height.to_bits());
-            assert_eq!(x.mask.to_bits(), y.mask.to_bits());
+        for j in 0..=N {
+            for i in 0..=N {
+                let k = (j * (N + 1) + i) as usize;
+                let (h, m) = expect(vertex_dir(id, N, i, j));
+                assert_eq!(b[k].height.to_bits(), h.to_bits());
+                assert_eq!(b[k].mask.to_bits(), m.to_bits());
+            }
         }
     }
     for d in directions(2000) {
-        let a = v2.sample(d);
         let b = v3.sample(d);
-        assert_eq!(a.height.to_bits(), b.height.to_bits());
-        assert_eq!(a.mask.to_bits(), b.mask.to_bits());
+        let (h, m) = expect(d);
+        assert_eq!(b.height.to_bits(), h.to_bits());
+        assert_eq!(b.mask.to_bits(), m.to_bits());
     }
 }
 
@@ -113,7 +128,10 @@ fn v3_stack_equals_pure_function() {
             for i in 0..=N {
                 let k = (j * (N + 1) + i) as usize;
                 let d = vertex_dir(id, N, i, j);
-                assert_eq!(ridge[k].to_bits(), ridge_at(seeds.ridge, &p, d).to_bits());
+                assert_eq!(
+                    ridge[k].to_bits(),
+                    ridge_at_v3(seeds.ridge, &p, d).to_bits()
+                );
                 assert_eq!(hills[k].to_bits(), hills_at(seeds.hills, &p, d).to_bits());
                 assert_eq!(
                     mtn[k].to_bits(),
