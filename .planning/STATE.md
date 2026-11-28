@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-11-27)
 
 ## Current Position
 
-Phase: 11 (Terrain Relief & Normals) - in progress (4/10 plans)
-Plan: 11-05 complete; next: 11-06
+Phase: 11 (Terrain Relief & Normals) - in progress (5/11 plans)
+Plan: 11-06A complete (gap fix: free-flight sun follows camera); next: user re-flies the 11-06 checkpoint
 Status: Executing Phase 11
-Last activity: 2026-11-27 - Completed 11-05 (v3 stencil/thresholds, normal seam + percentile cross-LOD tests)
+Last activity: 2026-11-27 - Completed 11-06A (free-flight sun follows camera, startup readout)
 
 ## Performance Metrics
 
@@ -80,7 +80,7 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-11-26T23:59:00.000Z
-Stopped at: Completed 11-05-PLAN.md
+Stopped at: Completed 11-06A-PLAN.md
 Resume file: None
 
 ## Deferred Items

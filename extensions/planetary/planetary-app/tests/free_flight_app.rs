@@ -213,3 +213,74 @@ fn orientation_stays_normalised_over_a_long_mixed_sequence() {
         assert!((q.length() - 1.0).abs() < 1e-12, "step {i}");
     }
 }
+
+fn elevation(app: &PlanetaryApp) -> f64 {
+    app.sun_elevation_at_camera_deg()
+}
+
+#[test]
+fn free_flight_sun_follows_the_camera_at_the_configured_elevation() {
+    for pos_sign in [
+        DVec3::X,
+        -DVec3::X,
+        DVec3::Y,
+        DVec3::new(0.3, -0.5, 0.8).normalize(),
+    ] {
+        let (mut app, mut rt) = setup(settings());
+        let r = 1.0e7;
+        let q = engine_sdk::DQuat::IDENTITY;
+        app.set_pose_override(Some((pos_sign * r, q)));
+        frames(&mut rt, &mut app, 1);
+        // Pose override keeps the fixed sun; it is not the headlight.
+        app.set_pose_override(None);
+        frames(&mut rt, &mut app, 1);
+        let p = app.camera().position().normalize();
+        let e = elevation(&app);
+        assert!(e > 0.0, "sun below horizon at {p:?}: {e}");
+        assert!(
+            (e - planetary_app::SUN_ELEVATION_DEG).abs() < 0.5,
+            "elevation {e} at {p:?}"
+        );
+    }
+}
+
+#[test]
+fn start_line_reports_a_lit_sun_at_the_free_flight_start() {
+    let (app, _rt) = setup(settings());
+    let line = app.look_line();
+    assert!(line.contains("generator: v2"), "{line}");
+    assert!(line.contains("topology: hex"), "{line}");
+    assert!(line.contains("sun elevation at camera: 35.0 deg"), "{line}");
+}
+
+#[test]
+fn scripted_descent_and_pose_override_keep_the_fixed_sun() {
+    let mut s = settings();
+    let r = s.terrain.terrain.radius;
+    s.script = Some(DescentScript::orbit_to_surface(r));
+    let (mut app, mut rt) = setup(s);
+    let before = app.light_direction();
+    frames(&mut rt, &mut app, 5);
+    assert_eq!(app.light_direction(), before);
+
+    let (mut app, mut rt) = setup(settings());
+    let before = app.light_direction();
+    app.set_pose_override(Some((-DVec3::X * 1.0e7, engine_sdk::DQuat::IDENTITY)));
+    frames(&mut rt, &mut app, 3);
+    assert_eq!(app.light_direction(), before);
+}
+
+#[test]
+fn generator_flag_selects_the_terrain_generator_version() {
+    for n in 1..=3_u32 {
+        let mut s = settings();
+        assert!(s.set_generator(n));
+        assert_eq!(s.terrain.terrain.generator_version, n);
+        let (app, _rt) = setup(s);
+        assert!(app.look_line().contains(&format!("generator: v{n}")));
+    }
+    let mut s = settings();
+    let before = s.clone();
+    assert!(!s.set_generator(4));
+    assert_eq!(s, before);
+}

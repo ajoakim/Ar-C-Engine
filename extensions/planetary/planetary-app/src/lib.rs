@@ -115,6 +115,16 @@ pub fn sun_direction_for_target(target_dir: DVec3) -> Vec3 {
     Vec3::new(travel.x as f32, travel.y as f32, travel.z as f32)
 }
 
+/// Elevation in degrees of the sun above the local horizon at `pos` for light travel `dir`.
+fn elevation_deg(pos: DVec3, dir: Vec3) -> f64 {
+    let len = pos.length();
+    if !(len.is_finite() && len > 0.0) {
+        return 0.0;
+    }
+    let to_sun = -DVec3::new(f64::from(dir.x), f64::from(dir.y), f64::from(dir.z));
+    (pos / len).dot(to_sun).clamp(-1.0, 1.0).asin().to_degrees()
+}
+
 /// The relief light for the scripted descent target direction.
 #[must_use]
 pub fn relief_light(target_dir: DVec3) -> DirectionalLight {
@@ -190,6 +200,18 @@ pub struct AppSettings {
 }
 
 impl AppSettings {
+    /// Selects the terrain generator version (1, 2 or 3 as the example's `--generator`).
+    /// Returns false (settings unchanged) for any other value.
+    pub fn set_generator(&mut self, version: u32) -> bool {
+        self.terrain.terrain = match version {
+            1 => TerrainParams::default(),
+            2 => TerrainParams::demo_v2(),
+            3 => TerrainParams::demo_v3(),
+            _ => return false,
+        };
+        true
+    }
+
     /// Cube-sphere settings (32 cells per edge), the reference topology.
     #[must_use]
     pub fn cube_default() -> Self {
@@ -392,6 +414,7 @@ pub struct PlanetaryApp {
     /// Ring mesh uploaded last frame, destroyed before the next one is built.
     ring_mesh: Option<engine_sdk::MeshHandle>,
     light: DirectionalLight,
+    generator_version: u32,
     prev_pos: Option<DVec3>,
     pose_override: Option<(DVec3, engine_sdk::DQuat)>,
     /// F3 toggles the read-only debug overlay (hidden at start).
@@ -471,6 +494,7 @@ impl PlanetaryApp {
             ring_radius: radius + settings.terrain.terrain.max_relief(),
             ring_mesh: None,
             light: relief_light(sun_target(settings.script.as_ref(), radius)),
+            generator_version: settings.terrain.terrain.generator_version,
             script: settings.script,
             terrain,
             camera,
@@ -486,6 +510,36 @@ impl PlanetaryApp {
             #[cfg(feature = "debug-overlay")]
             overlay_visible: false,
         })
+    }
+
+    /// Light travel direction currently sent to the scene.
+    #[must_use]
+    pub fn light_direction(&self) -> Vec3 {
+        self.light.direction
+    }
+
+    /// Sun elevation above the local horizon at the camera for the light direction the scene
+    /// currently uses, in degrees.
+    #[must_use]
+    pub fn sun_elevation_at_camera_deg(&self) -> f64 {
+        elevation_deg(self.camera.position(), self.light.direction)
+    }
+
+    /// Look readout for the startup line: generator version, topology and the sun elevation at
+    /// the camera (the sun follows the camera from the first update of a free flight).
+    #[must_use]
+    pub fn look_line(&self) -> String {
+        let dir = if self.script.is_none() && self.pose_override.is_none() {
+            sun_direction_for_target(self.camera.position())
+        } else {
+            self.light.direction
+        };
+        format!(
+            "generator: v{} | topology: {} | sun elevation at camera: {:.1} deg",
+            self.generator_version,
+            self.kind.name(),
+            elevation_deg(self.camera.position(), dir)
+        )
     }
 
     /// Topology in use.
@@ -751,7 +805,7 @@ impl App for PlanetaryApp {
         self.terrain.setup(resources, scene)?;
         self.apply_camera(scene);
         if !scene.startup.adapter.is_empty() {
-            println!("{}", startup_line(&scene.startup));
+            println!("{} | {}", startup_line(&scene.startup), self.look_line());
         }
         Ok(())
     }
@@ -824,6 +878,8 @@ impl App for PlanetaryApp {
                 .update(dt, &|d| terrain.surface_radius_at(d), extra);
             self.camera
                 .set_pose(self.free.position(), self.free.orientation());
+            // Headlight-style sun: fixed elevation over the camera (no day/night cycle).
+            self.light.direction = sun_direction_for_target(self.camera.position());
         }
         self.apply_camera(scene);
         self.update_title(dt, scene);

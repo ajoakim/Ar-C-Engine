@@ -5,7 +5,8 @@
 //! right mouse button to look, Esc quits. Free-flight (full 6DOF, quaternion orientation, roll
 //! about the view axis) is the default; F levels the horizon and switches to planet-aligned
 //! flight (planet-up yaw, vertical thrust along planet up, pitch clamped near the surface).
-//! `--descent`/`--ascent` scripted flights are always planet-aligned and ignore these keys. With `--features debug-overlay` (windowed), F3
+//! In free flight the sun follows the camera (fixed 35 degree elevation, no day/night cycle), so the ground under the
+//! camera is always lit; scripted descents keep the fixed sun. `--descent`/`--ascent` scripted flights are always planet-aligned and ignore these keys. With `--features debug-overlay` (windowed), F3
 //! toggles a read-only overlay: LOD histograms, streaming queue, memory and upload budgets,
 //! frame and prepare times.
 //!
@@ -27,7 +28,7 @@
 //! the maximum frames in flight (default 2); other values are usage errors. `--no-haze` turns
 //! the altitude haze off and `--no-atmosphere` keeps the plain haze but drops the sun-tinted sky
 //! and the limb ring (ADR-0019). `--always-reselect` runs the LOD selection every frame instead of reusing a
-//! selection that provably still holds (same result, only slower; for comparisons). The startup line prints the adapter, requested and active mode,
+//! selection that provably still holds (same result, only slower; for comparisons). The startup line prints the generator version, topology, sun elevation at the camera, the adapter, requested and active mode,
 //! supported modes, latency and monitor refresh rate; the window title shows altitude, speed
 //! and level.
 //!
@@ -64,7 +65,6 @@ use planetary_app::{
     ALTITUDE_BANDS, AppSettings, DescentScript, PlanetaryApp, TopologyKind, WallClock, band_of,
     spin_for_ms, summarize,
 };
-use planetary_core::TerrainParams;
 
 const USAGE: &str = "usage: planetary_flight [--topology <hex|cube>] [--debug-cells] [--headless <frames>] [--descent] [--ascent] [--frames <n>] [--perf-log <file.csv>] [--no-console] [--bench-descent] [--budget-ms <ms>] [--strict] [--bench-stream] [--fast] [--settle] [--no-adaptive] [--frame-ms <ms>] [--out <file.csv>] [--diagnostics] [--retain-frames <n>] [--present-mode <fifo|mailbox|immediate|auto>] [--frame-latency <1|2|3>] [--no-haze] [--no-atmosphere] [--always-reselect] [--generator <1|2|3>]";
 
@@ -348,12 +348,10 @@ fn main() -> Result<(), SdkError> {
         TopologyKind::Cube => AppSettings::cube_default(),
     };
     settings.terrain.debug_cells = debug_cells;
-    if let Some(g) = generator {
-        settings.terrain.terrain = match g {
-            1 => TerrainParams::default(),
-            2 => TerrainParams::demo_v2(),
-            _ => TerrainParams::demo_v3(),
-        };
+    if let Some(g) = generator
+        && !settings.set_generator(g)
+    {
+        return Err(usage());
     }
     settings.diagnostics = diagnostics;
     settings.haze = haze;

@@ -25,6 +25,14 @@ A release build reuses `target/release` and needs about 3 GB of free disk. Keep 
 | Right mouse + move | look |
 | Esc | quit |
 
+### Lighting
+
+In free flight the sun follows the camera: the light direction is recomputed every frame so the
+sun stands at the fixed 35 degree elevation over the camera (a headlight-style sun, not a
+day/night cycle). Scripted `--descent` / `--ascent` flights and test pose overrides keep the
+fixed sun so runs stay deterministic. The startup line prints the generator version, topology
+and the sun elevation at the camera.
+
 ### Flight modes
 
 - default = free-flight: full 6DOF with quaternion orientation. Pitch, yaw and roll are all about
