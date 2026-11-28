@@ -23,5 +23,6 @@ To add an ADR, copy `0000-template.md` to the next free number (4-digit zero-pad
 | [0017](0017-no-ecs-in-p0.md) | No ECS in P0 (engine_world::World Stays) | accepted |
 | [0018](0018-debug-overlay-placement-and-font-licences.md) | Debug Overlay Placement and Font Licences | accepted |
 | [0019](0019-minimal-atmosphere-limb-ring.md) | Minimal Atmosphere - Opaque Limb Ring and Sun-Tinted Sky | accepted |
+| [0020](0020-generator-v3-relief-and-height-derived-normals.md) | Generator v3 Relief and Height-Derived Normals | proposed |
 
 The LOD transition technique (WS-05) is the combination of [ADR-0010](0010-terrain-lod-skirts-and-shared-border-sampling.md) (skirts, shared-border sampling) and [ADR-0014](0014-vertex-morph-attribute-geomorphing.md) (geomorphing).
