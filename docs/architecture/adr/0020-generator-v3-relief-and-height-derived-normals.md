@@ -10,7 +10,7 @@ User feedback after the Phase 8 flight: "the surface is smooth. adding different
 
 ## Decision
 
-1. Layers, additive versioning. `TerrainParams.generator_version` accepts 1, 2 or 3; v1 and v2 paths are untouched (their goldens and the v2 mesh byte golden still pass). `TerrainParams::demo_v3()` is `demo_v2()` with version 3 and the constants below. Two new layers, `planet.hills` and `planet.mountains` (layer version 3, own seeds), are generated only for version >= 3. `compose_v3` is the v2 sum plus `hills * (1 - 0.6 g) + mountains * g`, with `g = smoothstep(0.44, 0.74, mask)` over the existing mask, floored at sea level. Test `v3_without_new_layers_equals_v2` guards that zero-amplitude v3 equals v2 bit for bit. There is no vertical-exaggeration parameter (D-02).
+1. Layers, additive versioning. `TerrainParams.generator_version` accepts 1, 2 or 3; v1 and v2 paths are untouched (their goldens and the v2 mesh byte golden still pass). `TerrainParams::demo_v3()` is `demo_v2()` with version 3 and the constants below. Two new layers, `planet.hills` and `planet.mountains` (layer version 3, own seeds), are generated only for version >= 3. `compose_v3` is the v2 sum plus `hills * (1 - 0.6 g) + mountains * g`, with `g = smoothstep(0.44, 0.74, mask)` over the existing mask, floored at sea level. Test `v3_without_new_layers_equals_v2` guards that zero-amplitude v3 equals v2 bit for bit. D-02 originally excluded any vertical-exaggeration parameter; it was superseded by a user decision, see item 7.
 
    | Layer | Amplitude | Frequency | Octaves |
    |-------|-----------|-----------|---------|
@@ -33,6 +33,8 @@ User feedback after the Phase 8 flight: "the surface is smooth. adding different
 
 6. v3 morph colour. The v3 test of morph target colour against the parent mesh uses an absolute bound of 0.15 (v2 keeps 0.05); measured worst row difference 0.1115.
 
+7. Relief exaggeration (`relief_scale`), user decision of 2026-11-27 that supersedes D-02. After flying v3 with the sun fix (11-06A) the user saw only gentle rolling hills and asked for hills and mountains to read clearly, with the height settable by config. `TerrainParams.relief_scale: f64` (default 1.0; v3 validation requires finite and `0.1..=8.0`) multiplies the ridge, hills and mountains contributions in `compose_v3` and nothing else (base, detail, mask and the gate are unscaled). `max_relief()` is `base + detail + (ridge + hills + mountains) * relief_scale`, and the v3 `LodModel` residual terms for those three layers carry the same factor (they are linear in the amplitudes), so the global height range and the selection bounds stay sound. The generator version stays 3 (a parameter, not a new generator) and `TerrainParams` stays `Copy`. v1 and v2 ignore the field. At 1.0 every height, mask, `max_relief` and residual is bit-identical to the v3 before the field existed (fingerprint test `scale_one_is_bit_identical_to_pre_change_v3`; v1/v2 residual pins and the v2 mesh byte golden unchanged). Plumbing: `AppSettings::set_relief_scale` and the `planetary_flight --relief <scale>` flag (usage error when non-finite or out of range); the startup line prints `relief scale`. The soundness test (2000 direction pairs, levels 1..12, cube and hex) runs strictly at 1, 2 and 3. Because base and detail are not scaled, the land height range grows by less than the scale (measured x1.73 at 2, x2.47 at 3). The calibrated slope and relief bands of `relief_v3.rs` are defined at 1.0 only. This change alters `terrain.rs`, so the earlier flight approval of 11-06 is void and the flight must be repeated.
+
 ## Alternatives Considered
 
 - Payload v5 with a header flag for normals: rejected (D-01); the normal already exists in v4 and v1/v2 goldens must stay bit-identical.
@@ -40,7 +42,7 @@ User feedback after the Phase 8 flight: "the surface is smooth. adding different
 - Analytic-gradient normals: rejected; about 5x the sample cost against the D-05 bound (design value, from research).
 - A new gradient-noise primitive: rejected; the existing value-noise fbm and ridge shapes meet the slope bands.
 - Fewer octaves to reduce the cross-LOD normal tail (mountains 2 + hills 2, detail 14 to 6, ridge 3 to 1): tried, max angle stayed 24.9 to 27.5 degrees and the D-02 slope band would break; constants kept.
-- Vertical exaggeration knob: rejected by D-02.
+- Vertical exaggeration knob: rejected by D-02, then adopted on 2026-11-27 (item 7).
 
 ## Consequences
 
@@ -50,6 +52,16 @@ User feedback after the Phase 8 flight: "the surface is smooth. adding different
 - The measured v3 LOD residual is much larger than v2 (cube L10 2238 m vs 68 m, L12 561 m vs 18 m) but relative looseness is lower (v3 2.5 to 8.5, v2 8 to 15).
 - Bump detail (colour-based or procedural fine detail normal perturbation) is deferred (D-06); height-based normals only.
 - Packed normals and normal morphing are to be considered with Phase 12.
+- Cost at higher relief scales (11-06B, release, `--bench-descent --frames 600 --generator 3 --budget-ms 8 --strict`, worst-band p95; mesh build cost is per vertex and does not depend on the scale, `mesh-ratio-check.sh 3 2 1.5` at 1.0: 1.146 / 1.154 / 1.252 / 1.276, PASS):
+
+  | relief scale | hex worst-band p95 ms | hex result | cube worst-band p95 ms | cube result |
+  |--------------|-----------------------|------------|------------------------|-------------|
+  | 1 | 4.04 | PASS | 3.76 | PASS |
+  | 2 | 3.94 | PASS | 3.99 | PASS |
+  | 3 | 3.98 | PASS | 3.90 | PASS |
+  | 8 | 4.17 | PASS | 3.27 | PASS |
+
+  Higher scales raise the selection node count slightly (hex max nodes 1439 at 1, 1481 at 2, 1459 at 3, 1556 at 8) but the p95 stays near 4 ms against the unchanged 8 ms gate. One 8.48 ms single-frame max occurred at scale 8 on hex (1-10 km band, p95 4.17 ms); the gate is on p95. The gate is not loosened. Supported range: the whole accepted range 0.1..=8.0 passes the gate on this machine, with 1 to 3 the intended and measured-in-depth range (the soundness test runs at 1, 2 and 3 only).
 - Open: the default flip, v3 goldens and acceptance of this ADR wait for the human flight and plan 07.
 
 ## Evidence

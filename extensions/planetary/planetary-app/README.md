@@ -33,6 +33,15 @@ day/night cycle). Scripted `--descent` / `--ascent` flights and test pose overri
 fixed sun so runs stay deterministic. The startup line prints the generator version, topology
 and the sun elevation at the camera.
 
+### Relief exaggeration (generator v3)
+
+`--generator 3 --relief <scale>` multiplies the ridge, hills and mountains amplitudes of generator
+v3 by `<scale>` (default 1.0, the calibrated Earth-like relief; base and detail are not scaled).
+Values that are not finite or outside 0.1..=8.0 are usage errors; generators 1 and 2 ignore it.
+In code: `AppSettings::set_relief_scale` (`TerrainParams::relief_scale`). The startup line prints
+`relief scale`. At 1.0 the output is bit-identical to the v3 before the setting existed.
+Supported range for the 8 ms descent gate: measured at 1, 2, 3 and 8 on hex and cube, the strict 8 ms p95 descent gate passes at all of them (worst band p95 3.3 to 4.2 ms), so the accepted range 0.1..=8.0 is supported; 1 to 3 is the intended range (ADR-0020).
+
 ### Flight modes
 
 - default = free-flight: full 6DOF with quaternion orientation. Pitch, yaw and roll are all about

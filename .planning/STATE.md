@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-11-27)
 
 ## Current Position
 
-Phase: 11 (Terrain Relief & Normals) - in progress (5/11 plans)
-Plan: 11-06A complete (gap fix: free-flight sun follows camera); next: user re-flies the 11-06 checkpoint
+Phase: 11 (Terrain Relief & Normals) - in progress (5/12 plans)
+Plan: 11-06B complete (gap fix: relief_scale exaggeration for v3, `--relief`); terrain.rs changed, so the user must re-fly the 11-06 checkpoint (--relief 1, 2, 3)
 Status: Executing Phase 11
-Last activity: 2026-11-27 - Completed 11-06A (free-flight sun follows camera, startup readout)
+Last activity: 2026-11-27 - Completed 11-06B (relief_scale for generator v3, --relief flag)
 
 ## Performance Metrics
 
@@ -80,7 +80,7 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-11-26T23:59:00.000Z
-Stopped at: Completed 11-06A-PLAN.md
+Stopped at: Completed 11-06B-PLAN.md; awaiting user re-flight of 11-06
 Resume file: None
 
 ## Deferred Items
