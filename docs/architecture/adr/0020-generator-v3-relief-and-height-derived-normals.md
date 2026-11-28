@@ -18,10 +18,10 @@ User feedback after the Phase 8 flight: "the surface is smooth. adding different
    | detail (unchanged) | 800 m | 24 | 14 |
    | ridge (v3 retune) | 1800 m (v2: 2500) | 12 | 3 (v2: 5) |
    | hills (new) | 600 m | 200 | 4 |
-   | mountains (new, `r*r`, gated) | 3500 m | 470 | 5 |
+   | mountains (new, `r*r`, gated; 3500 m before 11-06C) | 3900 m | 470 | 5 |
    | gate | smoothstep over mask 0.44..0.74 (width 0.30) | | |
 
-   Octave total 34 for v3 (v2: 27, derived from the defaults). `max_relief()` is 9700 m.
+   Octave total 34 for v3 (v2: 27, derived from the defaults). `max_relief()` is 10100 m (9700 m before 11-06C).
 
 2. Normals method. Payload v4 already carries a height-derived per-vertex normal (interior vertices: grid difference of the displaced surface; border vertices: face-independent 4-tap stencil), and `lit_textured.wgsl` already shades with it. Per D-01 there is no payload v5, the 52-byte vertex layout is unchanged and the shader is unchanged. The v3-only change is the border stencil step: v3 uses `sample_angle0 / 2^level` (function `border_normal_at`), generator < 3 calls the untouched v2 function. This is not a no-op on the hex grid: `HexSphere::new(16).sample_angle0() / (pi/2/16) = 0.442751`; on the cube `FRAC_PI_2 / n` equals `sample_angle0`, so the cube is unchanged.
 
@@ -34,6 +34,8 @@ User feedback after the Phase 8 flight: "the surface is smooth. adding different
 6. v3 morph colour. The v3 test of morph target colour against the parent mesh uses an absolute bound of 0.15 (v2 keeps 0.05); measured worst row difference 0.1115.
 
 7. Relief exaggeration (`relief_scale`), user decision of 2026-11-27 that supersedes D-02. After flying v3 with the sun fix (11-06A) the user saw only gentle rolling hills and asked for hills and mountains to read clearly, with the height settable by config. `TerrainParams.relief_scale: f64` (default 1.0; v3 validation requires finite and `0.1..=8.0`) multiplies the ridge, hills and mountains contributions in `compose_v3` and nothing else (base, detail, mask and the gate are unscaled). `max_relief()` is `base + detail + (ridge + hills + mountains) * relief_scale`, and the v3 `LodModel` residual terms for those three layers carry the same factor (they are linear in the amplitudes), so the global height range and the selection bounds stay sound. The generator version stays 3 (a parameter, not a new generator) and `TerrainParams` stays `Copy`. v1 and v2 ignore the field. At 1.0 every height, mask, `max_relief` and residual is bit-identical to the v3 before the field existed (fingerprint test `scale_one_is_bit_identical_to_pre_change_v3`; v1/v2 residual pins and the v2 mesh byte golden unchanged). Plumbing: `AppSettings::set_relief_scale` and the `planetary_flight --relief <scale>` flag (usage error when non-finite or out of range); the startup line prints `relief scale`. The soundness test (2000 direction pairs, levels 1..12, cube and hex) runs strictly at 1, 2 and 3. Because base and detail are not scaled, the land height range grows by less than the scale (measured x1.73 at 2, x2.47 at 3). The calibrated slope and relief bands of `relief_v3.rs` are defined at 1.0 only. This change alters `terrain.rs`, so the earlier flight approval of 11-06 is void and the flight must be repeated.
+
+8. Crease rounding (11-06C), found after the user flew high relief and saw a regular sawtooth along mountain tops. Root cause (`11-SAWTOOTH-DIAGNOSIS.md`): the mountains shape `A r^2` with `r = 1 - |2 fbm - 1|` has a C0 crease at every crest; linear interpolation between mesh vertices cuts a crest by about `slope_jump * step` and the vertex row crosses the crest at a varying phase, so a row of teeth with the vertex spacing appears. The relative error (error / step) does not shrink with a finer mesh and grows linearly with `relief_scale` (diagnosis: max 0.5 / 1.0 / 1.5 step at relief 1 / 2 / 3, about 4 / 8 / 12 px at the 2 px LOD budget). Fix (user-approved ranked option 1): in the v3 shapes only, `|x|` is replaced by `ax = sqrt(x*x + eps*eps) - eps`, `eps = 0.1` (`terrain::round_abs`, `CREASE_EPS`). `ax` is 1-Lipschitz, `0 <= ax <= |x|`, so `r = 1 - ax` stays in `[0, 1]`, `r*r <= 1`, and the LOD residual and height bounds (items 4 and 7) stay sound and `max_relief` is unaffected by the rounding. It uses only `*`, `+`, `-` and `sqrt` (IEEE correctly rounded, not in the `banned_ops` list), inside the border-critical region; it is a pure function of the direction, so shared-border and cross-LOD consistency hold. The same rounding applies to the v3 ridge through the new `ridge_shape_v3` / `ridge_at_v3` (the cube `RidgeLayer` uses it when `generator_version >= 3`); v2 `ridge_shape` / `ridge_at` and every v1/v2 path are untouched (v2 mesh byte golden, `GOLDEN_HEIGHTS_V1/V2` and the v1/v2 residual pins pass unchanged). Layer names, versions and seeds are unchanged. Consequences: v3 heights change at relief 1.0 (v3 is not golden and was never approved; the `relief_scale.rs` fingerprint was re-recorded: 0x1b54f6ebf399a5d9 -> 0x611242bdbf33ae2a), and the rounding lowered the land slope p99 below the D-02 band (24.10 deg at cube L8), so the mountains amplitude was re-tuned 3500 -> 3900 m (within the approved bands; max_relief 9700 -> 10100 m, inside 9-11 km). The inert-layer test now compares v3 with `compose_v2` of the v3 ridge value (the ridge differs from v2 by design). Regression guard: `tests/crease_v3.rs` interpolates true heights at 17 m and 67 m vertex steps along lines through 320 mountain-mask sites and bounds error / step at `0.05 * relief_scale`; measured (max over sites) 0.005 / 0.010 / 0.015 at step 17 and 0.022 / 0.044 / 0.067 at step 67 for relief 1 / 2 / 3, against 0.25 / 0.50 / 0.74 for the old abs shape (the negative control, kept only inside the test, fails the bound). This change alters `terrain.rs`, so any earlier flight approval is void and the flight must be repeated at `--relief 1`, `2` and `3`.
 
 ## Alternatives Considered
 
@@ -62,6 +64,15 @@ User feedback after the Phase 8 flight: "the surface is smooth. adding different
   | 8 | 4.17 | PASS | 3.27 | PASS |
 
   Higher scales raise the selection node count slightly (hex max nodes 1439 at 1, 1481 at 2, 1459 at 3, 1556 at 8) but the p95 stays near 4 ms against the unchanged 8 ms gate. One 8.48 ms single-frame max occurred at scale 8 on hex (1-10 km band, p95 4.17 ms); the gate is on p95. The gate is not loosened. Supported range: the whole accepted range 0.1..=8.0 passes the gate on this machine, with 1 to 3 the intended and measured-in-depth range (the soundness test runs at 1, 2 and 3 only).
+- Cost after 11-06C (release; fresh criterion, `mesh-ratio-check.sh 3 2 1.5`: 1.197 / 1.214 / 1.271 / 1.294 PASS; strict descent, worst-band p95 ms):
+
+  | relief scale | hex | cube |
+  |--------------|-----|------|
+  | 1 | 4.67 PASS | 3.74 PASS |
+  | 2 | 3.69 PASS | 4.19 PASS |
+  | 3 | 3.73 PASS | 3.85 PASS |
+
+  The 8 ms gate is unchanged. Sawtooth fix measurements: land slope p99 26.48 / 32.84 / 27.04 deg (cube L8 / cube L10 / hex L8), p50 1.81 / 2.04 / 1.80; mountain share 0.266; plains 0.297; land range 7228 m (x1.85 v2), observed max 7029 m <= 10100 m; cross-LOD normal p99 8.6-10.2 deg (gate 12), median 0.22-0.33 (gate 0.5).
 - Open: the default flip, v3 goldens and acceptance of this ADR wait for the human flight and plan 07.
 
 ## Evidence
