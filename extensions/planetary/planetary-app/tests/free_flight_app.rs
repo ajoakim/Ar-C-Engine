@@ -284,3 +284,28 @@ fn generator_flag_selects_the_terrain_generator_version() {
     assert!(!s.set_generator(4));
     assert_eq!(s, before);
 }
+
+#[test]
+fn relief_scale_setter_validates_and_commutes_with_the_generator() {
+    let mut s = settings();
+    assert_eq!(s.terrain.terrain.relief_scale, 1.0);
+    for bad in [0.0, 0.05, 8.5, -2.0, f64::NAN, f64::INFINITY] {
+        let before = s.clone();
+        assert!(!s.set_relief_scale(bad), "{bad}");
+        assert_eq!(s, before);
+    }
+    for good in [0.1, 1.0, 2.0, 3.0, 8.0] {
+        assert!(s.set_relief_scale(good));
+        assert_eq!(s.terrain.terrain.relief_scale, good);
+    }
+    // Either order of --generator / --relief gives the same terrain.
+    let mut a = settings();
+    assert!(a.set_relief_scale(2.0) && a.set_generator(3));
+    let mut b = settings();
+    assert!(b.set_generator(3) && b.set_relief_scale(2.0));
+    assert_eq!(a.terrain.terrain, b.terrain.terrain);
+    assert_eq!(a.terrain.terrain.relief_scale, 2.0);
+    let (app, _rt) = setup(a);
+    let line = app.look_line();
+    assert!(line.contains("generator: v3 | relief scale: 2 |"), "{line}");
+}

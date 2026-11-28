@@ -20,6 +20,7 @@ use engine_sdk::{
     RenderItem, Resources, SceneState, SdkError, Vec3, WorldPos,
 };
 use planetary_core::lod::View;
+use planetary_core::terrain::{RELIEF_SCALE_MAX, RELIEF_SCALE_MIN};
 use planetary_core::{CubeSphere, HexSphere, TerrainParams, Topology};
 use planetary_terrain::{
     CameraParams, PlanetaryCamera, StreamBudget, TAN_HALF_FOV_Y, TerrainConfig, TerrainReport,
@@ -202,13 +203,27 @@ pub struct AppSettings {
 impl AppSettings {
     /// Selects the terrain generator version (1, 2 or 3 as the example's `--generator`).
     /// Returns false (settings unchanged) for any other value.
+    /// An earlier [`AppSettings::set_relief_scale`] is kept, so the two setters commute.
     pub fn set_generator(&mut self, version: u32) -> bool {
+        let relief_scale = self.terrain.terrain.relief_scale;
         self.terrain.terrain = match version {
             1 => TerrainParams::default(),
             2 => TerrainParams::demo_v2(),
             3 => TerrainParams::demo_v3(),
             _ => return false,
         };
+        self.terrain.terrain.relief_scale = relief_scale;
+        true
+    }
+
+    /// Sets the relief exaggeration (generator v3 only; the example's `--relief`). Returns false
+    /// (settings unchanged) when `scale` is not finite or outside
+    /// `RELIEF_SCALE_MIN..=RELIEF_SCALE_MAX` (0.1..=8.0).
+    pub fn set_relief_scale(&mut self, scale: f64) -> bool {
+        if !(scale.is_finite() && (RELIEF_SCALE_MIN..=RELIEF_SCALE_MAX).contains(&scale)) {
+            return false;
+        }
+        self.terrain.terrain.relief_scale = scale;
         true
     }
 
@@ -415,6 +430,7 @@ pub struct PlanetaryApp {
     ring_mesh: Option<engine_sdk::MeshHandle>,
     light: DirectionalLight,
     generator_version: u32,
+    relief_scale: f64,
     prev_pos: Option<DVec3>,
     pose_override: Option<(DVec3, engine_sdk::DQuat)>,
     /// F3 toggles the read-only debug overlay (hidden at start).
@@ -495,6 +511,7 @@ impl PlanetaryApp {
             ring_mesh: None,
             light: relief_light(sun_target(settings.script.as_ref(), radius)),
             generator_version: settings.terrain.terrain.generator_version,
+            relief_scale: settings.terrain.terrain.relief_scale,
             script: settings.script,
             terrain,
             camera,
@@ -525,8 +542,8 @@ impl PlanetaryApp {
         elevation_deg(self.camera.position(), self.light.direction)
     }
 
-    /// Look readout for the startup line: generator version, topology and the sun elevation at
-    /// the camera (the sun follows the camera from the first update of a free flight).
+    /// Look readout for the startup line: generator version, relief scale, topology and the sun
+    /// elevation at the camera (the sun follows the camera from the first update of a free flight).
     #[must_use]
     pub fn look_line(&self) -> String {
         let dir = if self.script.is_none() && self.pose_override.is_none() {
@@ -535,8 +552,14 @@ impl PlanetaryApp {
             self.light.direction
         };
         format!(
-            "generator: v{} | topology: {} | sun elevation at camera: {:.1} deg",
+            "generator: v{} | relief scale: {}{} | topology: {} | sun elevation at camera: {:.1} deg",
             self.generator_version,
+            self.relief_scale,
+            if self.generator_version >= 3 {
+                ""
+            } else {
+                " (ignored below v3)"
+            },
             self.kind.name(),
             elevation_deg(self.camera.position(), dir)
         )
